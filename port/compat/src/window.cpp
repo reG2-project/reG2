@@ -6,6 +6,8 @@
 #include <SDL3/SDL.h>
 #include <deque>
 #include <map>
+#include <stdlib.h>
+#include <string.h>
 #include <string>
 #include "port_platform.hpp"
 #include "../../setup/setup.hpp"
@@ -159,6 +161,16 @@ HWND WINAPI CreateWindowExA(DWORD exStyle, LPCSTR className, LPCSTR title, DWORD
     if (!sMainWindow)
     {
         SDL_Log("Window created: %dx%d", windowW, windowH);
+        // GTA2_TEST_CRASH=1 or abort: a crash, to try the crash report.
+        if (const char* crash = getenv("GTA2_TEST_CRASH"))
+        {
+            if (strcmp(crash, "abort") == 0)
+            {
+                abort();
+            }
+            volatile int* volatile pNull = NULL;
+            *pNull = 0;
+        }
         sMainWindow = pWin;
         port_SetWindowIcon(pSdl);
         port_UpdateGameResolution();

@@ -23,6 +23,9 @@ static void EnterGameFolder(int argc, char** argv)
     // Before the setup's windows and the game's: on Linux the id matches the packages' desktop file.
     SDL_SetAppMetadata("reG2", GTA2_VERSION, GTA2_APP_ID);
     port_StartLog(argc, argv);
+#if defined(_WIN32)
+    port_InstallCrashHandler();
+#endif
     bool forceSetup = false;
     for (int i = 1; i < argc; i++)
     {
