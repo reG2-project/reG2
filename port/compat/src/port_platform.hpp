@@ -3,9 +3,18 @@
 
 #include <windows.h>
 #include <SDL3/SDL.h>
+#include <stdio.h>
+#include <string>
 
 // Resolves a game path to the host file system; out must hold PATH_MAX bytes.
 const char* port_resolve_path(const char* path, char* out);
+
+// The log (log.cpp): SDL's log lines, in memory until port_WriteLog writes them to reG2.log.
+void port_StartLog(int argc, char** argv);
+const char* port_WriteLog(); // the log's UTF-8 path, empty if it could not be written
+std::string port_WithLogPath(const char* text); // text and, after it, the written log's path
+void port_LogWrite(const char* text, size_t size); // to the written log, without allocating
+void port_LogExit(int code);
 
 SDL_Window* port_GetSDLWindow(HWND h);
 void port_SetFullscreen(HWND h, bool fullscreen);

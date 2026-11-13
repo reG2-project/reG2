@@ -1,5 +1,5 @@
-// Entry point: the game folder as working directory and the setup when it has no game data, SDL
-// start-up, then the game's WinMain.
+// Entry point: the log, the game folder as working directory and the setup when it has no game
+// data, SDL start-up, then the game's WinMain.
 #include "port_platform.hpp"
 #include "../../setup/setup.hpp"
 #include "reg2_version.h"
@@ -8,20 +8,7 @@
 #include <string.h>
 #include <string>
 
-// GTA2_LOG_FILE is a host path: not mapped into data like the game's drive paths.
-#undef fopen
-
 void port_RegisterRenderer();
-
-// GTA2_LOG_FILE: SDL's log, the game's debug strings and message boxes go to that file (on Windows
-// a GUI program has no stderr).
-static FILE* sLogFile;
-
-static void SDLCALL LogToFile(void*, int, SDL_LogPriority, const char* message)
-{
-    fprintf(sLogFile, "%s\n", message);
-    fflush(sLogFile);
-}
 
 static bool IsSetupArg(const char* arg)
 {
@@ -35,14 +22,7 @@ static void EnterGameFolder(int argc, char** argv)
 {
     // Before the setup's windows and the game's: on Linux the id matches the packages' desktop file.
     SDL_SetAppMetadata("reG2", GTA2_VERSION, GTA2_APP_ID);
-    if (const char* logPath = getenv("GTA2_LOG_FILE"))
-    {
-        sLogFile = fopen(logPath, "w");
-        if (sLogFile)
-        {
-            SDL_SetLogOutputFunction(LogToFile, NULL);
-        }
-    }
+    port_StartLog(argc, argv);
     bool forceSetup = false;
     for (int i = 1; i < argc; i++)
     {
@@ -50,6 +30,7 @@ static void EnterGameFolder(int argc, char** argv)
     }
     if (!port_PrepareGameFolder(forceSetup))
     {
+        port_LogExit(0);
         exit(0);
     }
 }
@@ -91,12 +72,14 @@ int main(int argc, char** argv)
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS))
     {
         SDL_Log("SDL_Init: %s", SDL_GetError());
+        port_LogExit(1);
         return 1;
     }
     port_RegisterRenderer();
     port_InitTestInput();
 
     const int result = WinMain(reinterpret_cast<HINSTANCE>(1), NULL, &cmdLine[0], SW_SHOWNORMAL);
+    port_LogExit(result);
     SDL_Quit();
     return result;
 }

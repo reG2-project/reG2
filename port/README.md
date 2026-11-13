@@ -92,7 +92,7 @@ data (`data/fstyle.sty`), and writes its settings and saves there:
 1. `GTA2_DIR`, if set;
 2. the current folder, then the executable's folder (a game folder the port was copied into);
 3. the per-user folder, which the setup fills. Packages (the Linux ones, a macOS bundle, an
-   installed Windows build) always end up here: nothing is written next to the executable.
+   installed Windows build) always end up here: next to the executable only an error's log is written.
 
 | Platform | Per-user folder (`SDL_GetPrefPath`) |
 |---|---|
@@ -102,6 +102,10 @@ data (`data/fstyle.sty`), and writes its settings and saves there:
 
 It holds `data/` (the game's data, the music in `data/GTAudio/`), `gta2_registry.ini` (settings),
 `gta2gl.ini` (renderer options), `player/` (saves and high scores) and `test/` (replays, logs).
+
+After an error message, `reG2.log` (the start-up steps, the OpenGL driver, errors and message
+boxes) is written next to the executable when that folder is writable, else in the per-user folder,
+and the message gives its path. A run without an error writes no log.
 
 Without the data there, a message box offers three choices:
 
@@ -325,10 +329,10 @@ the AppImage in a clean Debian, Ubuntu or Arch Linux container with the librarie
 | `GTA2_PRESENT_LOG=<file>` | every presented frame with the time it reached the screen (Wayland's presentation-time protocol; elsewhere when the swap returned), and every 10 seconds and at exit a summary: frame to frame times, how many refreshes each frame was shown, the shown time against the game time it depicts, on Wayland how many frames the compositor showed on vblank and scanned out directly, and the GPU time of each frame and how long before its presentation the GPU finished it |
 | `GTA2_NO_SOUND=1` | no audio device |
 | `GTA2_NO_OPENAL=1`, `GTA2_HRTF=1` | no 3D sound; binaural 3D sound |
-| `GTA2_LOG_FILE=<file>` | SDL's log, debug strings and message boxes written to that file |
+| `GTA2_LOG_FILE=<file>` | the log written to that file as the game runs, instead of `reG2.log` |
 | `GTA2_NO_MESSAGEBOX=1` | message boxes only logged, never shown |
 | `GTA2_AUDIO_DRIVER`, `GTA2_AUDIO_FILE` | SDL's audio driver and disk output file (wine hides `SDL_*` variables from Windows programs) |
-| `GTA2_DEBUG_OUTPUT=1` | the game's debug strings on stderr |
+| `GTA2_DEBUG_OUTPUT=1` | the game's debug strings on stderr and in the log |
 | `GTA2_SETUP_PATH=<folder or file>` | the setup installs from it, without the first question and the dialog (messages shown after it still wait, unless `GTA2_NO_MESSAGEBOX=1`) |
 | `GTA2_SETUP_DRAWN=1` | the setup's questions in its own window, not in message boxes |
 | `GTA2_SETUP_CAPTURE=<dir>` | the setup's windows written there as BMP |
