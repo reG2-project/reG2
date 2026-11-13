@@ -13,6 +13,7 @@
 #include "registry.hpp"
 #include <SDL3/SDL.h>
 #endif
+#include "net_hooks.hpp"
 
 // No std::wstring: with -fshort-wchar its traits would call the C library's 4-byte wide functions.
 
@@ -246,6 +247,10 @@ void Setup(Frontend* pFrontend)
 
     // The start menu's "Options" opened GTA2 Manager.
     pFrontend->mMenuPagesArray[MENUPAGE_START_MENU].mOptionsArray[1].mMenuPageTarget = kMenuPage;
+    if (gPortFrontendSetup)
+    {
+        gPortFrontendSetup(pFrontend); // the network game's page (port/net/menu.cpp)
+    }
 }
 
 bool Update(Frontend* pFrontend)
@@ -260,7 +265,9 @@ bool Update(Frontend* pFrontend)
 #if defined(GTA2_PORT_SDL)
         OriginalPageMouse(pFrontend);
 #endif
-        return false;
+        // The network game's page, and its line in the start menu, after the mouse: a click is its Enter, the right
+        // button its Escape (port/net/menu.cpp)
+        return gPortFrontendInput && gPortFrontendInput(pFrontend);
     }
     if (!sShown)
     {

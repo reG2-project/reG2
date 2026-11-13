@@ -22,6 +22,10 @@
 
 #include <dinput.h>
 #include "ped_graphic_type.hpp"
+#if defined(GTA2_PORT)
+#include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
+#include "../port/src/rand/owner.hpp" // PortRand::Scope: who a random draw belongs to
+#endif
 
 // Defined in Ped.cpp
 EXTERN_GLOBAL(s16, gPedOffscreenDespawnTime);
@@ -587,6 +591,11 @@ MATCH_FUNC(0x470330)
 void PedManager::Dummies()
 {
     s16 max_dummies = gPedManager->mMaxDummyChars;
+#if defined(GTA2_PORT)
+    // As many per player (a network server's), up to what leaves the ped pool (200) room for the traffic's drivers, the
+    // players, police and crews. A fixed 80, not counted from the pool
+    max_dummies = (s16)(max_dummies * gPortSpawnPlayers < 80 ? max_dummies * gPortSpawnPlayers : 80);
+#endif
     if (gPolice_7B8->mMaxWantedLevel > cop_level_enum::police_3)
     {
         max_dummies = static_cast<u16>(max_dummies) >> 1;
@@ -647,6 +656,9 @@ void PedManager::PedsService()
 
     if (!bSkip_dummies)
     {
+#if defined(GTA2_PORT)
+        PortRand::Scope portRandScope(PortRand::kDummies); // the server's alone (a network game)
+#endif
         Dummies();
     }
     mNumPedsUpdated = static_cast<char_type>(gNumPedsUpdated);

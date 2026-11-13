@@ -1,6 +1,7 @@
 // The video DLL's Vid_* API on top of VidSystem, with an OpenGL ES context on the game's SDL window,
 // and the registration of the built-in render and video DLLs.
 #include "port_platform.hpp"
+#include "../../net/eval/sim_bench.hpp"
 #include "../../renderer/gl_context.hpp"
 #include "../../renderer/vid_system.hpp"
 #include <stdlib.h>
@@ -87,12 +88,12 @@ void port_SetGameFlip(bool gameFlip)
 
 unsigned long long port_NowNs()
 {
-    return SDL_GetTicksNS();
+    return (unsigned long long)(SDL_GetTicksNS() * port_ClockSpeed());
 }
 
 void port_DelayNs(unsigned long long ns)
 {
-    SDL_DelayPrecise(ns);
+    SDL_DelayPrecise((Uint64)(ns / port_ClockSpeed()));
 }
 
 // The refresh period the swap waits for; 0 without vsync or when the screen does not say.
@@ -332,6 +333,10 @@ VID_EXPORT SVideo* GTA2_CC Vid_Init_SYS(void* hInstance, u16 flags)
 {
     VidSystem* pSys = new VidSystem();
     pSys->Init(hInstance, flags, sVidFuncs, "gta2gl.ini");
+    if (port_Headless())
+    {
+        pSys->DrawNothing();
+    }
     sVidSystem = pSys;
     if (sHasGameOptions)
     {
@@ -415,7 +420,7 @@ VID_EXPORT s32 GTA2_CC Vid_SetMode(SVideo* pVideo, HWND hWnd, s32 modeId)
         return 1;
     }
     pVideo->field_4C0_hwnd = hWnd;
-    if (!pSys->HasContext())
+    if (!pSys->HasContext() && !port_Headless())
     {
         const char* pError = "";
         IGLContext* pCtx = CreateGLContext(pWindow, &pError);
@@ -450,6 +455,8 @@ VID_EXPORT void GTA2_CC Vid_FlipBuffers(SVideo* pVideo)
         pSys->Flip(!port_GameRunning());
     }
     port_MouseEndFrame();
+    static unsigned sFlips;
+    SimBench_Frame(++sFlips); // the network game's simulation bench (GTA2_SIMBENCH, port/docs/netcode.md)
 }
 
 VID_EXPORT void GTA2_CC Vid_ReleaseSurface(SVideo*)

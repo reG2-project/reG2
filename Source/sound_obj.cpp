@@ -29,6 +29,10 @@
 #include "voice_line.hpp"
 #include "car_shop_event.hpp"
 #include <math.h>
+#if defined(GTA2_PORT)
+#include "../port/src/rand/sound.hpp" // VC6's rand, on a stream of its own in a network game (port/docs/netcode.md)
+#include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
+#endif
 
 // Forward declarations: the functions below are in address order
 EXTERN_GLOBAL(u16, gObjSoundDelayKind17);
@@ -3554,14 +3558,24 @@ void sound_obj::Service()
     static char_type bWasPaused_674E24;
     if (gGame_0x40)
     {
+#if defined(GTA2_PORT)
+        // A network game's results (gPortWorldStill): the world's sounds stop as in a pause, without the pause's vocal
+        const bool still = gPortWorldStill && gPortWorldStill();
+        mIsPaused = gGame_0x40->mGameState == GameState::Paused_2 || still;
+#else
         mIsPaused = gGame_0x40->mGameState == GameState::Paused_2;
+#endif
         if (!mIsPaused)
         {
             GenerateIntegerRandomNumberTable();
         }
         else
         {
+#if defined(GTA2_PORT)
+            if (!bWasPaused_674E24 && !still)
+#else
             if (!bWasPaused_674E24)
+#endif
             {
                 gSampManager.CloseVocalStream(1);
                 gSampManager.PlayVocal(1, 7, true); // FREEZE

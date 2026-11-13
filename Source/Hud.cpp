@@ -32,6 +32,13 @@
 #include "root_sound.hpp"
 #include "TextTable.hpp"
 #include "winmain.hpp"
+#if defined(GTA2_PORT)
+#include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
+#endif
+
+#if defined(GTA2_PORT_SDL)
+u16 port_TypedChar(s32 dik); // the character a key's last press typed, with shift (compat/src/dinput.cpp)
+#endif
 
 DEFINE_GLOBAL(Hud*, gHud_2B00, 0x706620);
 DEFINE_GLOBAL(s16, gDebugFont, 0x706600);
@@ -1467,7 +1474,13 @@ bool Hud_ChatInput::HandleChatInputKey(s32 action, Player* pPlayer)
         }
         else
         {
+#if defined(GTA2_PORT_SDL)
+            // the game's table where no keyboard typed it: a network server's copy of a client's line (the key events)
+            const u16 typed = port_TypedChar(action);
+            const u16 char_value = gText_0x14->RemapExtendedChar(typed ? typed : gKeybrd_0x204->GetKey(action));
+#else
             const u16 char_value = gText_0x14->RemapExtendedChar(gKeybrd_0x204->GetKey(action));
+#endif
             if (char_value)
             {
                 if (pPlayer->mChatTextIdx < 79)
@@ -2698,6 +2711,12 @@ void Hud_MpMessage::DecrementTimer()
 MATCH_FUNC(0x5d5770)
 void Hud_MpMessage::AnnounceKill(Player* killer, Player* victim)
 {
+#if defined(GTA2_PORT)
+    if (gPortServerKillNotices)
+    {
+        return;
+    }
+#endif
     if (killer->IsUser())
     {
         if (victim->IsUser())

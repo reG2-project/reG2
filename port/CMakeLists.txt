@@ -37,15 +37,26 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(CMAKE_SIZEOF_VOID_P EQUAL 4)
     set(arch_flags -m32)
 endif()
+
+# Windows can also build with DMA's DLLs (DirectX renderer and video, Miles, Bink) next to the exe.
+option(GTA2_PORT_DIRECTX "Windows: use the original DirectX, Miles and Bink DLLs instead of SDL3" OFF)
+
+# The network game's ENet and the netcode's tests (ctest -L net); GTA2_GAME=OFF builds only those, without SDL3
+option(GTA2_GAME "the game; OFF: only the netcode's tests" ON)
+if(NOT (WIN32 AND GTA2_PORT_DIRECTX))
+    enable_testing()
+    include(net/net.cmake)
+endif()
+if(NOT GTA2_GAME)
+    return()
+endif()
+
 # The game relies on what VC6 did with undefined behaviour (uninitialised locals returned on unused
 # paths, null checks after use): clang must not optimise on it.
 add_compile_options(
     ${arch_flags} -fms-extensions -fasm-blocks -fshort-wchar -fsigned-char
     -fno-strict-aliasing -fwrapv -ftrivial-auto-var-init=zero -fno-delete-null-pointer-checks -fno-autolink -w -Wno-address-of-temporary -Wno-c++11-narrowing)
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NON_CONFORMING_SWPRINTFS GTA2_PORT)
-
-# Windows can also build with DMA's DLLs (DirectX renderer and video, Miles, Bink) next to the exe.
-option(GTA2_PORT_DIRECTX "Windows: use the original DirectX, Miles and Bink DLLs instead of SDL3" OFF)
 
 if(WIN32 AND GTA2_PORT_DIRECTX)
     include_directories(${CMAKE_CURRENT_LIST_DIR}/include ${ROOT}/Source ${ROOT})
@@ -57,7 +68,7 @@ if(WIN32 AND GTA2_PORT_DIRECTX)
     target_compile_definitions(binkw32 PRIVATE BUILD_BINK)
 
     add_executable(gta2 WIN32 ${lib_src} ${ROOT}/test.cpp ${ROOT}/StdAfx.cpp
-        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/twin_stick.cpp src/ptr_slot.cpp src/layout_checks.cpp ${CMAKE_CURRENT_LIST_DIR}/resources.rc)
+        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/twin_stick.cpp src/ptr_slot.cpp src/layout_checks.cpp src/port_globals.cpp src/rand/rand.cpp src/rand/particle.cpp src/net_hooks.cpp ${CMAKE_CURRENT_LIST_DIR}/resources.rc)
     target_link_libraries(gta2 PRIVATE mss32 binkw32
         ddraw dinput dxguid dplayx winmm ole32 oleaut32 user32 gdi32 advapi32 version shell32 comdlg32)
     target_link_options(gta2 PRIVATE -static -static-libgcc -static-libstdc++ -lpthread)
@@ -140,9 +151,10 @@ else()
     endif()
     set_source_files_properties(${ROOT}/Source/3rdParty/bink.cpp PROPERTIES COMPILE_DEFINITIONS BUILD_BINK)
 
-    add_executable(gta2 ${lib_src} ${ROOT}/test.cpp ${ROOT}/StdAfx.cpp
+    list(FILTER lib_src EXCLUDE REGEX "/Source/(NetPlay|NetUi)\\.cpp$")
+    add_executable(gta2 ${lib_src} ${net_game_src} ${ROOT}/test.cpp ${ROOT}/StdAfx.cpp
         ${ROOT}/Source/3rdParty/bink.cpp
-        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/twin_stick.cpp src/ptr_slot.cpp src/layout_checks.cpp ${compat_src})
+        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/twin_stick.cpp src/ptr_slot.cpp src/layout_checks.cpp src/port_globals.cpp src/rand/rand.cpp src/rand/particle.cpp src/net_hooks.cpp ${compat_src})
     target_compile_definitions(gta2 PRIVATE GTA2_PORT_SDL)
     # Off in the Flatpak, which has no network access and updates itself.
     option(GTA2_UPDATE_CHECK "Look for a newer release on GitHub at start, through curl or wget" ON)
@@ -151,7 +163,8 @@ else()
     endif()
     # reg2, not gta2: unpacked into a GTA2 folder, it must not replace the original's gta2.exe.
     set_target_properties(gta2 PROPERTIES OUTPUT_NAME reg2)
-    target_link_libraries(gta2 PRIVATE gta2gl gta2setup SDL3::SDL3)
+    # dladdr: the network game's random draw log (net/engine/dev/compare.cpp); in libdl before glibc 2.34
+    target_link_libraries(gta2 PRIVATE gta2gl gta2setup SDL3::SDL3 enet ${CMAKE_DL_LIBS})
     if(openal_runtime AND NOT APPLE)
         add_custom_command(TARGET gta2 POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${openal_runtime} $<TARGET_FILE_DIR:gta2>)

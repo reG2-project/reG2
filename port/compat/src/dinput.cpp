@@ -401,7 +401,13 @@ class DirectInput : public IDirectInputA
 };
 
 DirectInput sDirectInput;
+unsigned short sTypedChar[256]; // the character each key last typed, in the keyboard's layout with its shift (port_TypedChar)
 } // namespace
+
+unsigned short port_TypedChar(int dik)
+{
+    return sTypedChar[dik & 0xFF];
+}
 
 DWORD port_DikFromScancode(SDL_Scancode sc)
 {
@@ -458,6 +464,13 @@ void port_OnInputEvent(const SDL_Event& e)
     if (!dik)
     {
         return;
+    }
+    if (down)
+    {
+        // Lower case as typed, where the game's tables give capitals: the chat's font has it, and its commands are
+        // case-insensitive
+        const SDL_Keycode c = SDL_GetKeyFromScancode(e.key.scancode, e.key.mod, false);
+        sTypedChar[dik & 0xFF] = c > ' ' && c < 256 && c != SDLK_DELETE ? static_cast<unsigned short>(c) : 0;
     }
     const bool buffered = !port_AltKeyInGame(dik);
     for (Device* pDev : sDevices)

@@ -24,6 +24,10 @@ unsigned port_FrameCount();
 // The full screen mode chosen in the settings, NULL for the desktop's.
 const SDL_DisplayMode* port_FullscreenMode();
 
+// GTA2_SPEED (the game's clock that many times faster) and GTA2_HEADLESS (no window content, sound or gamepads).
+double port_ClockSpeed();
+bool port_Headless();
+
 // Scripted key presses and exit (GTA2_INPUT, GTA2_EXIT_AT), checked as the message loop pumps.
 void port_InitTestInput();
 void port_InjectTestInput(unsigned frame);
@@ -58,6 +62,9 @@ int port_DefaultAltBinding(int control);
 bool port_AltKeyInGame(DWORD dik);
 // The layout's letter on the key at that DIK code's position (dinput.cpp), 0 if not a letter.
 int port_KeyLetter(int dik);
+// The character a key's last press typed, in the system's keyboard layout with shift (Latin-1, 0 none), for the
+// chat line (Hud.cpp): the game's tables (data/keyboard) are per key without shift, so a '/' behind shift never came
+unsigned short port_TypedChar(int dik);
 void port_CaptureStart(); // then the next key (DIK or mouse code) or pad code pressed, -1 until then
 int port_CapturedKey();
 int port_CapturedPad();

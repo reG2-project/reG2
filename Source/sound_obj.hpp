@@ -29,6 +29,12 @@ struct SoundPosEntry
     {
     }
 
+#if defined(GTA2_PORT_SDL)
+    // From a pool in the network game's rollback set (port/net/engine/sound_pool.cpp)
+    static void* operator new(size_t size);
+    static void operator delete(void* p);
+#endif
+
     Fix16 mLastSpeed; // 0x0
     Car* mCar; // 0x4
     s16 mUnused8; // 0x8
@@ -138,7 +144,11 @@ GTA2_ASSERT_SIZEOF_ALWAYS(Sound_Params, 0x8);
 
 class sound_obj
 {
+#if defined(GTA2_PORT)
+  public: // the network game saves and restores the sound state (port/net/engine/rollback.cpp)
+#else
   private:
+#endif
     bool mbSoundInitialized; // 0x0
     bool mIsPaused; // 0x1
     bool mServiceEnabled; // 0x2

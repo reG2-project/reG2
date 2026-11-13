@@ -252,10 +252,17 @@ s32 Map_0x370::FindZoneIdxByName(const char_type* pZoneName, u8 zone_name_len)
     return -1;
 }
 
+#if defined(GTA2_PORT)
+// A file static in port builds: registered from the start, so the network game rolls it back and sends it to clients
+DEFINE_STATIC_GLOBAL(s16, sLastIdx_6F626C, 0x6F626C);
+#endif
+
 MATCH_FUNC(0x4DF0F0)
 gmp_map_zone* Map_0x370::GetNextZoneOfTypeRoundRobin(u8 zone_type)
 {
+#if !defined(GTA2_PORT)
     static s16 sLastIdx_6F626C; // the turn, one for every zone type: a call for one type moves it on for the others too
+#endif
 
     s16 zone_stack[40];
 

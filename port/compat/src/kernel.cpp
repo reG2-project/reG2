@@ -4,6 +4,7 @@
 #include <objbase.h>
 #include <shellapi.h>
 #include <SDL3/SDL.h>
+#include "port_platform.hpp"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -20,6 +21,23 @@ struct Handle
     HandleKind mKind;
 };
 } // namespace
+
+// GTA2_SPEED=<k>: the game's clock k times faster; a large k runs a network game's steps back to back (a test, the
+// bots' training)
+double port_ClockSpeed()
+{
+    const char* speed = SDL_getenv("GTA2_SPEED");
+    static const double sSpeed = speed ? atof(speed) : 1.0;
+    return sSpeed > 0 ? sSpeed : 1.0;
+}
+
+// GTA2_HEADLESS: no window content, no sound, no gamepads (a dedicated server, the tests). Both read once, after main.cpp
+// gave the network game's command line its say
+bool port_Headless()
+{
+    static const bool sHeadless = SDL_getenv("GTA2_HEADLESS") != NULL; // SDL's: a server sets it (port/net/net_main.cpp)
+    return sHeadless;
+}
 
 extern "C" {
 
@@ -52,17 +70,18 @@ BOOL WINAPI ReleaseMutex(HANDLE)
 
 void WINAPI Sleep(DWORD ms)
 {
-    SDL_Delay(ms);
+    SDL_Delay((Uint32)(ms / port_ClockSpeed()));
 }
 
 DWORD WINAPI GetTickCount()
 {
-    return (DWORD)SDL_GetTicks();
+    return timeGetTime();
 }
 
+// In ns: at a large GTA2_SPEED a millisecond holds many steps. Wraps after 49 days / k (71 minutes at k = 1000).
 DWORD WINAPI timeGetTime()
 {
-    return (DWORD)SDL_GetTicks();
+    return (DWORD)(Uint64)(SDL_GetTicksNS() / 1e6 * port_ClockSpeed());
 }
 
 void WINAPI OutputDebugStringA(LPCSTR s)
