@@ -78,6 +78,15 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+      # The Windows exe with its debug information, for the module+offset frames of reG2.log's crash reports.
+      - uses: actions/upload-artifact@v4
+        if: startsWith(matrix.target, 'mingw')
+        with:
+          name: symbols-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/work/symbols/*
+          if-no-files-found: error
+          retention-days: 90
+
   flatpak:
     runs-on: ubuntu-24.04
     env:

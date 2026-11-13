@@ -257,7 +257,10 @@ docker run --rm $BWRAP -v $PWD/../fpwork/out:/out:ro -v $PWD/port/packaging:/p:r
 The releases are 64-bit:
 
 - Windows: `reG2-windows-x64.zip`, with `reg2.exe`, `SDL3.dll`, `OpenAL32.dll`, this README and
-  the libraries' licences. Built with llvm-mingw on UCRT, part of Windows 10 and later.
+  the libraries' licences. Built with llvm-mingw on UCRT, part of Windows 10 and later. The exe with
+  its debug information is `work/symbols/reg2-x64.exe` (the `symbols-*` artifact): the frames of a
+  crash report in `reG2.log` are module+offset, and the exe's are found with
+  `llvm-symbolizer --obj=reg2-x64.exe -f -C 0x<0x140000000 + offset>`.
 - Linux, portable: `reG2-linux-x86_64.tar.gz`. Extract it anywhere and start `./reg2`. It brings
   SDL 3 and OpenAL Soft, and takes glibc (2.29 or later), OpenGL, X11, Wayland and sound from the system,
   so it uses the system's GPU driver. `packaging/linux/README-x86_64.md` is its README; `./reg2` says which

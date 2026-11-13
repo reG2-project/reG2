@@ -46,5 +46,5 @@ case $T in
         sh "$HERE/linux_packages.sh" "$W/build-$T" "$W/deps-$T" "$W/out"
         sh "$HERE/appimage.sh" "$W/build-$T" "$W/deps-$T" "$W/dl/appimage-runtime-x86_64" "$W/out"
         ;;
-    mingw*) sh "$HERE/windows_zip.sh" "$W/build-$T" "$W/deps-$T" "$W/out" ;;
+    mingw*) sh "$HERE/windows_zip.sh" "$W/build-$T" "$W/deps-$T" "$W/out" "$W/symbols" ;;
 esac

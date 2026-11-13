@@ -1,8 +1,9 @@
 #!/bin/sh
-# windows_zip.sh <build dir> <deps prefix> <out dir>: reG2-windows-<x64|i686>.zip, the exe with
-# the SDL3 and OpenAL Soft DLLs, the port's README and the libraries' licences.
+# windows_zip.sh <build dir> <deps prefix> <out dir> [<symbols dir>]: reG2-windows-<x64|i686>.zip, the exe
+# with the SDL3 and OpenAL Soft DLLs, the port's README and the libraries' licences. The zip's exe has no
+# debug information: the symbols dir gets the exe with it, reg2-<x64|i686>.exe, to symbolize crash reports.
 set -eu
-B=$1; P=$2; OUT=$3
+B=$1; P=$2; OUT=$3; SYM=${4:-}
 HERE=$(cd "$(dirname "$0")" && pwd)
 ARCH=i686
 llvm-objdump -f "$B/reg2.exe" | grep -q 'file format coff-x86-64' && ARCH=x64
@@ -10,6 +11,10 @@ NAME=reG2-windows-$ARCH
 Z=$(mktemp -d)/$NAME
 mkdir -p "$Z" "$OUT"
 llvm-strip --strip-debug -o "$Z/reg2.exe" "$B/reg2.exe"
+if [ -n "$SYM" ]; then
+    mkdir -p "$SYM"
+    cp "$B/reg2.exe" "$SYM/reg2-$ARCH.exe"
+fi
 cp "$B/SDL3.dll" "$B/OpenAL32.dll" "$Z/"
 cp "$HERE/../README.md" "$Z/README.md"
 cp -r "$P/licenses" "$Z/"
