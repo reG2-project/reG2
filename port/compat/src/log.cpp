@@ -247,6 +247,18 @@ void port_StartLog(int argc, char** argv)
     const time_t now = time(NULL);
     strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", localtime(&now));
     SDL_Log("Started %s", date);
+    char klid[KL_NAMELENGTH] = "";
+    GetKeyboardLayoutNameA(klid);
+    std::string locales;
+    if (SDL_Locale** ppLocales = SDL_GetPreferredLocales(NULL))
+    {
+        for (int i = 0; ppLocales[i] && i < 4; i++)
+        {
+            locales += (i ? ", " : "") + std::string(ppLocales[i]->language) + (ppLocales[i]->country ? std::string("-") + ppLocales[i]->country : "");
+        }
+        SDL_free(ppLocales);
+    }
+    SDL_Log("Keyboard layout %s, locales %s", klid, locales.c_str());
     atexit(LogExitWithoutReturn);
 }
 

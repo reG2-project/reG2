@@ -24,6 +24,27 @@ bool sHasGameOptions;
 unsigned sTestFrame;
 bool sGameFlip;
 
+// The start-up steps the log shows: the first frame, of the frontend, of a game.
+void LogFirstFrames()
+{
+    static bool sPresented, sFrontend, sGame;
+    if (!sPresented)
+    {
+        sPresented = true;
+        SDL_Log("First frame presented");
+    }
+    if (!sFrontend && port_FrontendActive())
+    {
+        sFrontend = true;
+        SDL_Log("First frontend frame presented");
+    }
+    if (!sGame && port_GameRunning())
+    {
+        sGame = true;
+        SDL_Log("First game frame presented");
+    }
+}
+
 // Scroll Lock toggles faithful rendering and the gta2gl.ini options.
 void PollToggleKey(VidSystem* pSys)
 {
@@ -455,12 +476,7 @@ VID_EXPORT void GTA2_CC Vid_FlipBuffers(SVideo* pVideo)
         PollToggleKey(pSys);
         // In game nothing writes the CPU surface (movies play outside games); scanning it is costly on the 3DS.
         pSys->Flip(!port_GameRunning());
-        static bool sPresented;
-        if (!sPresented)
-        {
-            sPresented = true;
-            SDL_Log("First frame presented");
-        }
+        LogFirstFrames();
     }
     port_MouseEndFrame();
 }
