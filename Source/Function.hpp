@@ -290,6 +290,14 @@ void __stdcall LogFuncAddr(u32 codeAddr, s32 mode);
     #define PORT_CONST
 #endif
 
+// What _findfirst returns: a pointer on 64-bit Windows, so a long would truncate it.
+#if defined(GTA2_PORT_64BIT)
+#include <stdint.h>
+typedef intptr_t find_handle_t;
+#else
+typedef long find_handle_t;
+#endif
+
 #if defined(GTA2_PORT_64BIT)
     // The asserted sizes are the 32-bit ones; port/src/layout_checks.cpp checks the files' structures on every target.
     #define GTA2_ASSERT_SIZEOF_ALWAYS(structureName, expectedSize)

@@ -866,7 +866,7 @@ void InputRecorder_67F8B0::VerifyAttractFilesExist()
     for (s32 i = 0; i < ATTRACT_COUNT; i++)
     {
         struct _finddata_t fileInfo;
-        long hFind = _findfirst(pAttractFile->mPath, &fileInfo);
+        find_handle_t hFind = _findfirst(pAttractFile->mPath, &fileInfo);
         if (hFind == -1)
         {
             strcpy(gErrStr, pAttractFile->mPath);

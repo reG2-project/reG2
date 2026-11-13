@@ -326,7 +326,7 @@ bool PlyDat::PlySlotDatExists(s32 slot_idx)
     GetPlySlotDatName(slot_idx, FileName);
 
     _finddata_t findData;
-    long hFind = _findfirst(FileName, &findData);
+    find_handle_t hFind = _findfirst(FileName, &findData);
     if (hFind == -1)
     {
         return false;
@@ -471,7 +471,7 @@ bool PlyDat::HiScoreHscExists()
     GetHiScoreHscFileName(FileName);
 
     _finddata_t findData;
-    long hFind = _findfirst(FileName, &findData);
+    find_handle_t hFind = _findfirst(FileName, &findData);
     if (hFind == -1)
     {
         return false;

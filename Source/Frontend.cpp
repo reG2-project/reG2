@@ -1496,7 +1496,7 @@ MATCH_FUNC(0x4B6030)
 bool Frontend::pre_intro_bik_exists()
 {
     _finddata_t find_data;
-    long find_handle = _findfirst(gFrontend->pre_intro_bik(), &find_data);
+    find_handle_t find_handle = _findfirst(gFrontend->pre_intro_bik(), &find_data);
     if (find_handle == -1)
     {
         return false;
@@ -1560,7 +1560,7 @@ bool Frontend::intro_bik_exists()
     _finddata_t findData;
 
     // note: put call in argument rather than local to change inst ordering
-    const long hFind = _findfirst(gFrontend->intro_bik(), &findData);
+    const find_handle_t hFind = _findfirst(gFrontend->intro_bik(), &findData);
 
     if (hFind == -1)
     {
@@ -4131,7 +4131,7 @@ void Frontend::GetMainAndBonusStagesFromSeqFile()
     char seqFileName[256];
     _finddata_t findInfo;
 
-    long hFind = _findfirst("data\\*.seq", &findInfo);
+    find_handle_t hFind = _findfirst("data\\*.seq", &findInfo);
     if (hFind == -1)
     {
         FatalError(Gta2Error::SeqFileNotFound, "C:\\Splitting\\GTA2\\Source\\frontend2.cpp", 4876);
@@ -4383,7 +4383,7 @@ bool Frontend::PlySlotSvgExists(u8 idx)
     GetPlySlotSvgName(idx, FileName);
 
     _finddata_t findData;
-    long hFind = _findfirst(FileName, &findData);
+    find_handle_t hFind = _findfirst(FileName, &findData);
     if (hFind == -1)
     {
         return false;
