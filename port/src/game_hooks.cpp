@@ -47,7 +47,32 @@ f32 Offset(f32 pos, f32 layoutSize, s32 screenSize)
     const f32 extra = screenSize - 2 * margin - layoutSize * ToF(gViewCamera->mUiScale);
     return margin + (pos < layoutSize / 6 ? 0.0f : (pos > layoutSize * 5 / 6 ? extra : extra / 2));
 }
+
+bool sCentred;
+
+// With sCentred, the centre anchor's offset in whole pixels from the left one's: where the layout fills the width,
+// the group draws exactly as when anchored left.
+f32 OffsetX(f32 anchor)
+{
+    const s32 width = gViewCamera->mScreenPxWidth;
+    if (!sCentred)
+    {
+        return Offset(anchor, 640.0f, width);
+    }
+    const f32 left = Offset(0.0f, 640.0f, width);
+    return left + static_cast<s32>(Offset(320.0f, 640.0f, width) - left);
+}
 } // namespace
+
+PortUiCentred::PortUiCentred()
+{
+    sCentred = true;
+}
+
+PortUiCentred::~PortUiCentred()
+{
+    sCentred = false;
+}
 
 Fix16 PortUiX(Fix16 x)
 {
@@ -55,7 +80,7 @@ Fix16 PortUiX(Fix16 x)
     {
         return FromF(PortPauseMenu::PlaceUi(ToF(x), false));
     }
-    return FromF(ToF(x) * ToF(gViewCamera->mUiScale) + Offset(ToF(x), 640.0f, gViewCamera->mScreenPxWidth));
+    return FromF(ToF(x) * ToF(gViewCamera->mUiScale) + OffsetX(ToF(x)));
 }
 
 Fix16 PortUiY(Fix16 y)
@@ -83,7 +108,7 @@ Fix16 PortUiStringX(const wchar_t* pStr, Fix16 x, u16 font)
     {
         anchor = start < 640.0f / 6 ? 0.0f : (start + width > 640.0f * 5 / 6 ? 640.0f : 320.0f);
     }
-    return FromF(start * ToF(gViewCamera->mUiScale) + Offset(anchor, 640.0f, gViewCamera->mScreenPxWidth));
+    return FromF(start * ToF(gViewCamera->mUiScale) + OffsetX(anchor));
 }
 
 // The layout fits the safe area's height on wide screens, its width on tall ones. Scaled up, it can go

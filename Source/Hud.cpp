@@ -2286,6 +2286,10 @@ void Hud_Brief::DrawBrief()
 {
     if (mCurrBriefs)
     {
+#if defined(GTA2_PORT)
+        // The face and the text span the layout's width.
+        PortUiCentred centred;
+#endif
         DrawFigureScaled(sprite_types_enum::user_6,
                          mFaceVariant + 3 * mFaceIdx + 16,
                          (32), // x

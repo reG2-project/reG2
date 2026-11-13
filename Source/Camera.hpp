@@ -217,6 +217,12 @@ EXTERN_GLOBAL(Camera*, gViewCamera);
 Fix16 PortUiX(Fix16 x);
 Fix16 PortUiY(Fix16 y);
 Fix16 PortUiStringX(const wchar_t* pStr, Fix16 x, u16 font);
+// While one exists, every x position uses the centre anchor, so a group spanning the layout stays together.
+struct PortUiCentred
+{
+    PortUiCentred();
+    ~PortUiCentred();
+};
 // The screen's width over that of a 4:3 screen of the same height (1 when not wider).
 Fix16 PortViewWidthFactor();
 // A camera zoom with the player's zoom setting applied, for everything that depends on the view's size.
