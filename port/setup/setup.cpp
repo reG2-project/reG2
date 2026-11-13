@@ -415,29 +415,49 @@ bool HasGameData(const fs::path& dir)
 }
 
 // $GTA2_DIR, else the current folder or the executable's when it holds the game's data, else the
-// per-user folder (empty if none).
-fs::path GameFolder(bool* pPerUser)
+// per-user folder (empty if none). pWhy: which one, for the log.
+fs::path GameFolder(bool* pPerUser, const char** pWhy)
 {
     *pPerUser = false;
     if (const char* dir = SDL_getenv("GTA2_DIR"))
     {
+        *pWhy = "GTA2_DIR";
         return PathFromUtf8(dir);
     }
     std::error_code ec;
     const char* base = SDL_GetBasePath();
     if (HasGameData(fs::current_path(ec)) || !base)
     {
+        *pWhy = base ? "current folder, has data" : "current folder";
         return fs::current_path(ec);
     }
     if (HasGameData(PathFromUtf8(base)))
     {
+        *pWhy = "executable's folder, has data";
         return PathFromUtf8(base);
     }
     char* pref = SDL_GetPrefPath("", "reG2");
     const fs::path dir = PathFromUtf8(pref ? pref : "");
     SDL_free(pref);
     *pPerUser = true;
+    *pWhy = "per-user folder";
     return dir;
+}
+
+void LogDataCheck(const DataCheck& check)
+{
+    std::string missing;
+    for (size_t i = 0; i < check.mMissing.size() && i < 10; i++)
+    {
+        missing += (i ? ", " : "") + check.mMissing[i];
+    }
+    if (check.mMissing.size() > 10)
+    {
+        missing += ", ...";
+    }
+    const std::string state =
+        check.mMissing.empty() ? "complete" : "missing " + std::to_string(check.mMissing.size()) + " files: " + missing;
+    SDL_Log("Game data: %s, music %d of %d tracks", state.c_str(), check.mMusicFound, check.mMusicTotal);
 }
 } // namespace
 
@@ -455,7 +475,9 @@ void port_SetWindowIcon(SDL_Window* pWindow)
 bool port_PrepareGameFolder(bool forceSetup)
 {
     bool perUser;
-    const fs::path dir = GameFolder(&perUser);
+    const char* why = "";
+    const fs::path dir = GameFolder(&perUser, &why);
+    SDL_Log("Game folder (%s): %s", why, PathToUtf8(dir).c_str());
     std::error_code ec;
     fs::current_path(dir, ec);
     if (ec || dir.empty())
@@ -472,12 +494,21 @@ bool port_PrepareGameFolder(bool forceSetup)
             fs::create_directories(sub, ec);
         }
     }
-    if (!perUser || (!forceSetup && CheckGameData(".").mMissing.empty()))
+    const DataCheck check = CheckGameData(".");
+    LogDataCheck(check);
+    if (!perUser || (!forceSetup && check.mMissing.empty()))
     {
+        SDL_Log("Setup skipped: %s", perUser ? "the game data is there" : "not the per-user folder");
         return true;
     }
+    SDL_Log("Setup: %s", forceSetup ? "--setup" : "no game data");
     SDL_InitSubSystem(SDL_INIT_EVENTS);
     const bool ok = SetupLoop(PathToUtf8(dir));
     SDL_QuitSubSystem(SDL_INIT_EVENTS);
+    SDL_Log("Setup %s", ok ? "done" : "left: quitting");
+    if (ok)
+    {
+        LogDataCheck(CheckGameData("."));
+    }
     return ok;
 }

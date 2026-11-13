@@ -68,6 +68,10 @@ IGLContext* CreateGLContext(SDL_Window* pWindow, const char** ppError)
         {
             ctx = SDL_GL_CreateContext(pWindow);
         }
+        if (!ctx)
+        {
+            SDL_Log("OpenGL 3.3 core: %s", SDL_GetError());
+        }
     }
     if (!ctx)
     {
@@ -75,7 +79,12 @@ IGLContext* CreateGLContext(SDL_Window* pWindow, const char** ppError)
         return NULL;
     }
     PFNGLGETSTRINGPROC getString = reinterpret_cast<PFNGLGETSTRINGPROC>(SDL_GL_GetProcAddress("glGetString"));
-    SDL_Log("OpenGL: %s", getString ? reinterpret_cast<const char*>(getString(GL_VERSION)) : "?");
+    auto glString = [getString](GLenum name) {
+        const char* s = getString ? reinterpret_cast<const char*>(getString(name)) : NULL;
+        return s ? s : "?";
+    };
+    SDL_Log("OpenGL: %s, %s, %s, GLSL %s", glString(GL_VERSION), glString(GL_VENDOR), glString(GL_RENDERER),
+            glString(GL_SHADING_LANGUAGE_VERSION));
     SDL_GL_SetSwapInterval(1);
     PresentLog::Attach(pWindow);
     return new SDLGLContext(pWindow, ctx);

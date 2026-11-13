@@ -75,6 +75,9 @@ int main(int argc, char** argv)
         port_LogExit(1);
         return 1;
     }
+    const int sdl = SDL_GetVersion();
+    SDL_Log("SDL %d.%d.%d, video driver %s", SDL_VERSIONNUM_MAJOR(sdl), SDL_VERSIONNUM_MINOR(sdl), SDL_VERSIONNUM_MICRO(sdl),
+            SDL_GetCurrentVideoDriver());
     port_RegisterRenderer();
     port_InitTestInput();
 

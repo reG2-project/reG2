@@ -152,11 +152,13 @@ HWND WINAPI CreateWindowExA(DWORD exStyle, LPCSTR className, LPCSTR title, DWORD
     SDL_Window* pSdl = SDL_CreateWindow(title, windowW, windowH, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
     if (!pSdl)
     {
+        SDL_Log("Window %dx%d: %s", windowW, windowH, SDL_GetError());
         return NULL;
     }
     Window* pWin = new Window{pSdl, it->second, (LONG)style, (LONG)exStyle, 0, title ? title : "", x, y, w, h};
     if (!sMainWindow)
     {
+        SDL_Log("Window created: %dx%d", windowW, windowH);
         sMainWindow = pWin;
         port_SetWindowIcon(pSdl);
         port_UpdateGameResolution();

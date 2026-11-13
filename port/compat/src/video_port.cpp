@@ -387,11 +387,13 @@ VID_EXPORT s32 GTA2_CC Vid_SetMode(SVideo* pVideo, HWND hWnd, s32 modeId)
     SDL_Window* pWindow = port_GetSDLWindow(hWnd);
     if (!pSys || !pWindow)
     {
+        SDL_Log("Vid_SetMode %d: no %s", modeId, pSys ? "window" : "video system");
         return 1;
     }
     s32 w;
     s32 h;
-    if (modeId == VidSystem::kWindowedModeId)
+    const bool windowed = modeId == VidSystem::kWindowedModeId;
+    if (windowed)
     {
         RECT rc;
         GetClientRect(hWnd, &rc);
@@ -404,14 +406,17 @@ VID_EXPORT s32 GTA2_CC Vid_SetMode(SVideo* pVideo, HWND hWnd, s32 modeId)
         SDisplayMode* pMode = pSys->FindMode(modeId);
         if (!pMode)
         {
+            SDL_Log("Vid_SetMode %d: no such mode", modeId);
             return 1;
         }
         w = pMode->field_8_width;
         h = pMode->field_C_height;
         port_SetFullscreen(hWnd, true);
     }
+    SDL_Log("Vid_SetMode %d: %dx%d %s", modeId, w, h, windowed ? "windowed" : "full screen");
     if (w <= 0 || h <= 0)
     {
+        SDL_Log("Vid_SetMode %d: empty frame", modeId);
         return 1;
     }
     pVideo->field_4C0_hwnd = hWnd;
@@ -432,6 +437,7 @@ VID_EXPORT s32 GTA2_CC Vid_SetMode(SVideo* pVideo, HWND hWnd, s32 modeId)
         port_ApplyVsync();
     }
     pSys->SetMode(modeId, w, h);
+    SDL_Log("Vid_SetMode %d: done", modeId);
     return 0;
 }
 
@@ -449,6 +455,12 @@ VID_EXPORT void GTA2_CC Vid_FlipBuffers(SVideo* pVideo)
         PollToggleKey(pSys);
         // In game nothing writes the CPU surface (movies play outside games); scanning it is costly on the 3DS.
         pSys->Flip(!port_GameRunning());
+        static bool sPresented;
+        if (!sPresented)
+        {
+            sPresented = true;
+            SDL_Log("First frame presented");
+        }
     }
     port_MouseEndFrame();
 }
