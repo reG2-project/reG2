@@ -37,11 +37,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(CMAKE_SIZEOF_VOID_P EQUAL 4)
     set(arch_flags -m32)
 endif()
+# No warnings, or only the 64 to 32-bit integer truncations, which build.sh checks in the Windows x64 build.
+option(GTA2_WARN_SHORTEN "Only clang's -Wshorten-64-to-32 warnings, instead of none" OFF)
+set(warning_flags -w)
+if(GTA2_WARN_SHORTEN)
+    set(warning_flags -Wno-everything -Wshorten-64-to-32)
+endif()
 # The game relies on what VC6 did with undefined behaviour (uninitialised locals returned on unused
 # paths, null checks after use): clang must not optimise on it.
 add_compile_options(
     ${arch_flags} -fms-extensions -fasm-blocks -fshort-wchar -fsigned-char
-    -fno-strict-aliasing -fwrapv -ftrivial-auto-var-init=zero -fno-delete-null-pointer-checks -fno-autolink -w -Wno-address-of-temporary -Wno-c++11-narrowing)
+    -fno-strict-aliasing -fwrapv -ftrivial-auto-var-init=zero -fno-delete-null-pointer-checks -fno-autolink ${warning_flags}
+    -Wno-address-of-temporary -Wno-c++11-narrowing)
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NON_CONFORMING_SWPRINTFS GTA2_PORT)
 
 # Windows can also build with DMA's DLLs (DirectX renderer and video, Miles, Bink) next to the exe.

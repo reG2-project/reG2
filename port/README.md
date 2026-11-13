@@ -236,8 +236,10 @@ to unshield and libarchive.
 `.github/workflows/port.yml` builds and tests the packages on pushes to `main` and `port/**` branches, on
 `v*` tags (a draft release of the 64-bit packages) and on demand. On Linux each is `packaging/ci.sh` in a
 Debian 13 container, which installs the tools, downloads the sources pinned in `packaging/versions.sh`, builds
-the libraries (`packaging/deps.sh`), the port (`packaging/build.sh`), then the packages. The same runs
-locally, from the repository's root:
+the libraries (`packaging/deps.sh`), the port (`packaging/build.sh`), then the packages. The mingw64 build
+turns on clang's `-Wshorten-64-to-32` and fails on a 64-bit value truncated into a `long`, 32 bits on
+Windows and 64 on Linux (lengths, `size_t` and `ptrdiff_t`, aside). The same runs locally, from the
+repository's root:
 
 ```bash
 docker run --rm -v $PWD:/src:ro -v $PWD/../work:/work -w /src debian:trixie sh port/packaging/ci.sh linux64 /work
