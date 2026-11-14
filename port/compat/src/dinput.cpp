@@ -433,7 +433,11 @@ void port_OnInputEvent(const SDL_Event& e)
 {
     port_PadEvent(e);
     port_MouseEvent(e);
+#ifdef GTA2_PORT_SDL2
+    if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+#else
     if (e.type == SDL_EVENT_WINDOW_FOCUS_LOST)
+#endif
     {
         // The releases of the keys held now would go to the next window.
         for (Device* pDev : sDevices)
@@ -453,7 +457,11 @@ void port_OnInputEvent(const SDL_Event& e)
     {
         return;
     }
+#ifdef GTA2_PORT_SDL2
+    const DWORD dik = Dik(e.key.keysym.scancode);
+#else
     const DWORD dik = Dik(e.key.scancode);
+#endif
     const bool down = e.type == SDL_EVENT_KEY_DOWN;
     if (!dik)
     {

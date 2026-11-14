@@ -60,7 +60,11 @@ int main(int argc, char** argv)
     }
     if (const char* file = getenv("GTA2_AUDIO_FILE"))
     {
+#ifdef GTA2_PORT_SDL2
+        SDL_setenv("SDL_AUDIODISKOUTPUTFILE", file, 1);
+#else
         SDL_SetHint(SDL_HINT_AUDIO_DISK_OUTPUT_FILE, file);
+#endif
     }
     std::string cmdLine;
     for (int i = 1; i < argc; i++)

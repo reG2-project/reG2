@@ -42,9 +42,18 @@ void port_MouseEvent(const SDL_Event& e)
                 sLeftDown = false;
             }
             break;
+#ifdef GTA2_PORT_SDL2
+        case SDL_WINDOWEVENT:
+            if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+            {
+                sLeftDown = false;
+            }
+            break;
+#else
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             sLeftDown = false;
             break;
+#endif
         case SDL_EVENT_MOUSE_WHEEL:
             sWheel += e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -e.wheel.y : e.wheel.y;
             break;

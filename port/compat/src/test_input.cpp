@@ -49,8 +49,12 @@ void AttachPad(int pad)
     desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
     desc.name = pad ? "GTA2 test pad 2" : "GTA2 test pad";
     SDL_setenv_unsafe("GTA2_GAMEPAD", "GTA2 test pad", 1);
+#ifdef GTA2_PORT_SDL2
+    sPads[pad] = SDL_OpenJoystick(SDL_AttachVirtualJoystick(&desc));
+#else
     const SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
     sPads[pad] = id ? SDL_OpenJoystick(id) : NULL;
+#endif
     if (!sPads[pad])
     {
         SDL_Log("GTA2_INPUT: no virtual gamepad: %s", SDL_GetError());
@@ -218,15 +222,25 @@ void InjectMouse(const KeyEvent& event)
             break;
         case SDL_EVENT_MOUSE_WHEEL:
             e.wheel.windowID = window;
-            e.wheel.y = event.mX;
             e.wheel.direction = SDL_MOUSEWHEEL_NORMAL;
+#ifdef GTA2_PORT_SDL2
+            e.wheel.y = (Sint32)event.mX;
+            e.wheel.mouseX = (Sint32)sMouseX;
+            e.wheel.mouseY = (Sint32)sMouseY;
+#else
+            e.wheel.y = event.mX;
             e.wheel.mouse_x = sMouseX;
             e.wheel.mouse_y = sMouseY;
+#endif
             break;
         default:
             e.button.windowID = window;
             e.button.button = static_cast<Uint8>(event.mX);
+#ifdef GTA2_PORT_SDL2
+            e.button.state = event.mDown ? SDL_PRESSED : SDL_RELEASED;
+#else
             e.button.down = event.mDown;
+#endif
             e.button.clicks = 1;
             e.button.x = sMouseX;
             e.button.y = sMouseY;
@@ -253,7 +267,12 @@ void port_InjectTestInput(unsigned frame)
         if (it->mMouseEvent == SDL_EVENT_WINDOW_FOCUS_LOST || it->mMouseEvent == SDL_EVENT_WINDOW_FOCUS_GAINED)
         {
             SDL_Event e = {};
+#ifdef GTA2_PORT_SDL2
+            e.type = SDL_WINDOWEVENT;
+            e.window.event = (Uint8)it->mMouseEvent;
+#else
             e.type = it->mMouseEvent;
+#endif
             SDL_Window* pWindow = port_MainSDLWindow();
             e.window.windowID = pWindow ? SDL_GetWindowID(pWindow) : 0;
             SDL_PushEvent(&e);
@@ -285,10 +304,17 @@ void port_InjectTestInput(unsigned frame)
         }
         SDL_Event e = {};
         e.type = it->mDown ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+#ifdef GTA2_PORT_SDL2
+        e.key.keysym.scancode = it->mScancode;
+        e.key.keysym.sym = SDL_GetKeyFromScancode(it->mScancode, SDL_KMOD_NONE, false);
+        e.key.keysym.mod = it->mMod;
+        e.key.state = it->mDown ? SDL_PRESSED : SDL_RELEASED;
+#else
         e.key.scancode = it->mScancode;
         e.key.key = SDL_GetKeyFromScancode(it->mScancode, SDL_KMOD_NONE, false);
         e.key.mod = it->mMod;
         e.key.down = it->mDown;
+#endif
         SDL_PushEvent(&e);
         SDL_Log("test input: frame %u %s %s", frame, SDL_GetScancodeName(it->mScancode), it->mDown ? "down" : "up");
         it = Events().erase(it);

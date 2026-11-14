@@ -62,6 +62,12 @@ int SDLCALL FetchLatest(void*)
     const char* url = SDL_getenv("GTA2_UPDATE_URL") ? SDL_getenv("GTA2_UPDATE_URL") : "https://api.github.com/repos/reG2-project/reG2/releases/latest";
     const char* commands[][6] = {{"curl", "-fsSL", "--max-time", "10", url, NULL}, {"wget", "-qO-", "--timeout=10", url, NULL}};
     char* pOut = NULL;
+#ifdef GTA2_PORT_SDL2
+    for (s32 i = 0; i < 2 && !pOut; i++)
+    {
+        pOut = SDL2_ProcessCapture(commands[i]);
+    }
+#else
     for (s32 i = 0; i < 2 && !pOut; i++)
     {
         const SDL_PropertiesID props = SDL_CreateProperties();
@@ -76,6 +82,7 @@ int SDLCALL FetchLatest(void*)
         pOut = pProcess ? static_cast<char*>(SDL_ReadProcess(pProcess, NULL, NULL)) : NULL;
         SDL_DestroyProcess(pProcess);
     }
+#endif
     const char* pTag = pOut ? SDL_strstr(pOut, "\"tag_name\"") : NULL;
     pTag = pTag ? SDL_strstr(pTag + 10, "\"v") : NULL;
     SDL_SetAtomicInt(&sLatest, pTag ? VersionNumber(pTag + 2) : 0);

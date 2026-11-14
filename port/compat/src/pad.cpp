@@ -497,8 +497,13 @@ void port_PadEvent(const SDL_Event& e)
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
         {
+#ifdef GTA2_PORT_SDL2
+            const DWORD dik = port_DikFromScancode(e.key.keysym.scancode);
+            sKeyDown[dik] = dik && e.key.state == SDL_PRESSED;
+#else
             const DWORD dik = port_DikFromScancode(e.key.scancode);
             sKeyDown[dik] = dik && e.key.down;
+#endif
             if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat)
             {
                 sMode = kKeyboardMode;
@@ -506,17 +511,31 @@ void port_PadEvent(const SDL_Event& e)
             }
             break;
         }
+#ifdef GTA2_PORT_SDL2
+        case SDL_WINDOWEVENT:
+            if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+            {
+                memset(sKeyDown, 0, sizeof(sKeyDown));
+                sButtonsDown = 0;
+            }
+            break;
+#else
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             memset(sKeyDown, 0, sizeof(sKeyDown));
             sButtonsDown = 0;
             break;
+#endif
         case SDL_EVENT_GAMEPAD_ADDED:
             port_OpenGamepad();
             break;
         case SDL_EVENT_GAMEPAD_REMOVED:
             for (int i = 0; i < sNumGamepads; i++)
             {
+#ifdef GTA2_PORT_SDL2
+                if (SDL_GetGamepadID(sGamepads[i]) == e.cdevice.which)
+#else
                 if (SDL_GetGamepadID(sGamepads[i]) == e.gdevice.which)
+#endif
                 {
                     SDL_Gamepad* pPad = sGamepads[i];
                     sGamepads[i] = sGamepads[--sNumGamepads];
@@ -527,14 +546,22 @@ void port_PadEvent(const SDL_Event& e)
             }
             break;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+#ifdef GTA2_PORT_SDL2
+            if (PadInput(e.cbutton.which))
+#else
             if (PadInput(e.gbutton.which))
+#endif
             {
                 sMode = kPadMode;
                 sMouseAims = false;
             }
             break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+#ifdef GTA2_PORT_SDL2
+            if ((e.caxis.value > kThreshold || e.caxis.value < -kThreshold) && PadInput(e.caxis.which))
+#else
             if ((e.gaxis.value > kThreshold || e.gaxis.value < -kThreshold) && PadInput(e.gaxis.which))
+#endif
             {
                 sMode = kPadMode;
                 sMouseAims = false;
