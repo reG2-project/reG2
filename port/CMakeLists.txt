@@ -51,6 +51,12 @@ add_compile_options(
     -Wno-address-of-temporary -Wno-c++11-narrowing)
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NON_CONFORMING_SWPRINTFS GTA2_PORT)
 
+# Build against SDL2 instead of SDL3 (Linux and Windows MinGW; macOS stays SDL3-only).
+option(GTA2_SDL2 "Build against SDL2 instead of SDL3" OFF)
+if(GTA2_SDL2)
+    add_compile_definitions(GTA2_PORT_SDL2)
+endif()
+
 # Windows can also build with DMA's DLLs (DirectX renderer and video, Miles, Bink) next to the exe.
 option(GTA2_PORT_DIRECTX "Windows: use the original DirectX, Miles and Bink DLLs instead of SDL3" OFF)
 
@@ -71,12 +77,27 @@ if(WIN32 AND GTA2_PORT_DIRECTX)
     set_target_properties(mss32 binkw32 PROPERTIES PREFIX "")
 else()
     # Windows: SDL3-devel-<version>-mingw, -DSDL3_DIR=<it>/i686-w64-mingw32/lib/cmake/SDL3.
-    find_package(SDL3 REQUIRED CONFIG)
+    # With -DGTA2_SDL2=ON, SDL2 instead, through the compat/sdl2 shim that answers the SDL3 names.
+    if(GTA2_SDL2)
+        find_package(SDL2 REQUIRED CONFIG)
+        if(NOT TARGET SDL2::SDL2)
+            find_package(PkgConfig REQUIRED)
+            pkg_check_modules(SDL2PC REQUIRED IMPORTED_TARGET sdl2)
+            add_library(SDL2::SDL2 ALIAS PkgConfig::SDL2PC)
+        endif()
+        add_library(sdl2shim STATIC ${CMAKE_CURRENT_LIST_DIR}/compat/sdl2/sdl2_impl.cpp)
+        target_link_libraries(sdl2shim PUBLIC SDL2::SDL2)
+        target_include_directories(sdl2shim PUBLIC ${CMAKE_CURRENT_LIST_DIR}/compat/sdl2)
+        set(sdl_target sdl2shim)
+    else()
+        find_package(SDL3 REQUIRED CONFIG)
+        set(sdl_target SDL3::SDL3)
+    endif()
 
     # The OpenGL ES renderer: portable, no Windows headers.
     file(GLOB renderer_src ${CMAKE_CURRENT_LIST_DIR}/renderer/*.cpp)
     add_library(gta2gl STATIC ${renderer_src})
-    target_link_libraries(gta2gl PRIVATE SDL3::SDL3)
+    target_link_libraries(gta2gl PRIVATE ${sdl_target})
 
     # First-start setup (setup/): finds the game folder, or copies the game's data into the per-user
     # one. libarchive reads disc images and archives, unshield InstallShield cabinets: from the system,
@@ -84,7 +105,7 @@ else()
     set(GTA2_SETUP_DEPS_DIR "" CACHE PATH "Install prefix of libarchive and unshield")
     file(GLOB setup_src ${CMAKE_CURRENT_LIST_DIR}/setup/*.cpp)
     add_library(gta2setup STATIC ${setup_src})
-    target_link_libraries(gta2setup PRIVATE SDL3::SDL3)
+    target_link_libraries(gta2setup PRIVATE ${sdl_target})
     if(GTA2_SETUP_DEPS_DIR)
         target_include_directories(gta2setup PRIVATE ${GTA2_SETUP_DEPS_DIR}/include)
         target_compile_definitions(gta2setup PRIVATE LIBARCHIVE_STATIC)
@@ -160,7 +181,7 @@ else()
     endif()
     # reg2, not gta2: unpacked into a GTA2 folder, it must not replace the original's gta2.exe.
     set_target_properties(gta2 PROPERTIES OUTPUT_NAME reg2)
-    target_link_libraries(gta2 PRIVATE gta2gl gta2setup SDL3::SDL3)
+    target_link_libraries(gta2 PRIVATE gta2gl gta2setup ${sdl_target})
     if(openal_runtime AND NOT APPLE)
         add_custom_command(TARGET gta2 POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${openal_runtime} $<TARGET_FILE_DIR:gta2>)
@@ -173,6 +194,9 @@ else()
         target_compile_options(gta2 PRIVATE -include ${compat}/win32_redirect.hpp)
         target_include_directories(gta2 PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include ${ROOT}/Source ${ROOT})
         target_link_libraries(gta2 PRIVATE user32 advapi32 version)
+        if(GTA2_SDL2)
+            target_link_libraries(gta2 PRIVATE comdlg32 shell32 ole32 uuid)
+        endif()
         target_link_options(gta2 PRIVATE -static -static-libgcc -static-libstdc++ -lpthread)
         add_custom_command(TARGET gta2 POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:gta2> $<TARGET_FILE_DIR:gta2>
@@ -196,7 +220,7 @@ else()
                 BUILD_WITH_INSTALL_RPATH ON INSTALL_RPATH @executable_path/../Frameworks)
             add_custom_command(TARGET gta2 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_BUNDLE_CONTENT_DIR:gta2>/Frameworks
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3> ${openal_runtime}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${sdl_target}> ${openal_runtime}
                     $<TARGET_BUNDLE_CONTENT_DIR:gta2>/Frameworks)
             # The Khronos header the renderer declares its OpenGL entry points with; macOS has none.
             target_include_directories(gta2 PRIVATE ${CMAKE_CURRENT_LIST_DIR}/renderer/khronos ${compat}/macos)

@@ -11,6 +11,9 @@
 #if defined(__linux__)
 #include <poll.h>
 #include <time.h>
+#ifdef GTA2_PORT_SDL2
+#include <SDL_syswm.h>
+#endif
 #endif
 
 namespace
@@ -437,9 +440,20 @@ bool LoadWayland()
 // True when the compositor will report presentation times.
 bool AttachWayland()
 {
+#ifdef GTA2_PORT_SDL2
+    SDL_SysWMinfo wm = {};
+    SDL_VERSION(&wm.version);
+    if (!SDL_GetWindowWMInfo(spWindow, &wm) || wm.subsystem != SDL_SYSWM_WAYLAND)
+    {
+        return false;
+    }
+    spDisplay = wm.info.wl.display;
+    spSurface = wm.info.wl.surface;
+#else
     const SDL_PropertiesID props = SDL_GetWindowProperties(spWindow);
     spDisplay = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
     spSurface = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
+#endif
     if (!spDisplay || !spSurface || !LoadWayland())
     {
         return false;

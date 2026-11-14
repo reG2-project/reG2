@@ -24,20 +24,30 @@ const char kNoGameText[] =
     "installers. Download GTA2.exe from there, then choose \"Install from a file\" and pick it.";
 const char kNoGameUrl[] = "https://archive.org/details/rockstar-classics";
 
+#ifdef GTA2_PORT_SDL2
+const char kFilePatterns[] = "exe;iso;zip;7z";
+#else
 const SDL_DialogFileFilter kFileFilters[] = {
     {"GTA2 installer or disc image", "exe;iso;zip;7z"},
     {"All files", "*"},
 };
+#endif
 
 #if !defined(_WIN32) && !defined(__APPLE__)
+#ifndef GTA2_PORT_SDL2
 const unsigned char kLogoPng[] = {
 #embed "../resources/reg2_256.png"
 };
+#endif
 
 // The reG2 logo, 256 px.
 SDL_Surface* LoadLogo()
 {
+#ifdef GTA2_PORT_SDL2
+    return NULL;
+#else
     return SDL_LoadPNG_IO(SDL_IOFromConstMem(kLogoPng, sizeof(kLogoPng)), true);
+#endif
 }
 #endif
 
@@ -121,7 +131,9 @@ public:
     void Text(float x, float y, const std::string& s, Uint32 rgb)
     {
         Color(rgb);
+#ifndef GTA2_PORT_SDL2
         SDL_RenderDebugText(mRenderer, x, y, s.c_str());
+#endif
     }
 
     // GTA2_SETUP_CAPTURE=<folder>: frames written there as BMP, for tests without a screen.
@@ -129,12 +141,14 @@ public:
     {
         static int sCaptures;
         const char* dir = SDL_getenv("GTA2_SETUP_CAPTURE");
+#ifndef GTA2_PORT_SDL2
         SDL_Surface* s = capture && dir ? SDL_RenderReadPixels(mRenderer, NULL) : NULL;
         if (s)
         {
             SDL_SaveBMP(s, (std::string(dir) + "/setup_" + std::to_string(sCaptures++) + ".bmp").c_str());
             SDL_DestroySurface(s);
         }
+#endif
         SDL_RenderPresent(mRenderer);
         Color(0xEEEEEE);
         SDL_RenderClear(mRenderer);
@@ -152,6 +166,30 @@ private:
 // it): a click or the button's number answers it, Escape or closing gives escapeButton.
 int DrawnBox(const std::string& message, const std::vector<const char*>& buttons, int escapeButton)
 {
+#ifdef GTA2_PORT_SDL2
+    fprintf(stderr, "%s: %s\n", kTitle, message.c_str());
+    for (size_t i = 0; i < buttons.size(); i++)
+    {
+        fprintf(stderr, "  %d. %s\n", (int)i + 1, buttons[i]);
+    }
+    fprintf(stderr, "Choose 1-%d [1]: ", (int)buttons.size());
+    fflush(stderr);
+    for (;;)
+    {
+        char line[16] = "";
+        if (!fgets(line, sizeof(line), stdin))
+        {
+            return escapeButton;
+        }
+        const int n = atoi(line);
+        if (n >= 1 && n <= (int)buttons.size())
+        {
+            return n - 1;
+        }
+        fprintf(stderr, "Choose 1-%d [1]: ", (int)buttons.size());
+        fflush(stderr);
+    }
+#else
     const int w = 340;
     const std::string text = Wrap(message, (w - 16) / 8, true);
     const int top = 18 + 10 * (int)std::count(text.begin(), text.end(), '\n'), h = top + 20 * (int)buttons.size() + 6;
@@ -198,6 +236,7 @@ int DrawnBox(const std::string& message, const std::vector<const char*>& buttons
         win.Present(first);
         SDL_Delay(10);
     }
+#endif
 }
 
 // A native message box; buttons are numbered from 0, closing it gives escapeButton.
@@ -214,9 +253,15 @@ int Ask(SDL_MessageBoxFlags flags, const std::string& message, const std::vector
         std::vector<SDL_MessageBoxButtonData> data;
         for (int i = 0; i < (int)buttons.size(); i++)
         {
+#ifdef GTA2_PORT_SDL2
+            data.push_back({(int)((i == returnButton ? SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT : 0u) |
+                                  (i == escapeButton ? SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT : 0u)),
+                            i, buttons[i]});
+#else
             data.push_back({(i == returnButton ? SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT : 0u) |
                                 (i == escapeButton ? SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT : 0u),
                             i, buttons[i]});
+#endif
         }
 #if defined(_WIN32) || defined(__APPLE__)
         const std::string text = message;
@@ -245,6 +290,30 @@ struct Pick
 // A folder or a file from the system's dialog; empty if cancelled.
 std::string PickPath(bool folder)
 {
+#ifdef GTA2_PORT_SDL2
+    std::string filter;
+    for (const char* p = kFilePatterns; *p; p++)
+    {
+        if (*p == ';')
+        {
+            filter += " *.";
+        }
+        else
+        {
+            filter += *p;
+        }
+    }
+    filter = "*." + filter;
+    std::string path;
+    if (!SDL2_PickPath(folder, folder ? NULL : filter.c_str(), &path))
+    {
+        Ask(SDL_MESSAGEBOX_ERROR,
+            "No file dialog could be opened.\n\nOn Linux this needs zenity or kdialog. The path can also be given "
+            "in the GTA2_SETUP_PATH environment variable.",
+            {"OK"}, 0, 0);
+    }
+    return path;
+#else
     Pick pick;
     const SDL_DialogFileCallback done = [](void* pUser, const char* const* pList, int) {
         Pick* p = static_cast<Pick*>(pUser);
@@ -274,6 +343,7 @@ std::string PickPath(bool folder)
             {"OK"}, 0, 0);
     }
     return pick.mPath;
+#endif
 }
 
 struct Job
@@ -307,7 +377,11 @@ InstallResult RunInstall(const fs::path& source)
         {
             job.mProgress.mCancel = job.mProgress.mCancel || e.type == SDL_EVENT_QUIT ||
                                     e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED ||
+#ifdef GTA2_PORT_SDL2
+                                    (e.type == SDL_EVENT_KEY_DOWN && e.key.keysym.sym == SDLK_ESCAPE);
+#else
                                     (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE);
+#endif
         }
         const uint64_t done = job.mProgress.mDone >> 20, total = job.mProgress.mTotal >> 20;
         const std::string amount = total ? std::to_string(done) + " / " + std::to_string(total) + " MB" : "";

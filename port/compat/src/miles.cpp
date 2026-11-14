@@ -76,7 +76,11 @@ struct Stream
 
 struct Driver
 {
+#ifdef GTA2_PORT_SDL2
+    SDL_AudioDeviceID mDevice = 0;
+#else
     SDL_AudioStream* mDevice = NULL;
+#endif
     S32 mMasterVolume = 127;
     std::vector<Sample*> mSamples;
     std::vector<Stream*> mStreams;
@@ -521,9 +525,15 @@ class Limiter
 
 Limiter sLimiter;
 
+#ifdef GTA2_PORT_SDL2
+void SDLCALL AudioCallback(void*, Uint8* pStream, int len)
+{
+    const int frames = len / (int)(2 * sizeof(float));
+#else
 void SDLCALL AudioCallback(void*, SDL_AudioStream* stream, int additional, int)
 {
     const int frames = additional / (int)(2 * sizeof(float));
+#endif
     if (frames <= 0)
     {
         return;
@@ -580,7 +590,11 @@ void SDLCALL AudioCallback(void*, SDL_AudioStream* stream, int additional, int)
     {
         v = v > 1.0f ? 1.0f : (v < -1.0f ? -1.0f : v);
     }
+#ifdef GTA2_PORT_SDL2
+    SDL_memcpy(pStream, mix.data(), (size_t)frames * 2 * sizeof(float));
+#else
     SDL_PutAudioStreamData(stream, mix.data(), (int)(mix.size() * sizeof(float)));
+#endif
 }
 
 Sample* S(HSAMPLE h)
@@ -667,7 +681,11 @@ DXDEC void AILCALL AIL_delay(S32 intervals)
 
 // The game closes and reopens the driver to switch 3D sound on or off: the SDL device stays open
 // (silent while no driver), since reopening it takes a noticeable time.
+#ifdef GTA2_PORT_SDL2
+static SDL_AudioDeviceID sDevice;
+#else
 static SDL_AudioStream* sDevice;
+#endif
 
 DXDEC S32 AILCALL AIL_waveOutOpen(HDIGDRIVER FAR* drvr, LPHWAVEOUT FAR*, S32, LPWAVEFORMAT)
 {
@@ -678,6 +696,21 @@ DXDEC S32 AILCALL AIL_waveOutOpen(HDIGDRIVER FAR* drvr, LPHWAVEOUT FAR*, S32, LP
     }
     if (!sDevice)
     {
+#ifdef GTA2_PORT_SDL2
+        SDL_AudioSpec want = {};
+        want.freq = kOutRate;
+        want.format = AUDIO_F32SYS;
+        want.channels = 2;
+        want.samples = 1024;
+        want.callback = AudioCallback;
+        sDevice = SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
+        if (!sDevice)
+        {
+            SDL_Log("Audio: %s", SDL_GetError());
+            return -1;
+        }
+        SDL_Log("Audio: %s", SDL_GetCurrentAudioDriver());
+#else
         const SDL_AudioSpec spec = {SDL_AUDIO_F32, 2, kOutRate};
         sDevice = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, AudioCallback, NULL);
         if (!sDevice)
@@ -686,10 +719,15 @@ DXDEC S32 AILCALL AIL_waveOutOpen(HDIGDRIVER FAR* drvr, LPHWAVEOUT FAR*, S32, LP
             return -1;
         }
         SDL_Log("Audio: %s", SDL_GetCurrentAudioDriver());
+#endif
     }
     sDriver = new Driver();
     sDriver->mDevice = sDevice;
+#ifdef GTA2_PORT_SDL2
+    SDL_PauseAudioDevice(sDevice, 0);
+#else
     SDL_ResumeAudioStreamDevice(sDevice);
+#endif
     *drvr = reinterpret_cast<HDIGDRIVER>(sDriver);
     return 0;
 }
@@ -706,7 +744,11 @@ DXDEC S32 AILCALL AIL_digital_handle_release(HDIGDRIVER)
 {
     if (sDriver)
     {
+#ifdef GTA2_PORT_SDL2
+        SDL_PauseAudioDevice(sDriver->mDevice, 1);
+#else
         SDL_PauseAudioStreamDevice(sDriver->mDevice);
+#endif
     }
     return 1;
 }
@@ -715,7 +757,11 @@ DXDEC S32 AILCALL AIL_digital_handle_reacquire(HDIGDRIVER)
 {
     if (sDriver)
     {
+#ifdef GTA2_PORT_SDL2
+        SDL_PauseAudioDevice(sDriver->mDevice, 0);
+#else
         SDL_ResumeAudioStreamDevice(sDriver->mDevice);
+#endif
     }
     return 1;
 }

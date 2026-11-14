@@ -250,6 +250,17 @@ void port_StartLog(int argc, char** argv)
     char klid[KL_NAMELENGTH] = "";
     GetKeyboardLayoutNameA(klid);
     std::string locales;
+#ifdef GTA2_PORT_SDL2
+    if (SDL_Locale* pLocales = SDL_GetPreferredLocales_I())
+    {
+        for (int i = 0; pLocales[i].language && i < 4; i++)
+        {
+            locales += (i ? ", " : "") + std::string(pLocales[i].language) +
+                       (pLocales[i].country ? std::string("-") + pLocales[i].country : "");
+        }
+        SDL_free(pLocales);
+    }
+#else
     if (SDL_Locale** ppLocales = SDL_GetPreferredLocales(NULL))
     {
         for (int i = 0; ppLocales[i] && i < 4; i++)
@@ -258,6 +269,7 @@ void port_StartLog(int argc, char** argv)
         }
         SDL_free(ppLocales);
     }
+#endif
     SDL_Log("Keyboard layout %s, locales %s", klid, locales.c_str());
     atexit(LogExitWithoutReturn);
 }

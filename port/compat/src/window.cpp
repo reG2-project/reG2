@@ -66,6 +66,42 @@ void Translate(const SDL_Event& e)
     }
     switch (e.type)
     {
+#ifdef GTA2_PORT_SDL2
+        case SDL_QUIT:
+            Post(h, WM_CLOSE, 0, 0);
+            break;
+        case SDL_WINDOWEVENT:
+            switch (e.window.event)
+            {
+                case SDL_WINDOWEVENT_FOCUS_GAINED:
+                    Post(h, WM_ACTIVATEAPP, TRUE, 0);
+                    Post(h, WM_ACTIVATE, WA_ACTIVE, 0);
+                    Post(h, WM_SETFOCUS, 0, 0);
+                    break;
+                case SDL_WINDOWEVENT_FOCUS_LOST:
+                    Post(h, WM_ACTIVATE, WA_INACTIVE, 0);
+                    Post(h, WM_KILLFOCUS, 0, 0);
+                    Post(h, WM_ACTIVATEAPP, FALSE, 0);
+                    break;
+                case SDL_WINDOWEVENT_RESIZED:
+                case SDL_WINDOWEVENT_SIZE_CHANGED:
+                    if (!sFullscreen && !(SDL_GetWindowFlags(sMainWindow->mSdl) & SDL_WINDOW_FULLSCREEN))
+                    {
+                        port_SaveWindowSize(e.window.data1, e.window.data2);
+                    }
+                    port_UpdateGameResolution();
+                    break;
+                case SDL_WINDOWEVENT_MINIMIZED:
+                    Post(h, WM_SIZE, SIZE_MINIMIZED, 0);
+                    break;
+                case SDL_WINDOWEVENT_RESTORED:
+                    Post(h, WM_SIZE, SIZE_RESTORED, MAKELPARAM(sMainWindow->mW, sMainWindow->mH));
+                    break;
+                default:
+                    break;
+            }
+            break;
+#else
         case SDL_EVENT_QUIT:
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
             Post(h, WM_CLOSE, 0, 0);
@@ -97,9 +133,14 @@ void Translate(const SDL_Event& e)
         case SDL_EVENT_WINDOW_RESTORED:
             Post(h, WM_SIZE, SIZE_RESTORED, MAKELPARAM(sMainWindow->mW, sMainWindow->mH));
             break;
+#endif
         case SDL_EVENT_KEY_DOWN:
             // Alt+Enter: the game's full screen toggle, a WM_SYSKEYDOWN with the context bit.
+#ifdef GTA2_PORT_SDL2
+            if (e.key.keysym.sym == SDLK_RETURN && (e.key.keysym.mod & SDL_KMOD_ALT) && !e.key.repeat)
+#else
             if (e.key.key == SDLK_RETURN && (e.key.mod & SDL_KMOD_ALT) && !e.key.repeat)
+#endif
             {
                 Post(h, WM_SYSKEYDOWN, VK_RETURN, 1 << 29);
             }

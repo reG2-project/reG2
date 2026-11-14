@@ -25,6 +25,26 @@ ninja -C build_port
 
 For x64, `toolchain-mingw64-clang.cmake` and the SDK's `x86_64-w64-mingw32` folder.
 
+## SDL2
+
+`-DGTA2_SDL2=ON` builds against SDL2 (2.26 or newer) instead of SDL3, for older systems. The
+sources still include SDL3's headers: `compat/sdl2/SDL3/SDL.h` is a shim that answers the SDL3
+names with SDL2's, and everything SDL2 cannot provide is `#ifdef GTA2_PORT_SDL2` next to it.
+macOS stays SDL3-only.
+
+```bash
+cmake -S port -B build_sdl2 -G Ninja -DCMAKE_TOOLCHAIN_FILE=$PWD/port/toolchain-linux64-clang.cmake \
+      -DGTA2_SDL2=ON -DGTA2_SETUP_DEPS_DIR=<prefix> -DCMAKE_BUILD_TYPE=RelWithDebInfo
+ninja -C build_sdl2
+```
+
+What SDL2 lacks, and what the port does instead: no file dialogs (zenity or kdialog on Linux,
+`GetOpenFileName` and the folder browser on Windows), no 8x8 debug font (the drawn fallback of the
+setup asks for a number on the console), `SDL_Delay` for frame pacing (ms, not ns), the display
+scale from its DPI, `SDL_AUDIODISKOUTPUTFILE` for `GTA2_AUDIO_FILE`, no Wayland app id, and the
+frame log's Wayland presentation times without the scanout flags. The virtual test pads need SDL2
+2.24's `SDL_JoystickAttachVirtualEx`.
+
 ## macOS
 
 Not tested yet. `packaging/deps.sh macos` builds the libraries (SDL3, OpenAL Soft, libarchive, unshield)
