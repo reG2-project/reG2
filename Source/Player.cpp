@@ -3,6 +3,8 @@
 // Port: the autosave's restore and TWIN STICK.
 #include "../port/src/saves.hpp"
 #include "../port/src/twin_stick.hpp"
+// Port: LASER RIFLE.
+#include "../port/src/laser.hpp"
 #endif
 #include "car_shop_type.hpp"
 #include "hud_message_priority.hpp"
@@ -882,6 +884,13 @@ void Player::InitPlayerPed(Ped* pPed)
         {
             ammo = gWeapon_8->get_max_ammo_capacity(weapon_idx);
         }
+#if defined(GTA2_PORT)
+        // Port: LASER RIFLE, given by its cheat or get_all_weapons in the slot the game keeps empty.
+        if (weapon_idx == PortLaser::kWeapon && PortLaser::Granted())
+        {
+            ammo = gWeapon_8->get_max_ammo_capacity(weapon_idx);
+        }
+#endif
         mWeapons[weapon_idx] = gWeapon_8->allocate_ped_weapon(weapon_idx, pPed, ammo);
     }
 

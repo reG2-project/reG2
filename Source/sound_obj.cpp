@@ -29,6 +29,10 @@
 #include "voice_line.hpp"
 #include "car_shop_event.hpp"
 #include <math.h>
+#if defined(GTA2_PORT)
+// Port: LASER RIFLE's sound.
+#include "../port/src/laser.hpp"
+#endif
 
 // Forward declarations: the functions below are in address order
 EXTERN_GLOBAL(u16, gObjSoundDelayKind17);
@@ -6653,6 +6657,14 @@ void sound_obj::ProcessType7_Weapon(s32 idx)
                     case weapon_type::oil_stain:
                         samp_idx = 61;
                         break;
+#if defined(GTA2_PORT)
+                    // Port: LASER RIFLE, the electro gun's loop played faster, so higher.
+                    case PortLaser::kWeapon:
+                        samp_idx = 318;
+                        rate_adjust = 9000;
+                        this->msQueueSample.mReleasingSoundFlag = 0;
+                        break;
+#endif
                     default:
                         return;
                 }

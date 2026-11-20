@@ -36,6 +36,8 @@ EXTERN_GLOBAL(Fix16, kFpOneEighth_706CC8);
 #if defined(GTA2_PORT)
 // Port: TWIN STICK shot leads.
 #include "../port/src/twin_stick.hpp"
+// Port: LASER RIFLE.
+#include "../port/src/laser.hpp"
 #endif
 
 DEFINE_GLOBAL_INIT(Fix16, kFP16Quarter_706CF4, Fix16(0x1000, 0), 0x706CF4);
@@ -1987,6 +1989,13 @@ void Weapon::pull_trigger()
         case weapon_type::weapon_0x17:
             car_bomb(true);
             break;
+
+#if defined(GTA2_PORT)
+        // Port: LASER RIFLE, a weapon of the port's in a slot the game leaves unused.
+        case PortLaser::kWeapon:
+            PortLaser::Fire(this);
+            break;
+#endif
 
         default:
             return;

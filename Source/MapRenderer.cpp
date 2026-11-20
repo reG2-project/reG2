@@ -2,8 +2,9 @@
 #include "Camera.hpp"
 #if defined(GTA2_PORT)
 // Port: frames between logic steps, the port's lights (headlights, light effects), the day and night cycle,
-// ambient occlusion and FIRE SMOKE.
+// ambient occlusion, FIRE SMOKE and LASER RIFLE's beams.
 #include "../port/src/fire_smoke.hpp"
+#include "../port/src/laser.hpp"
 #include "../port/src/frame_loop.hpp"
 #include "../port/src/lights.hpp"
 #include "../port/src/day_night.hpp"
@@ -3611,8 +3612,9 @@ void MapRenderer::Draw()
         {
             gSpriteRenderer->Draw(zLayer); // draw all sprites at zLayer
 #if defined(GTA2_PORT)
-            // Port: FIRE SMOKE at this height, with the sprites, so that the blocks drawn next hide it as they do them.
+            // Port: FIRE SMOKE and laser beams at this height, with the sprites, so that the blocks drawn next hide them.
             PortFireSmoke::DrawLayer(zLayer);
+            PortLaser::DrawLayer(zLayer);
 #endif
         }
 
@@ -3742,5 +3744,6 @@ void MapRenderer::Draw()
     gSpriteRenderer->Draw(7);    // draw all sprites on the highest layer
 #if defined(GTA2_PORT)
     PortFireSmoke::DrawLayer(7);
+    PortLaser::DrawLayer(7);
 #endif
 }
