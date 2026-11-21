@@ -37,7 +37,8 @@ class ClientProbe
     void CompareAlone(const Snapshot& snap, engine::SavedWorld* saved, engine::SavedWorld& now);
     // A correction blended in (in raw units): logged when large (GTA2_NET_CORRLOG)
     void Correction(uint32_t frame, const engine::Pose& n, int32_t dx, int32_t dy, int32_t dr, const Snapshot& latest);
-    void Jerk(uint32_t frame, int slot, bool synced); // what is shown around the local player, this frame
+    // What is shown around the local player, this frame, against the newest two snapshots
+    void Jerk(uint32_t frame, int slot, bool synced, const Snapshot& newest, const Snapshot& before);
     void PrintStats(uint32_t frame); // with the client's periodic log lines
     void FrameEnd(); // the frame's last: the game as it is drawn
 

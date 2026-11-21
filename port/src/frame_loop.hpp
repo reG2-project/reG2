@@ -28,6 +28,9 @@ u32 StepsBeforeDraw();
 // Logic steps run so far, and where the current draw sits between the last two (1: on the last).
 u32 StepCount();
 f32 DrawAlpha();
+// The part of a step the current draw is behind the last one (0 outside a draw or without interpolation): what a value
+// stepped once per logic step is drawn less of, as a fraction of its step.
+f32 StepNotElapsed();
 
 // Two values a draw changes, put back at the end of the scope unless a logic step ran before this draw.
 template <typename T>

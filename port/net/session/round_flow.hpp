@@ -71,6 +71,11 @@ class RoundFlow
     {
         return mMaps;
     }
+    // The names the notices give the maps (MapTitle), in Maps()'s order; without them, the maps' own
+    void SetMapTitles(const std::vector<std::string>& titles)
+    {
+        mTitles = titles;
+    }
 
   private:
     void Enter(uint32_t tick, RoundPhase phase, RoundActions& out);
@@ -82,10 +87,12 @@ class RoundFlow
     int NextMap() const; // after the results: the most chosen (a tie: one of the tied, at random), else the rotation's next, else the same
     int FindMap(const std::string& arg) const; // a number (1-based) or a name; -1 none
     int Seconds(uint32_t ticks) const;
+    std::string Title(int map) const;
 
     RoundRules mRules;
     RoundState mState;
     std::vector<std::string> mMaps;
+    std::vector<std::string> mTitles;
     int mCurrentMap = -1;
     uint32_t mPhaseEnd = 0; // the tick the countdown or results end (the warmup's: once the minimum is in)
     uint32_t mRoundStart = 0;

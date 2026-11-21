@@ -16,6 +16,8 @@ namespace net
 {
 // recordings/session-<n>.rec, n counting up over the sessions (recordings/next) and kept for the newest 10
 std::string NextRecordingPath();
+// A recording ends here (an evening in a busy area is hundreds of MB, and ten are kept): its replay ends there too
+const uint64_t kMaxRecordingBytes = 200ull << 20;
 
 class ClientRecorder
 {
@@ -26,6 +28,7 @@ class ClientRecorder
 
   private:
     FILE* mFile = nullptr;
+    uint64_t mBytes = 0; // written so far: a recording stops at kMaxRecordingBytes
 };
 
 class ClientReplay

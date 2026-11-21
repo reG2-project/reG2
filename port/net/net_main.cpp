@@ -18,6 +18,7 @@
     #include <unistd.h>
 #endif
 
+void port_RegistryReadOnly(); // compat/src/registry.cpp: gta2_registry.ini read, never written
 
 namespace
 {
@@ -47,12 +48,16 @@ void OnFrame(void*)
 }
 
 // A client that quits, or is stopped, leaves the server at once: else its slot stays taken until the server's timeout
-// (5-10 s), and a player joining meanwhile finds the server full
+// (5-10 s), and a player joining meanwhile finds the server full. A server that ends tells its clients
 void LeaveServer()
 {
     if (gClient)
     {
         gClient->Leave();
+    }
+    if (gServer)
+    {
+        gServer->Shutdown();
     }
 }
 
@@ -119,6 +124,7 @@ void StartClientGame(const net::engine::NetworkGame& game)
     net::engine::StartNetworkGame(game);
     gTickMs = game.tickMs;
     net::engine::SetFrameHook(OnFrame, NULL);
+    gPortNetFrameLoop = true; // frames at the display's rate, interpolated between the ticks
 }
 
 net::ClientConfig gMenuConfig; // the command line's client options (--name, --lag...), for a join from the frontend
@@ -141,6 +147,7 @@ int LeaveNetworkGame()
     gClient = NULL;
     gPortIdleHook = NULL;
     gPortDrawOverlay = NULL;
+    gPortNetFrameLoop = false;
     gTickSet = false;
     PortRand::SetSoundSeparate(false);
     PortRand::SetParticleSeparate(false);
@@ -220,6 +227,8 @@ int NetMain_Init(std::vector<std::string>& args)
     std::string error;
     if (o.server)
     {
+        // A client in the same folder saves the settings: a server's whole-file rewrites would undo its changes
+        port_RegistryReadOnly();
         if (!o.window)
         {
             SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "GTA2_HEADLESS", "1", true); // what port_Headless reads
@@ -250,7 +259,13 @@ int NetMain_Init(std::vector<std::string>& args)
         }
         net::engine::StartNetworkGame(sc.game);
         gTickMs = sc.game.tickMs;
-        gPortIdleHook = [] { gServer->Idle(); net::engine::IdleWait(); }; // pings answered at once
+        gPortIdleHook = [] { StopIfRequested(); gServer->Idle(); net::engine::IdleWait(); }; // pings answered at once
+        atexit(LeaveServer);
+        signal(SIGTERM, OnStopSignal);
+        signal(SIGINT, OnStopSignal);
+#if !defined(_WIN32)
+        signal(SIGHUP, OnStopSignal);
+#endif
     }
     else if (!o.replay.empty())
     {

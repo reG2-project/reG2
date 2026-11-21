@@ -1,5 +1,6 @@
-// The log: SDL's log lines kept in memory, written to reG2.log only for a crash or an error box,
-// next to the executable when that folder is writable, else in the per-user folder.
+// The log: SDL's log lines kept in memory, written to reG2.log (a network server's: reG2-server.log, so a client
+// beside it keeps its own) only for a crash or an error box, next to the executable when that folder is writable,
+// else in the per-user folder.
 // $GTA2_LOG_FILE: every line written to that file as it comes.
 #include "port_platform.hpp"
 #include "../../src/build_id.hpp"
@@ -56,6 +57,7 @@ State& S()
 }
 
 bool sWriteTried;
+const char* sLogName = "reG2.log";
 SDL_LogOutputFunction sDefaultOutput;
 void* sDefaultUserData;
 bool sMainReturned;
@@ -226,6 +228,10 @@ void port_StartLog(int argc, char** argv)
     }
 #endif
     sWriteTried = S().mFile != NoFile();
+    for (int i = 1; i < argc; i++)
+    {
+        sLogName = strcmp(argv[i], "--server") ? sLogName : "reG2-server.log";
+    }
     SDL_GetLogOutputFunction(&sDefaultOutput, &sDefaultUserData);
     SDL_SetLogOutputFunction(LogOutput, NULL);
 
@@ -272,14 +278,14 @@ const char* port_WriteLog()
         // A macOS bundle must not change: its signature covers the folder.
         if (const char* base = SDL_GetBasePath())
         {
-            created = CreateLog(std::string(base) + "reG2.log");
+            created = CreateLog(std::string(base) + sLogName);
         }
 #endif
         if (!created)
         {
             if (char* pref = SDL_GetPrefPath("", "reG2"))
             {
-                created = CreateLog(std::string(pref) + "reG2.log");
+                created = CreateLog(std::string(pref) + sLogName);
                 SDL_free(pref);
             }
         }

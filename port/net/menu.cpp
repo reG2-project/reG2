@@ -18,6 +18,7 @@
 #include <vector>
 
 EXTERN_GLOBAL(HINSTANCE, gHInstance);
+unsigned short port_TypedChar(int dik); // compat/src/dinput.cpp: the character a key's last press typed, with shift
 EXTERN_GLOBAL(SoundObject, snd1); // the frontend's sound: 1 up, 2 down, 5 enter, 6 back, 7 a key, 8 a deletion
 
 namespace
@@ -34,7 +35,7 @@ enum
     kOptions
 };
 
-std::string gAddress = "127.0.0.1", gName, gStatus;
+std::string gAddress, gName, gStatus; // the address: the last one joined, none the first time
 int gEditing = -1; // the field being typed into (kAddress, kName), or -1
 std::string gBefore; // the field as it was: Esc gives it back
 bool gJoining;
@@ -118,49 +119,28 @@ std::vector<std::string> StatusLines(const std::string& text, u16 font)
     return lines;
 }
 
-// The characters a key types: an address's and a name's (the game's own keyboard table has no shift, and the name
-// entry drops what its font has no width for); uppercase, as the frontend's fonts draw them
-char KeyChar(int key, bool shift)
+// The character a key types into an address or a name, uppercase as the frontend's fonts draw them: the keyboard
+// layout's (the game's own keyboard table has no shift), the keypad's where the layout gives none
+char KeyChar(int key)
 {
-    static const char* kRow1 = "QWERTYUIOP"; // DIK_Q..DIK_P
-    static const char* kRow2 = "ASDFGHJKL"; // DIK_A..DIK_L
-    static const char* kRow3 = "ZXCVBNM"; // DIK_Z..DIK_M
-    if (key >= DIK_1 && key <= DIK_9)
+    const unsigned short typed = port_TypedChar(key);
+    if (typed && typed < 128)
     {
-        return (char)('1' + key - DIK_1);
+        return (char)toupper(typed);
     }
-    switch (key)
+    if (key >= DIK_NUMPAD7 && key <= DIK_NUMPAD9)
     {
-        case DIK_0:
-        case DIK_NUMPAD0:
-            return '0';
-        case DIK_NUMPAD1: return '1';
-        case DIK_NUMPAD2: return '2';
-        case DIK_NUMPAD3: return '3';
-        case DIK_NUMPAD4: return '4';
-        case DIK_NUMPAD5: return '5';
-        case DIK_NUMPAD6: return '6';
-        case DIK_NUMPAD7: return '7';
-        case DIK_NUMPAD8: return '8';
-        case DIK_NUMPAD9: return '9';
-        case DIK_DECIMAL: return '.';
-        case DIK_PERIOD: return shift ? ':' : '.'; // ':' is shift and '.' on many layouts
-        case DIK_SEMICOLON: return ':'; // and shift and ';' on a US one
-        case DIK_MINUS: return shift ? '_' : '-';
+        return (char)('7' + key - DIK_NUMPAD7);
     }
-    if (key >= DIK_Q && key <= DIK_P)
+    if (key >= DIK_NUMPAD4 && key <= DIK_NUMPAD6)
     {
-        return kRow1[key - DIK_Q];
+        return (char)('4' + key - DIK_NUMPAD4);
     }
-    if (key >= DIK_A && key <= DIK_L)
+    if (key >= DIK_NUMPAD1 && key <= DIK_NUMPAD3)
     {
-        return kRow2[key - DIK_A];
+        return (char)('1' + key - DIK_NUMPAD1);
     }
-    if (key >= DIK_Z && key <= DIK_M)
-    {
-        return kRow3[key - DIK_Z];
-    }
-    return 0;
+    return key == DIK_NUMPAD0 ? '0' : key == DIK_DECIMAL ? '.' : 0;
 }
 
 std::string& Field(int f)
@@ -169,11 +149,10 @@ std::string& Field(int f)
 }
 
 // A key pressed this frame into the field being typed into; Enter keeps it, Esc gives back what it was
-void Type(Frontend* pFrontend, const bool* pressed)
+void Type(const bool* pressed)
 {
     std::string& text = Field(gEditing);
     const size_t maxLength = gEditing == kAddress ? 40 : 15;
-    const bool shift = (pFrontend->mKeys[DIK_LSHIFT] & 0x80) || (pFrontend->mKeys[DIK_RSHIFT] & 0x80);
     for (int k = 0; k < 256; k++)
     {
         if (!pressed[k])
@@ -203,8 +182,10 @@ void Type(Frontend* pFrontend, const bool* pressed)
             }
             continue;
         }
-        const char c = KeyChar(k, shift);
-        const bool allowed = gEditing == kAddress ? c && c != '_' : c && c != ':' && c != '.';
+        // The name entry drops what its font has no width for
+        const char c = KeyChar(k);
+        const bool common = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-';
+        const bool allowed = common || (gEditing == kAddress ? c == '.' || c == ':' : c == '_');
         if (allowed && text.size() < maxLength)
         {
             text += c;
@@ -305,6 +286,7 @@ bool Input(Frontend* pFrontend)
         {
             // Ours too: the game's page change draws a level's picture for a frame (UpdateMenuScreen)
             pFrontend->ChangeMenuPage(kPage);
+            pFrontend->mMenuPagesArray[kPage].mCurrentOptionIdx = gAddress.empty() ? kAddress : kJoin;
             pFrontend->mMenuScreen = Options_0;
             snd1.mObjectType = 5;
             return true;
@@ -350,7 +332,7 @@ bool Input(Frontend* pFrontend)
     }
     else if (gEditing >= 0)
     {
-        Type(pFrontend, pressed);
+        Type(pressed);
     }
     else if (pFrontend->mReturnPressed)
     {

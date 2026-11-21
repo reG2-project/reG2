@@ -74,9 +74,14 @@ Key* FromHandle(HKEY h)
 // milliseconds on the 3DS, for each step of a setting.
 bool sDeferSaves;
 bool sUnsaved;
+bool sReadOnly;
 
 void Save()
 {
+    if (sReadOnly)
+    {
+        return;
+    }
     if (sDeferSaves)
     {
         sUnsaved = true;
@@ -319,6 +324,11 @@ void SaveUnsaved()
     }
 }
 } // namespace
+
+void port_RegistryReadOnly()
+{
+    sReadOnly = true;
+}
 
 void port_DeferRegistrySaves(bool defer)
 {

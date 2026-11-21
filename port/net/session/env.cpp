@@ -13,7 +13,13 @@ const net::SessionEnv& net::Env()
         e.animLog = getenv("GTA2_NET_ANIMLOG") != NULL;
         e.inputLog = getenv("GTA2_NET_INPUTLOG") != NULL;
         e.jerkLog = getenv("GTA2_NET_JERKLOG") ? (atoi(getenv("GTA2_NET_JERKLOG")) >= 2 ? 2 : 1) : 0;
-        e.blend = getenv("GTA2_NET_BLEND") ? (float)atof(getenv("GTA2_NET_BLEND")) : 0.2f; // 0.3: remote players a fifth jerkier
+        e.noForward = getenv("GTA2_NET_NOFORWARD") && atoi(getenv("GTA2_NET_NOFORWARD"));
+        e.holdAll = getenv("GTA2_NET_HOLDALL") && atoi(getenv("GTA2_NET_HOLDALL"));
+        // Tuned on recordings (port/docs/netcode.md, "The client"): the other players shown a third nearer the server's
+        e.resimSaves = getenv("GTA2_NET_RESIMSAVES") ? atoi(getenv("GTA2_NET_RESIMSAVES")) : 4;
+        e.blend = getenv("GTA2_NET_BLEND") ? (float)atof(getenv("GTA2_NET_BLEND")) : 0.3f;
+        e.blendFar = getenv("GTA2_NET_BLEND_FAR") ? (float)atof(getenv("GTA2_NET_BLEND_FAR")) : 0.5f;
+        e.blendSelf = getenv("GTA2_NET_BLEND_SELF") ? (float)atof(getenv("GTA2_NET_BLEND_SELF")) : 0.5f;
         e.navDump = getenv("GTA2_NET_NAVDUMP");
         e.testKill = getenv("GTA2_NET_TESTKILL");
         e.testArm = getenv("GTA2_NET_TESTARM");
@@ -29,8 +35,10 @@ const net::SessionEnv& net::Env()
         e.testCar = getenv("GTA2_NET_TESTCAR");
         e.testTrain = getenv("GTA2_NET_TESTTRAIN");
         e.snapCheck = getenv("GTA2_NET_SNAPCHECK") != NULL;
+        e.stats = getenv("GTA2_NET_STATS") != NULL;
         e.replayOn = getenv("GTA2_NET_REPLAYON") ? atoi(getenv("GTA2_NET_REPLAYON")) : 0;
         e.say = getenv("GTA2_NET_SAY");
+        e.botVoteMap2 = getenv("GTA2_NET_BOTMAP2") != NULL;
         e.testWanted = getenv("GTA2_NET_TESTWANTED");
         return e;
     }();

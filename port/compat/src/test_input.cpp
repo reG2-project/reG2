@@ -1,6 +1,7 @@
 // Test tools driven by environment variables, for runs nobody watches:
 //   GTA2_INPUT=<frame>:<key>[:<frames held>],...   SDL key names ("Return", "Down", "Escape", "A"),
-//                                                   "Alt+" for the Alt modifier ("Alt+Return"),
+//                                                   "Alt+" or "Shift+" for a modifier ("Alt+Return"),
+//                                                   "Comma" for the "," key,
 //                                                   "pad.<button>" or "pad.<axis>+/-" for a virtual
 //                                                   gamepad ("pad.a", "pad.dpup", "pad.leftx-", or
 //                                                   "pad.rightx=0.5" for part of an axis' range;
@@ -121,6 +122,11 @@ void Load()
             mod = SDL_KMOD_LALT;
             key = key.substr(4);
         }
+        else if (key.compare(0, 6, "Shift+") == 0)
+        {
+            mod = SDL_KMOD_LSHIFT;
+            key = key.substr(6);
+        }
         const unsigned held = c2 == std::string::npos ? 2 : (unsigned)atoi(item.c_str() + c2 + 1);
         if (key == "focus.lost" || key == "focus.gained")
         {
@@ -206,7 +212,7 @@ void Load()
             Events().push_back(KeyEvent{frame + held, SDL_SCANCODE_UNKNOWN, mod, false, button, axis, rest, 0, 0, 0, pad});
             continue;
         }
-        const SDL_Scancode sc = SDL_GetScancodeFromName(key.c_str());
+        const SDL_Scancode sc = key == "Comma" ? SDL_SCANCODE_COMMA : SDL_GetScancodeFromName(key.c_str()); // "," separates
         if (sc == SDL_SCANCODE_UNKNOWN)
         {
             SDL_Log("GTA2_INPUT: unknown key %s", key.c_str());

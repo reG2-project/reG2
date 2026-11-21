@@ -79,6 +79,8 @@ void net::WriteHello(BitWriter& w, const Hello& m)
     WriteString(w, m.build);
     WriteString(w, m.name);
     w.Bits(m.carInfo, 32);
+    w.Bits(m.session, 32);
+    w.Bits(m.token, 32);
 }
 
 bool net::ReadHello(BitReader& r, Hello& m)
@@ -86,6 +88,11 @@ bool net::ReadHello(BitReader& r, Hello& m)
     m.version = r.VarU();
     const bool ok = ReadString(r, m.build) && ReadString(r, m.name);
     m.carInfo = r.Bits(32);
+    if (r.BitsLeft() >= 64) // an older build's hello ends here: still read, so the refusal can name its build
+    {
+        m.session = r.Bits(32);
+        m.token = r.Bits(32);
+    }
     return ok && !r.Overflow();
 }
 
@@ -93,12 +100,14 @@ static void WritePrint(net::BitWriter& w, const net::MapPrint& p)
 {
     w.Bits(p.gmp, 32);
     w.Bits(p.sty, 32);
+    w.Bits(p.scr, 32);
 }
 
 static void ReadPrint(net::BitReader& r, net::MapPrint& p)
 {
     p.gmp = r.Bits(32);
     p.sty = r.Bits(32);
+    p.scr = r.Bits(32);
 }
 
 void net::WriteWelcome(BitWriter& w, const Welcome& m)
@@ -125,6 +134,8 @@ void net::WriteWelcome(BitWriter& w, const Welcome& m)
     {
         WriteString(w, m.maps[i]);
     }
+    w.Bits(m.token, 32);
+    w.Bits(m.game, 16);
 }
 
 bool net::ReadWelcome(BitReader& r, Welcome& m)
@@ -146,6 +157,8 @@ bool net::ReadWelcome(BitReader& r, Welcome& m)
     {
         ok = ReadString(r, m.maps[i]);
     }
+    m.token = r.Bits(32);
+    m.game = (uint16_t)r.Bits(16);
     return ok && !r.Overflow() && m.slot < m.players && m.players <= 6; // the game has 6 player slots
 }
 
@@ -208,6 +221,10 @@ void net::WriteCommands(BitWriter& w, uint32_t ackTick, const InputCmd* cmds, in
         {
             w.Bits(cmds[i].buttons, 22);
         }
+        if (cmds[i].buttons & kKeyDownBit)
+        {
+            w.Bits(cmds[i].typed, 16);
+        }
     }
 }
 
@@ -232,6 +249,7 @@ int net::ReadCommands(BitReader& r, uint32_t* pAckTick, InputCmd* cmds, int max)
     {
         cmds[i].tick = last - (uint32_t)(count - 1 - i);
         cmds[i].buttons = r.Bool() && i ? cmds[i - 1].buttons : r.Bits(22);
+        cmds[i].typed = cmds[i].buttons & kKeyDownBit ? (uint16_t)r.Bits(16) : 0;
     }
     return r.Overflow() ? -1 : count;
 }
@@ -242,6 +260,33 @@ void net::WriteSnapshotHeader(BitWriter& w, const SnapshotHeader& h)
     w.VarU(h.tick);
     w.VarU(h.tick - h.baseTick); // 0..: how far back the baseline is (0: none)
     w.VarU(h.lastCmdTick);
+    // Per slot with any: the slot, how many, and each one as the one before (1 bit) or its 12 bits
+    int slots = 0;
+    for (int i = 0; i < kMaxForwardSlots; i++)
+    {
+        slots += h.forwarded.count[i] > 0;
+    }
+    w.Bits((uint32_t)slots, 4);
+    for (int i = 0; i < kMaxForwardSlots; i++)
+    {
+        const int n = h.forwarded.count[i] > kMaxForwarded ? kMaxForwarded : h.forwarded.count[i];
+        if (!n)
+        {
+            continue;
+        }
+        w.Bits((uint32_t)i, 3);
+        w.Bits((uint32_t)(n - 1), 2);
+        for (int k = 0; k < n; k++)
+        {
+            const uint32_t c = h.forwarded.controls[i][k] & 0xFFF;
+            const bool same = k > 0 && c == (h.forwarded.controls[i][k - 1] & 0xFFFu);
+            w.Bits(same ? 1 : 0, 1);
+            if (!same)
+            {
+                w.Bits(c, 12);
+            }
+        }
+    }
 }
 
 bool net::ReadSnapshotHeader(BitReader& r, SnapshotHeader& h)
@@ -249,6 +294,18 @@ bool net::ReadSnapshotHeader(BitReader& r, SnapshotHeader& h)
     h.tick = r.VarU();
     const uint32_t back = r.VarU();
     h.lastCmdTick = r.VarU();
+    h.forwarded = ForwardedInputs();
+    const uint32_t slots = r.Bits(4);
+    for (uint32_t j = 0; j < slots && !r.Overflow(); j++)
+    {
+        const uint32_t i = r.Bits(3);
+        const int n = (int)r.Bits(2) + 1;
+        for (int k = 0; k < n; k++)
+        {
+            h.forwarded.controls[i][k] = (uint16_t)(r.Bits(1) && k > 0 ? h.forwarded.controls[i][k - 1] : r.Bits(12));
+        }
+        h.forwarded.count[i] = (uint8_t)n;
+    }
     if (r.Overflow() || back > h.tick)
     {
         return false;
@@ -257,10 +314,30 @@ bool net::ReadSnapshotHeader(BitReader& r, SnapshotHeader& h)
     return true;
 }
 
+namespace
+{
+int gLinkMtu = 1280;
+} // namespace
+
+void net::SetLinkMtu(int mtu)
+{
+    gLinkMtu = mtu < 576 ? 576 : mtu > 1428 ? 1428 : mtu;
+}
+
+int net::LinkMtu()
+{
+    return gLinkMtu;
+}
+
+size_t net::MaxPayload()
+{
+    return (size_t)gLinkMtu - 56;
+}
+
 void net::WriteSnapshotParts(const std::vector<uint8_t>& message, uint32_t tick, std::vector<std::vector<uint8_t>>& parts)
 {
     parts.clear();
-    const size_t piece = kMaxPayload - kPartHeader;
+    const size_t piece = MaxPayload() - kPartHeader;
     const int count = (int)((message.size() + piece - 1) / piece);
     for (int i = 0; i < count; i++)
     {

@@ -8,9 +8,15 @@
 
 namespace net
 {
-const uint32_t kProtocolVersion = 24;
+const uint32_t kProtocolVersion = 27;
 const uint16_t kDefaultPort = 27920;
-const size_t kMaxPayload = 1372; // the largest unreliable ENet packet that isn't fragmented at mtu 1400 (port/docs/netcode.md, "Wire format")
+const size_t kMaxPayload = 1372; // the largest unreliable ENet packet at any link MTU (1428: ENet's mtu 1400)
+// The link's MTU, IP packets (--mtu, 576 to 1428): 1280 by default, the smallest of the VPNs people play LAN games over
+// (Tailscale; WireGuard 1420, Hamachi 1404). Its unreliable packets are at most MaxPayload: that less IP and UDP's 28
+// bytes and ENet's 28, so neither ENet nor IP fragments them (port/docs/netcode.md, "Wire format")
+void SetLinkMtu(int mtu);
+int LinkMtu();
+size_t MaxPayload();
 const uint8_t kChannelUnreliable = 0; // snapshots, commands
 const uint8_t kChannelReliable = 1; // join, events, chat
 const int kChannelCount = 2;
@@ -38,7 +44,7 @@ enum MsgType : uint8_t
 // CRC-32s of a map's files (core/crc32.hpp): a client with other files would play another game
 struct MapPrint
 {
-    uint32_t gmp = 0, sty = 0;
+    uint32_t gmp = 0, sty = 0, scr = 0;
 };
 
 // The build first after the version, so that a server of any version can say what it runs and what the client does
@@ -48,6 +54,7 @@ struct Hello
     std::string build; // port_BuildId (port/src/build_id.hpp): a server takes only its own
     std::string name; // empty, too long or taken: the server gives one
     uint32_t carInfo = 0; // data/nyc.gci's CRC-32 (the cars' physics, every map's)
+    uint32_t session = 0, token = 0; // a reconnect: the welcome's, so the server gives the slot back as it was (0: a join)
 };
 
 // What a client needs to start the same network game as the server
@@ -65,9 +72,11 @@ struct Welcome
     std::string name; // the player's name, as the server has it (another than the hello's if that was taken)
     std::string map; // the map's name (data/<map>.mmp)
     std::string gmp, sty, scr; // file names in data/
-    MapPrint print; // the server's copy of gmp and sty
+    MapPrint print; // the server's copy of gmp, sty and scr
     uint32_t serverTick = 0;
     std::vector<std::string> maps; // the maps a vote can choose, by number (the round's state in the world entity counts them)
+    uint32_t token = 0; // this slot's: a reconnect's hello shows it to have the slot back with its score
+    uint16_t game = 0; // the server's game to take snapshots of (its snapshots' world.game): the next one during a map change
 };
 
 struct Reject
@@ -79,7 +88,7 @@ struct MapChange
 {
     std::string map; // the map's name (data/<map>.mmp)
     std::string gmp, sty, scr; // file names in data/
-    MapPrint print; // the server's copy of gmp and sty
+    MapPrint print; // the server's copy of gmp, sty and scr
     uint16_t game = 0; // the server's game on it (its snapshots' world.game)
 };
 
@@ -87,7 +96,9 @@ struct InputCmd
 {
     uint32_t tick; // the server tick it is for
     uint32_t buttons; // the game's input bits (Source/input_bits.hpp), 22 bits
+    uint16_t typed; // with a key press: the character it typed in the client's keyboard layout (0: none), for the chat
 };
+const uint32_t kKeyDownBit = 0x200000; // a key event's press (Source/input_bits.hpp)
 
 const size_t kMaxName = 15; // the game's player names (Player::mPlayerName)
 // <asked> as a player's name: printable ASCII, at most kMaxName, "PLAYER" if that leaves nothing, and with a number
@@ -111,13 +122,23 @@ bool ReadMapChange(BitReader& r, MapChange& m);
 void WriteCommands(BitWriter& w, uint32_t ackTick, const InputCmd* cmds, int count);
 int ReadCommands(BitReader& r, uint32_t* pAckTick, InputCmd* cmds, int max); // -1 if malformed
 
-// Snapshot header: its tick, the tick of the baseline it is a delta to (its own tick: none, a full snapshot), and the newest command tick
-// the server has applied for this client; the delta (snapshot.hpp) follows
+// Snapshot header: its tick, the tick of the baseline it is a delta to (its own tick: none, a full snapshot), the newest command tick
+// the server has applied for this client
+// and, per other player, the controls the server has for the ticks after it (the next one's as it will run, then the
+// commands it holds): what a client predicts that player with before it repeats the last
+const int kMaxForwarded = 4;
+const int kMaxForwardSlots = 8;
+struct ForwardedInputs
+{
+    uint8_t count[kMaxForwardSlots] = {}; // ticks known after the snapshot's, per slot
+    uint16_t controls[kMaxForwardSlots][kMaxForwarded] = {}; // the low 12 bits of the input, for tick + 1 + k
+};
 struct SnapshotHeader
 {
     uint32_t tick;
     uint32_t baseTick;
     uint32_t lastCmdTick;
+    ForwardedInputs forwarded;
 };
 // A snapshot message bigger than one packet goes in parts (up to kMaxParts): its tick, the part's index and how many,
 // then a piece of the message's bytes. A client puts them together, in order, once it has all of them
@@ -125,6 +146,6 @@ const int kMaxParts = 8;
 const size_t kPartHeader = 8; // the most a part's header takes, in bytes
 void WriteSnapshotParts(const std::vector<uint8_t>& message, uint32_t tick, std::vector<std::vector<uint8_t>>& parts);
 bool ReadSnapshotPart(BitReader& r, uint32_t* pTick, int* pIndex, int* pCount, std::vector<uint8_t>& piece);
-void WriteSnapshotHeader(BitWriter& w, const SnapshotHeader& h);
+void WriteSnapshotHeader(BitWriter& w, const SnapshotHeader& h); // then the delta (snapshot.hpp)
 bool ReadSnapshotHeader(BitReader& r, SnapshotHeader& h);
 } // namespace net

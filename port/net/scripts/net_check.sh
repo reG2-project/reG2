@@ -164,7 +164,7 @@ rounds() {
     > "$OUT/rounds_server.log" 2>&1) &
   sleep 2
   for b in rammer soldier; do
-    (cd "$GAME" && GTA2_HEADLESS=1 GTA2_SPEED=4 GTA2_NET_CHECKGRID=1 exec "$BIN" --connect 127.0.0.1:$p --name r_$b --bot $b \
+    (cd "$GAME" && GTA2_HEADLESS=1 GTA2_SPEED=4 GTA2_NET_CHECKGRID=1 GTA2_NET_BOTMAP2=1 exec "$BIN" --connect 127.0.0.1:$p --name r_$b --bot $b \
       > "$OUT/rounds_$b.log" 2>&1) &
   done
   sleep 18

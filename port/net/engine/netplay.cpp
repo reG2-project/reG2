@@ -123,6 +123,7 @@ void net::engine::StopNetworkGame()
     gActive = false;
     gPortWorldStill = NULL;
     gPortTagTimeCounts = false;
+    gPortChatChar = NULL;
     gPortScoreBonusHook = NULL;
     gNetPlay.mPlayerIdx = 0;
     gNetPlay.mN2.mPlayersCount = 0;
@@ -135,6 +136,7 @@ void net::engine::StopNetworkGame()
     bSkip_fire_engines = false;
     bSkip_buses = false;
     gPortNoFireEngines = false;
+    gPortNetRoundPad = 0;
     gPortKeepWantedPoints = false;
     gPortServerKillNotices = false;
     gPortServerKillAwards = false;

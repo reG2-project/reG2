@@ -13,7 +13,7 @@ DirectPlay sat (`NetPlay`), and the few changes to `Source/` are port-only hooks
 
 What works: 1-6 players on the game's multiplayer maps, frags, points and tag games, police, traffic, trains and ambient peds,
 joining and leaving mid-game, rounds with warmup, results and votes, map rotations, chat with commands, reconnecting,
-a frontend page to join, bots (scripted and trained), recordings that replay without a server. Protocol 24.
+a frontend page to join, bots (scripted and trained), recordings that replay without a server. Protocol 27.
 
 ## Running
 
@@ -34,7 +34,7 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 | Round flow | `--minplayers N` (2), `--warmup s` (60), `--results s` (15), `--votes start,map,kick` (or `none`), `--rounds on\|off` |
 | Arena | `--arena brain,...` (bots on the server itself), `--ticks N` (the result printed and the server ended at tick N), `--seed N` |
 | Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` |
-| Either end | `--lag ms`, `--jitter ms`, `--loss %`: a link conditioner on this end's sends |
+| Either end | `--lag ms`, `--jitter ms`, `--loss %`, `--lossburst N`, `--spike ms:on:every`: a link conditioner on this end's sends (losses in bursts of N on average; ms more delay for `on` s every `every` s); `--mtu N`: the link's MTU (IP packets, 1280 by default, which fits the VPNs people play over: Tailscale 1280, WireGuard 1420, Hamachi 1404; 1428 the most) |
 
 ## Hosting a game
 
@@ -44,7 +44,8 @@ a join is turned away otherwise, with what differs on the network page (and prin
 
 1. **The host** starts a server: `./reg2 --server --map downtown-6p` (`--players`, `--maps` and the rest above). It has no
    window and prints its log; on Windows, where nothing shows it, add `--window` (closing the window ends it) or end it
-   in the Task Manager. The menu can't start one yet. Then it joins it like the others, at `127.0.0.1`.
+   in the Task Manager. The menu can't start one yet. Then it joins it like the others, at `127.0.0.1`. From the same
+   folder too: a server writes its own log (`reG2-server.log`) and never writes gta2_registry.ini, the client's settings.
 2. **Its network**: the server listens on **UDP 27920** (`--port` for another). Over the internet the host's router
    forwards that port to the host's machine (port forwarding, in the router's settings: UDP, 27920, to the machine's
    LAN address), and its firewall lets it in: Windows asks the first time the server starts (allow it on private and,
@@ -55,31 +56,39 @@ a join is turned away otherwise, with what differs on the network page (and prin
 
 On a LAN nobody forwards anything: the others join at the host's LAN address (`ip addr`, `ipconfig`: 192.168.x.y), the
 host's firewall still letting UDP 27920 in. A player whose name is taken, empty or longer than 15 characters plays under
-one the server gives ("PLAYER 2"). A server that is stopped and started again starts a new game: its players go back to
-the network page and join again.
+one the server gives ("PLAYER 2"). A server that ends (its window closed, Ctrl-C, a stop signal) tells its players, who
+go back to the network page with "the server closed"; one started again starts a new game, which they join again.
 
 ## Playing
 
 **Joining from the frontend.** The start menu has **Network game** (`port/net/menu.cpp`, frontend page 13): an address
-(`host[:port]`), a name and **Join game**, kept in gta2_registry.ini (`Network`). The join runs in the background with "Connecting..." and any
+(`host[:port]`, empty until one is typed, then the last one), a name and **Join game**, kept in gta2_registry.ini
+(`Network`). The join runs in the background with "Connecting..." and any
 error on the page; welcomed, the frontend boots the network game as it boots a level. `--name` and the link
 conditioner's options apply to a join from the page too.
 
-**Leaving.** Escape in a network game is the client's: "Leave the game? Y / N" over the frame. Yes leaves the server
-and goes back to the network page as a single player again. So does a client that lost the server for good, was
-kicked, or hasn't the next map's files, with why on the page; without the map's files a join fails the same way.
+**Leaving.** Escape in a network game is the client's: "Leave the game? Y / N" over the frame (not while a chat line is
+typed). Y or Enter (a pad's A) leaves; any other key is no. Leaving leaves the server and goes back to the network page
+as a single player again. So does a client that lost the server for good, was kicked, or hasn't the next map's files,
+with why on the page; without the map's files a join fails the same way.
 
 **Connection.** The ping shows at the bottom right: the network's round trip alone (`kMsgPing`, answered at once,
-both polled between frames). With no snapshot for 0.7 s it shows **Connection interrupted** and plays on with the
-others' last inputs. When ENet drops the connection (after 5-10 s) it shows **Lost the server, reconnecting** and
-connects again every 3 s under its name; the server gives a name its old slot back if it is free, at a restart zone.
-After 30 s, or back as another player or on another map, it goes back to the network page.
+both polled between frames). With no snapshot for 0.7 s it shows **Connection interrupted** and plays on, the others'
+last inputs held for 5 ticks after the last snapshot, then without fire, then from 10 ticks on none. When ENet drops
+the connection (after 5-10 s) it shows **Lost the server, reconnecting** and connects again every 3 s with its slot's
+token (the welcome's): the server gives the slot back with its score and ammo, also while it still has the old
+connection (dropped then, the player stays where it is), else at a restart zone. A game the server went on to
+meanwhile (a round's fresh game, another map) starts here as a map change does. After 30 s it goes back to the
+network page. A new join under the name of a player who left takes that slot, with an empty score.
 
 **Chat** is the game's own: F10 starts a line, each key types into it, Enter ends it, and every machine shows
 "name: line_" while it is typed. The key events reach the server in the commands, so the server's player types the
 same line, and the player entity carries it to the other clients. A key types the character the system's keyboard
 layout gives with shift (`port_TypedChar`): the game's own tables (`data/keyboard`) have one character per key and no
-shift. The server's copy of a line, which has no keyboard, types with the game's table (US, no shift).
+shift. The server's copy of a line, which has no keyboard, types the character each press typed on its client, sent
+with the command (`gPortChatChar`), so the others read what was typed on any layout (the game's US table when none came).
+The game shows a line only while it is typed; a client keeps the last 5 ended lines (but commands) over the frame for
+10 s each, from the received snapshots (`KeepChatLines`). The warmup's panel and notice name the keys.
 
 **Commands** are chat lines starting with `/`, sent to the server when typed to their end: `/ready`, `/start`,
 `/map N` (or a name), `/kick NAME`, `/yes`, `/no`. Tab completes the command, then a map from the welcome's list or a
@@ -87,7 +96,7 @@ player's name, as far as all that fit agree; when several fit they show over the
 
 **Rounds** (`session/round_flow.cpp`): a match is rounds in phases, run by the server and shown on every client:
 
-1. **Warmup**: the map is played as usual. It ends when `--minplayers` are in and all are ready (F1 or `/ready`), or
+1. **Warmup**: the map is played as usual. It ends when `--minplayers` are in and all are ready (F1, a gamepad's Back, or `/ready`), or
    `--warmup` seconds after the minimum was reached (0: only when all are ready).
 2. **Countdown**, 5 s, large in the middle of the frame, in **a fresh game**: every round is a game of its own, started
    on the server and every client the way a map change starts one (on the same map, or the voted one), so scores,
@@ -98,7 +107,11 @@ player's name, as far as all that fit agree; when several fit they show over the
    start where the map script puts them. Too few left: back to the warmup.
 3. **The round**, to the frag limit (points in a points game; tag: time only) or the time limit. The leader wins
    (in a tag game, as the game's own results: the player who was "it" the longest); a tie at the time limit is a draw.
-4. **Results** (`--results` s): the winner, a table of frags and deaths, and the maps with their votes (the number keys, or `/map N`).
+   A client shows the clock and the goal in the bottom corner ("9:42   FIRST TO 10").
+4. **Results** (`--results` s): the winner, a table of frags and deaths (and points first, sorted by them, in a points
+   game), and the maps with their votes (the number keys, Up, Down and Enter, a gamepad's
+   d-pad and A, or `/map N`). The maps show by their `.mmp` `Description` ("Face Off" for mp5-6p, `MapTitle`), as the
+   original lobby listed them; `/map` and Tab take the file names.
    The world stands still meanwhile: a tick runs only the players' own (the chat goes on) and the HUD, and the
    inputs are key events only, on the server and every client (`gPortWorldStill`); its sounds stop as in a pause.
    Then the next round's fresh game, on the most chosen map (a tie: one of the tied, at random), else the rotation's next,
@@ -106,7 +119,8 @@ player's name, as far as all that fit agree; when several fit they show over the
 
 **Votes**: `/start` (end the warmup), `/map N` (change now; a round ends without a winner), `/kick NAME` (out, and the
 name turned away for 10 minutes). One at a time, open 20 s, decided by a majority of the people in the game (not
-voting counts as no; the caller votes yes); Y or N while it shows. `--votes` sets which are allowed.
+voting counts as no; the caller votes yes); Y or N while it shows (the keys that type them, so QWERTZ works), F1 or a
+gamepad's Back for yes. `--votes` sets which are allowed.
 
 With `--rounds off` (the default with `--arena`) the round starts at once and the next follows its end directly, in
 the same game (everyone respawned with no score: `engine::NewRound`).
@@ -133,24 +147,36 @@ that wasn't ending.
 
 ### The game loop
 
-Every network frame `RunGameFrame` runs the tick, then `NetPlay::SendToAll`, where the original sent
-its inputs. The port's `NetPlay` (`engine/netplay.cpp`) makes that the netcode's frame hook: after tick T, before the
-frame is drawn. There the server reads its clients and sets every player's input for T+1; the client sends its
-command, applies snapshots and rolls back. Between frames both poll the network about every millisecond
-(`gPortIdleHook`) for pings, so neither the tick nor the frame adds to the ping.
+Every network step runs the tick, then `NetPlay::SendToAll`, where the original sent its inputs. The port's `NetPlay`
+(`engine/netplay.cpp`) makes that the netcode's frame hook, once per tick: after tick T, before anything is drawn.
+There the server reads its clients and sets every player's input for T+1; the client sends its command, applies
+snapshots and rolls back. Between steps both poll the network about every millisecond (`gPortIdleHook`) for pings, so
+neither the tick nor the frame adds to the ping.
+
+A client runs reG2's frame loop (`port/src/frame_loop.cpp`, `gPortNetFrameLoop`), as single player does: ticks at the
+game's rate, frames at the FRAME LIMIT, each drawn between the last two ticks (`port/src/interpolation.cpp`), SHOW FPS.
+The step is the tick and the hook together, so a draw only ever sees the state after a hook: the interpolation goes
+from what the frames before showed (the state before the tick, after the last hook's blend) to the state after this
+one's rollback and blend, and a correction is spread over the frames of a tick. A server and a replay run the
+original's frame path in `winmain.cpp` (a step, then a frame): a server draws nothing, a replay runs as fast as it can.
 
 ### The server
 
 - **Commands** carry the server tick they are for and repeat the last few, so a lost packet loses no input. The server
   buffers them per tick and repeats a player's last input when one is late (its controls only: a repeated key would
-  type twice). It reports the newest command tick it has, and the client keeps its commands about two ticks early.
+  type twice), for 6 ticks at most: a client silent longer plays nothing, its player stands until it is back. It
+  reports the newest command tick it has, and the client keeps its commands about two ticks early. The client paces
+  its ticks to keep them there (a quarter faster when late, a tenth or a fifth slower when early); commands a few
+  ticks late are caught up by running the missing ticks at once, saved, and only more than 8 late or 20 early make it
+  jump (its saves lost until snapshots of the new ticks come).
 - **Snapshots**, per client, every tick (`Server::SendSnapshot`): every player and the car each sits in, wherever they
   are, and everything within the client's interest area (24 blocks around its player; a camera sees 6 to 8). Each
   entity is a delta against the state that client acknowledged for it (per-entity baselines, so a snapshot can carry
   part of the world and nothing waits for a lost packet). What doesn't fit the budget goes with the state the client
   already has and its age, a few bits. New state goes by priority: the age plus one over one plus a sixth of the
-  distance; an entity new to the client counts as 8 ticks old. A busy area's snapshot goes in up to `--packets` parts
-  of 1372 bytes (the largest unreliable ENet packet that isn't fragmented).
+  distance; an entity new to the client counts as 8 ticks old. Beyond 12 blocks (off screen with a margin), an entity
+  whose new state costs more than its age gets it only every third tick. A busy area's snapshot goes in up to
+  `--packets` parts of the link's largest unfragmented packet (`--mtu` less 56 bytes: 1224 at the default 1280).
 - **Spawning** (`engine/spawn.cpp`): the game's limits on ambient traffic (16 cars) and peds (50) are for the whole
   game, and the first players' cameras took them all. A server allows the limits times its players, up to 3 players'
   worth (its traffic has drivers of its own: more ran the ped pool out). Before anything spawns, each client's camera
@@ -162,17 +188,28 @@ command, applies snapshots and rolls back. Between frames both poll the network 
   beyond one camera's edge, isn't spawned where another player's view is (`TrafficSpawner::SpawnTrafficCar`).
 - **Joining and leaving** (`engine/slots.cpp`): a slot without a client is out of the game the way the game handles a
   player who left (its ped walks on as a pedestrian). A joining client gets a new player ped at the next restart zone
-  and an empty score. Snapshots carry the slots in the game, and clients mirror them.
+  and an empty score. Snapshots carry the slots in the game, and clients mirror them. The others read "BOB joined",
+  "BOB is back", "BOB left" or "BOB was kicked" (the server's notices).
 - **No sound**: a server opens no audio device (`gPortNoAudio`). Nobody hears it, and its listener would follow slot
   0's camera, whose ped can be any ped in any car once that player has left.
 
 ### The client
 
 - **Prediction** (`engine/rollback.cpp`): the client saves the game after every tick. On a snapshot of tick S it
-  restores S, applies the server's state, and runs the ticks up to its own with its own inputs; other players repeat
-  their last input. Everything else moves on by the game's own simulation in those ticks.
-- **The blend**: what is shown moves a part of the way to the corrected state each frame (`GTA2_NET_BLEND`, 0.2);
-  more than 2 blocks off (a respawn, a car entered) jumps.
+  restores S, applies the server's state, and runs the ticks up to its own with its own inputs; other players take
+  the controls the snapshot forwards for the ticks after it (the next tick's as the server runs it, then the commands
+  it holds, up to 4), then the last of them repeated, a turn only once two in a row have it (a tap repeated turns far
+  past the server's). `GTA2_NET_NOFORWARD=1` predicts by the repeated input alone (to compare on a replay).
+  Everything else moves on by the game's own simulation in those ticks. Of the resimulated ticks only the first 4 are
+  saved again (the next snapshots restore those; a save of the 3 MB world was three quarters of a rollback's time): the
+  later ones keep their save from before, a world of that tick still, which a snapshot after 4 lost ones would restore
+  (counted in the log).
+- **The blend**: what is shown, place and facing alike, moves a part of the way to the corrected state each tick: 0.3
+  of a small error, rising to 0.5 of one near 2 blocks, and 0.5 of the local player's own (on foot or its car); more
+  than 2 blocks off (a respawn, a car entered) jumps. Tuned on recordings by the display error (what a tick showed
+  against the server's tick, players included, in the client's log): against 0.2 for all, the other players are shown
+  a third nearer the server's place, the local player half as far off, and they move no jerkier but at 60 ms of lag,
+  where steps changing by over 0.15 blocks/tick^2 go from 0.05% to 0.11% of the frames.
 - **What a client runs** (`engine/client_mode.cpp`): a client simulates what moves, not what decides. The game's own
   debug switches turn the rest off, set again every frame:
 
@@ -186,7 +223,9 @@ command, applies snapshots and rolls back. Between frames both poll the network 
   | doors, cranes, crushers, trains, traffic lights | runs | predicted, corrected by snapshots (the lights' phase is in the world entity, each train has one of its own) |
   | particles, tile animations, lights, HUD, sound | runs | cosmetic; a resimulated tick runs without the sound service, then takes what it left (shots, impacts, voice lines, sound events, radio reports), so a restore doesn't play them again; what no live tick played (a snapshot's death, another player's shot the prediction missed, by ammo) is given to the next live tick |
 
-  Player peds take no damage on a client, and everything counts as seen there, so nothing is removed off screen.
+  Player peds take no damage on a client, and everything counts as seen there, so nothing is removed off screen. A
+  player's health that drops in a snapshot shows the server's hit: the game's blood burst at its ped and the grunt of a
+  punch (`ShowServerHit`, `engine/players.cpp`), which the client's own hits on an invulnerable ped don't give.
 - **Replicas** (`engine/replica.cpp`): the client adopts what the map script made on both sides, makes the rest, moves
   them every snapshot and removes what the server drops, within the area the snapshot reached (a snapshot cut for size
   leaves what lies beyond as it is). A train's carriages are never made or removed: the client's own trains (both ends
@@ -276,25 +315,26 @@ A little-endian bitstream (`core/bitstream.cpp`), never a copy of a struct: clie
 
 | Message | Channel | |
 |---|---|---|
-| `kMsgHello`, `kMsgWelcome`, `kMsgReject` | reliable | the join: the protocol version, the build, the name, `nyc.gci`'s CRC-32; the server's session, the slot and name, the game's settings, the map with its files' CRC-32s, the maps a vote chooses from |
+| `kMsgHello`, `kMsgWelcome`, `kMsgReject` | reliable | the join: the protocol version, the build, the name, `nyc.gci`'s CRC-32 (and a reconnect's session and token); the server's session, the slot, its token and name, the game's settings, the map with its files' CRC-32s (gmp, sty and scr) and the game to take snapshots of, the maps a vote chooses from |
 | `kMsgLeave` | reliable | why a client leaves (its copy of the map differs) |
-| `kMsgCommands` | unreliable | the last few commands (tick and input bits, each delta-coded against the one before) and the newest snapshot the client has |
-| `kMsgSnapshot`, `kMsgSnapshotPart` | unreliable | server tick, the baseline it is made against, entities with field masks and changed fields (`core/snapshot.cpp`) |
+| `kMsgCommands` | unreliable | the last few commands (tick and input bits, each delta-coded against the one before; a key press with the character it typed) and the newest snapshot the client has |
+| `kMsgSnapshot`, `kMsgSnapshotPart` | unreliable | server tick, the baseline it is made against, the other players' forwarded controls, entities with field masks and changed fields (`core/snapshot.cpp`) |
 | `kMsgMapChange` | reliable | the next map, after a round, with its files' CRC-32s |
 | `kMsgPing`, `kMsgPong` | unreliable | the client's clock, sent back at once |
 | `kMsgCommand`, `kMsgNotice` | reliable | a player's command; a line to show (a vote, a player ready) |
 
-ENet runs with `mtu` 1400, two channels (never reliable data on the snapshot channel: under loss it delayed the
-snapshots), its throttle off (it dropped snapshots when the round trip rose) and a flush after every tick.
+ENet runs with `mtu` the link's MTU less IP and UDP's 28 bytes (`--mtu`, 1280 by default), two channels (never reliable
+data on the snapshot channel: under loss it delayed the snapshots), its throttle off (it dropped snapshots when the
+round trip rose) and a flush after every tick.
 
 ## Recordings
 
-Every client session is recorded (`session/recording.cpp`): the welcome, then per frame the packets, the round trip
-and the input, to `recordings/session-<n>.rec` (the newest 10; `GTA2_NET_RECORD=<file>` elsewhere, `off` none). A
-client does nothing but react to what arrives and to its own input, so `--replay <file>` plays the session again
-without a server, tick for tick, as fast as the game runs: a minute in about 2 s, the same every time. **F12, or the key
-under Esc, marks a moment** in play: the client and its replay print `net: mark <n> at frame <f>`, so a bug seen in
-play is "the last session, mark 2".
+Every client session is recorded (`session/recording.cpp`): the welcome, then per frame the packets, the round trip and
+the input, to `recordings/session-<n>.rec` (the newest 10, each stopped at 200 MB: one to a few hours;
+`GTA2_NET_RECORD=<file>` elsewhere, `off` none). A client does nothing but react to what arrives and to its own input,
+so `--replay <file>` plays the session again without a server, tick for tick, as fast as the game runs: a minute in
+about 2 s, the same every time. **F12, or the key under Esc, marks a moment** in play: the client and its replay print
+`net: mark <n> at frame <f>`, so a bug seen in play is "the last session, mark 2".
 
 ## Bots
 
@@ -315,7 +355,8 @@ them in a test.
 | `human` | for crash hunts, what people do and the others don't, in turns: cars, buses and the tank (in, about, out at speed), trains (on at a station, a ride, off), every weapon it has, pickups, into water, its own blasts (`session/bot_human.cpp`) |
 | `nn:<file>` | a trained network (`session/bot_nn.cpp`): 62 inputs (`BotFeatures`), a choice in six groups of outputs |
 
-In the round flow bots ready up, vote for map 2 in the results and yes on any vote but their own kick.
+In the round flow bots ready up, vote for one of the other maps in the results (map 2 with `GTA2_NET_BOTMAP2=1`, for a
+test) and yes on any vote but their own kick.
 
 **Training** (`port/net/scripts/rl_bots.py`, PPO with torch): an **arena** (`--server --arena ... --ticks N`, bots
 on the server itself, `port/net/dev/arena.cpp`) plays the trainer's `remote:<port>` slots over a local socket, a
@@ -381,7 +422,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Game.cpp` | `gPortDrawOverlay` | drawn last: the status, the round's panel, chat completion |
 | `Car.cpp`, `Char_Pool.cpp` | `PortTrafficLimit()`, `gPortSpawnPlayers` | the spawn limits times the players |
 | `port/src/options_menu.cpp` | `gPortFrontendSetup`, `gPortFrontendInput` | the network page, beside reG2's options |
-| `winmain.cpp` | `gPortNextNetworkGame`, `gPortLeaveNetworkGame` | a map change goes to the next game; a client that left goes to the network page |
+| `winmain.cpp` | `gPortNextNetworkGame`, `gPortLeaveNetworkGame`, `gPortNetFrameLoop` | a map change goes to the next game; a client that left goes to the network page; a client runs reG2's frame loop |
 | `map_0x370.cpp` | a file static in port builds | the restart zones' turn, a function's static in the original: registered from the start, so rolled back and sent |
 | `sprite.cpp` | `gPortSpriteMovedHook` | a sprite moved: the grid check (`GTA2_NET_CHECKGRID`) |
 | `port/src/game_hooks.cpp` | `gPortLeavePromptShown` | the leave prompt is up: a gamepad's A and B answer it |
@@ -392,7 +433,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `ScriptThread.cpp` | `gPortScriptCommandRuns` | a client runs the level start's look and sound commands, and steps over the rest |
 | `Car.cpp` | `gPortCarMayExplode` | a client's car the server sends blows up when a snapshot says the server's did, not on its own prediction |
 | `Car.cpp` | `Car::TryHonkHorn` | a train's lead without a driver (a player got out of a carriage that stood still) doesn't read it |
-| `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`) | the chat types the keyboard layout's characters |
+| `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`), `gPortChatChar` | the chat types the keyboard layout's characters; a server, those its clients typed |
 | `Hud.cpp` | `gPortServerKillNotices` | a client's kill notices are the server's deaths only |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
 | `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
@@ -414,8 +455,7 @@ mouse aim, the turret's aim, the pad's analog driving and the aim camera (`port/
 player's day and night (`day_night.cpp`) and the pause menu (`pause_menu.cpp`). AUTOSAVE, RETRY JOBS and FRENZY RESPAWN
 (`autosave.cpp`, `retry.cpp`) are for single player only, and INFINITE LIVES goes with the debug flags a network game
 clears (`InitializeGame`). Vibration is the local player's, from the ticks a client predicts (`gPortNoRumble`). A
-network game runs the original's frame path in `winmain.cpp` (a step, then a frame), without reG2's frame limit and
-interpolation.
+client runs reG2's frame loop and interpolation ("The game loop").
 
 ## Checks
 
@@ -481,13 +521,18 @@ off by default:
 |---|---|---|
 | `GTA2_NET_RECORD=<file>\|off` | client | the recording's file (default `recordings/session-<n>.rec`) |
 | `GTA2_NET_REPLAYON=<frames>` | replay | the game runs on that many frames after the recording ends, nothing arriving |
-| `GTA2_NET_BLEND=<0..1>` | client | how far a correction is blended in each frame (0.2; 1: at once) |
+| `GTA2_NET_STATS=1` | client | the connection beside the ping, over the last second: the snapshots lost (the server sends one a tick), received per second, the ticks the game runs ahead of the newest, and the ticks resimulated per rollback |
+| `GTA2_NET_NOFORWARD=1` | client | other players predicted by their repeated input only, not the forwarded controls |
+| `GTA2_NET_HOLDALL=1` | client | other players' last input held through a stall, not let go |
+| `GTA2_NET_CUT=<every ms>:<ms>` | either end | with the link conditioner on (`--lag 1`): every unreliable send lost that long that often |
+| `GTA2_NET_RESIMSAVES=<n>` | client | the resimulated ticks saved again after a rollback: the first n (4; 0: all) |
+| `GTA2_NET_BLEND=<0..1>`, `_BLEND_FAR`, `_BLEND_SELF` | client | how far a correction is blended in each tick: a small one (0.3), one near 2 blocks (0.5), the local player's own (0.5); 1: at once |
 | `GTA2_NET_COMPARE=1` | client | the comparison check |
 | `GTA2_NET_DIVERGE=<tick>[:<ticks>]` | client | the divergence check |
 | `GTA2_NET_CORRLOG=1` | client | corrections over half a block or 45 degrees |
-| `GTA2_NET_JERKLOG=1\|2` | both | how jerky what is shown moves (2: and each jump) |
+| `GTA2_NET_JERKLOG=1\|2` | both | how jerky what is shown moves (2: and each jump), and how far its way is from its facing and how fast it turns (on a client also where the newest snapshots have the two agree) |
 | `GTA2_NET_MARKER=1` | client | a square where the newest snapshot has the local player |
-| `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death, the sound's channels and the car radio |
+| `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death and the server's hits on players, the sound's channels and the car radio |
 | `GTA2_NET_CARDIFF=1` | client | where the prediction of the local player's car differs from the snapshot |
 | `GTA2_NET_GANGLOG=1` | both | player 0's group every 15 ticks, by the server's ids |
 | `GTA2_NET_STACKLOG=1` | both | two cars in one place (under 0.4 blocks apart), once per pair: a car the client kept that the server dropped |
@@ -504,6 +549,7 @@ off by default:
 | `GTA2_NET_TESTCAR=<tick>:<player>:<model>,...` | server | a car beside the player (11: a bus; 63, 64: a truck cab with a container trailer); model + 1000 * n: damaged by n * 1000 (16: on fire, 26: burning) |
 | `GTA2_NET_TESTTRAIN=<tick>:<player>:<train>,...` | server | the player at the wheel of a train; train + 10: that train into reverse; train + 20: the player on the platform of the station it stops at next |
 | `GTA2_NET_TESTARM=<weapon>:<ammo>[,...]`, `GTA2_NET_TESTWANTED=<points>` | server | every player kept armed (car weapons from 15: the car it drives), or at least that wanted (600: a star) |
+| `GTA2_NET_BOTMAP2=1` | client bot | it votes map 2 in the results (net_check's rounds step) |
 | `GTA2_NET_BOTCARFIRE=1` | both | bots fire their car weapons while driving (a second in three) |
 | `GTA2_NET_BOTTURRET=1` | both | bots turn their roof turret while driving (a second in three) |
 | `GTA2_NET_SAY=<frame>:<command>;...` | client | commands sent at those frames |
@@ -531,11 +577,10 @@ own (`single`) and rollback in scenes with explosions (`explode`).
 | Drift of a client's own simulation | within 330 ms nearly everything stays within a pixel; peds drift first (46% by a pixel after 1 s) |
 | ENet 1.3.18 | the largest unfragmented unreliable packet at `mtu` 1400 is 1372 bytes; a larger one goes as reliable fragments (seconds of delay under loss) |
 | A link at 150 ms, ±10 ms, 5% loss | commands 2 ticks early, none late; about 9 ticks resimulated per snapshot; the local player's prediction error 0.00 blocks |
+| A link at 300 ms (Linux, x86_64 desktop) | 12 ticks resimulated per snapshot: a rollback takes 3 ms a tick on average, 6 ms at worst, three quarters of it the 12 saves of the world (LAN: 0.6 ms); in the client's log every 300 frames |
 
 ## Open
 
-- **reG2's frame loop in a network game**: steps and frames go the original's way (a step, then a frame), so no frame
-  limit above 30, no interpolation and no SHOW FPS. Interpolating would need the netcode's frame hook on reG2's steps.
 - **Typing on the network page with a gamepad**: the address and name take the keyboard only.
 - **Other players at car doors**: most of the remaining large corrections of other players are with the server at a
   door. Next: a remote player the server has at a door put there at once instead of walked there by its predicted

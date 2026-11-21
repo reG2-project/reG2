@@ -1,10 +1,13 @@
 #include "interpolation.hpp"
 #include "Camera.hpp"
+#include "Car.hpp"
 #include "Game.hpp"
 #include "Hud.hpp"
+#include "Ped.hpp"
 #include "Player.hpp"
 #include "sprite.hpp"
 #include <string.h>
+#include <stdio.h>
 #include <vector>
 
 namespace PortInterp
@@ -100,6 +103,15 @@ ArrowPose sArrowsDrawn[kNumArrows];
 bool sArrowsApplied;
 
 std::vector<Saved> sSaved;
+
+// A player's ped's place as the step left it (Ped::mCam, where its name is drawn over it in a network game): moved by
+// as much as its sprite (its car's in one) is moved for the draw
+struct SavedPed
+{
+    Ped* mpPed;
+    Fix16_Vec mCam;
+};
+std::vector<SavedPed> sSavedPeds;
 u32 sMoved;
 u32 sJumped;
 u32 sSnapped;
@@ -171,6 +183,18 @@ Camera* ViewCamera()
     return gGame_0x40 && gGame_0x40->mDrawPlayer ? &gGame_0x40->mDrawPlayer->mViewCamera : NULL;
 }
 
+// Its place as the step left it, put back after the draw (Restore)
+void Save(Sprite& sprite)
+{
+    Saved saved;
+    saved.mpSprite = &sprite;
+    saved.mPose = PoseOf(sprite);
+    saved.mZCol = sprite.mZCol;
+    saved.mVisual.Save(sprite.mpVisualShape);
+    saved.mCollision.Save(sprite.mpCollisionShape != sprite.mpVisualShape ? sprite.mpCollisionShape : NULL);
+    sSaved.push_back(saved);
+}
+
 void ApplySprite(Sprite& sprite, const Pose& prev, f32 alpha)
 {
     const Pose cur = PoseOf(sprite);
@@ -195,15 +219,7 @@ void ApplySprite(Sprite& sprite, const Pose& prev, f32 alpha)
         return;
     }
     sMoved++;
-
-    Saved saved;
-    saved.mpSprite = &sprite;
-    saved.mPose = cur;
-    saved.mZCol = sprite.mZCol;
-    saved.mVisual.Save(sprite.mpVisualShape);
-    saved.mCollision.Save(sprite.mpCollisionShape != sprite.mpVisualShape ? sprite.mpCollisionShape : NULL);
-    sSaved.push_back(saved);
-
+    Save(sprite);
     sprite.mXy.x.mValue = Lerp(prev.mX, cur.mX, alpha);
     sprite.mXy.y.mValue = Lerp(prev.mY, cur.mY, alpha);
     sprite.mZpos.mValue = Lerp(prev.mZ, cur.mZ, alpha);
@@ -241,6 +257,76 @@ void RestoreSprite(const Saved& saved)
     if (zColFilled)
     {
         sprite.ComputeZLayer();
+    }
+}
+// Where an object attached to a car goes for a car at <x, y, rot>, as AttachedSprite::UpdateAttached puts it
+void AttachedPlace(const AttachedSprite& a, Fix16 x, Fix16 y, Ang16 rot, Fix16* pX, Fix16* pY)
+{
+    *pX = x;
+    *pY = y;
+    if (a.mOffsetX != Fix16(0) || a.mOffsetY != Fix16(0))
+    {
+        Fix16 ox = a.mOffsetX;
+        Fix16 oy = a.mOffsetY;
+        Ang16::RotateVector(ox, oy, rot);
+        *pX = x + ox;
+        *pY = y + oy;
+    }
+}
+
+// The objects on a car (its flames, smoke, lights, a roof turret) drawn where the car is drawn: lerped on their own,
+// an object made this step (drawn where the step put it) would be off the car. Not on a car that turned further than a
+// car steers in a step (a train's carriage at a corner, whose lights stay put while it is drawn turning)
+const s32 kMaxAttachedTurn = 90;
+
+void ApplyAttached(const std::vector<Pose>& carsAtStep, const std::vector<Car*>& cars)
+{
+    for (size_t i = 0; i < cars.size(); i++)
+    {
+        const Sprite* pCar = cars[i]->mCarSprite;
+        const Pose& step = carsAtStep[i];
+        const Pose& before = sPoses[pCar - gSpritePool->mPool.mPool];
+        if (before.mId != step.mId || Abs(TurnBetween(before.mRot, step.mRot)) > kMaxAttachedTurn)
+        {
+            continue;
+        }
+        Fix16 stepX, stepY;
+        stepX.mValue = step.mX;
+        stepY.mValue = step.mY;
+        Ang16 stepRot;
+        stepRot.rValue = step.mRot;
+        for (AttachedSprite* a = cars[i]->mAttachments.mP18; a; a = a->mpNext)
+        {
+            Sprite* pSprite = a->mpSprite;
+            if (!pSprite || !pSprite->AsObject2C())
+            {
+                continue;
+            }
+            // Only one the step put on the car (an object that left it keeps its own place)
+            Fix16 x, y;
+            AttachedPlace(*a, stepX, stepY, stepRot, &x, &y);
+            const Saved* pSaved = NULL;
+            for (size_t k = 0; k < sSaved.size() && !pSaved; k++)
+            {
+                pSaved = sSaved[k].mpSprite == pSprite ? &sSaved[k] : NULL;
+            }
+            const Pose real = pSaved ? pSaved->mPose : PoseOf(*pSprite);
+            if (Abs(real.mX - x.mValue) > 4 || Abs(real.mY - y.mValue) > 4)
+            {
+                continue;
+            }
+            if (!pSaved)
+            {
+                Save(*pSprite);
+            }
+            AttachedPlace(*a, pCar->mXy.x, pCar->mXy.y, pCar->mRotation, &x, &y);
+            pSprite->mXy.x = x;
+            pSprite->mXy.y = y;
+            pSprite->mZpos = pCar->mZpos;
+            pSprite->mRotation = pCar->mRotation + a->mOffsetRot;
+            pSprite->mRotation.Normalize();
+            pSprite->InvalidateZColAndBBoxes();
+        }
     }
 }
 } // namespace
@@ -293,9 +379,55 @@ void Apply(f32 alpha)
     {
         return;
     }
+    // Each player's ped and where its sprite is at the step, before the sprites move
+    struct PlayerSprite
+    {
+        Ped* mpPed;
+        Sprite* mpSprite;
+        Pose mPose;
+    };
+    PlayerSprite players[MAX_PLAYERS];
+    s32 numPlayers = 0;
+    sSavedPeds.clear();
+    for (s32 i = 0; i < gGame_0x40->mNumPlayers && i < MAX_PLAYERS; i++)
+    {
+        Player* pPlayer = gGame_0x40->mPlayers[i];
+        Ped* pPed = pPlayer ? pPlayer->mPlayerPed : NULL;
+        Sprite* pSprite = pPed && (pPed->mCar || pPed->mGameObject) ? pPed->GetSprite() : NULL;
+        if (pSprite)
+        {
+            PlayerSprite p = {pPed, pSprite, PoseOf(*pSprite)};
+            players[numPlayers++] = p;
+        }
+    }
+    std::vector<Car*> cars;
+    std::vector<Pose> carsAtStep;
+    for (Car* pCar = gCar_BC_Pool ? gCar_BC_Pool->mPool.mpPrev : NULL; pCar; pCar = pCar->mpNext)
+    {
+        if (pCar->mCarSprite && pCar->mAttachments.mP18)
+        {
+            cars.push_back(pCar);
+            carsAtStep.push_back(PoseOf(*pCar->mCarSprite));
+        }
+    }
     for (s32 i = 0; i < kNumSprites; i++)
     {
         ApplySprite(gSpritePool->mPool.mPool[i], sPoses[i], alpha);
+    }
+    ApplyAttached(carsAtStep, cars);
+    for (s32 i = 0; i < numPlayers; i++)
+    {
+        const PlayerSprite& p = players[i];
+        const s32 dx = p.mpSprite->mXy.x.mValue - p.mPose.mX, dy = p.mpSprite->mXy.y.mValue - p.mPose.mY;
+        const s32 dz = p.mpSprite->mZpos.mValue - p.mPose.mZ;
+        if (dx || dy || dz)
+        {
+            SavedPed saved = {p.mpPed, p.mpPed->mCam};
+            sSavedPeds.push_back(saved);
+            p.mpPed->mCam.x.mValue += dx;
+            p.mpPed->mCam.y.mValue += dy;
+            p.mpPed->mCam.z.mValue += dz;
+        }
     }
 
     Camera* pCamera = spCamera;
@@ -354,6 +486,27 @@ void Restore()
         RestoreSprite(sSaved[i]);
     }
     sSaved.clear();
+    for (size_t i = 0; i < sSavedPeds.size(); i++)
+    {
+        sSavedPeds[i].mpPed->mCam = sSavedPeds[i].mCam;
+    }
+    sSavedPeds.clear();
+}
+
+bool Steered(const Sprite* pSprite)
+{
+    const s32 i = gSpritePool ? static_cast<s32>(pSprite - gSpritePool->mPool.mPool) : -1;
+    if (i < 0 || i >= kNumSprites)
+    {
+        return true;
+    }
+    // In a draw the sprite is drawn turned part of the way: its place at the step is the one saved
+    s32 rot = pSprite->mRotation.rValue;
+    for (size_t k = 0; k < sSaved.size(); k++)
+    {
+        rot = sSaved[k].mpSprite == pSprite ? sSaved[k].mPose.mRot : rot;
+    }
+    return sPoses[i].mId != pSprite->mInstanceId || Abs(TurnBetween(sPoses[i].mRot, rot)) <= kMaxAttachedTurn;
 }
 
 void TakeCounts(u32* pMoved, u32* pJumped, u32* pSnapped)

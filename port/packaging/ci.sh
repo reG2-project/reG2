@@ -2,6 +2,8 @@
 # ci.sh <linux32|linux64|mingw32|mingw64> <work dir>: one packaging job, run as root in a Debian 13 container
 # (i386/debian:trixie for linux32, debian:trixie for the others), from the repository's root.
 # <work dir>/dl holds the downloads and <work dir>/deps-<target> the libraries: both can be cached.
+# The container has no git: pass the commit in $GTA2_COMMIT (docker run -e GTA2_COMMIT=$(git rev-parse HEAD)), or the
+# package's network game takes any commit's.
 set -eu
 T=$1; W=$2
 HERE=$(cd "$(dirname "$0")" && pwd)

@@ -3,12 +3,15 @@
 // it has acknowledged.
 #include "server.hpp"
 #include "env.hpp"
+#include "../maps.hpp"
 #include <algorithm>
+#include <chrono>
 #include <math.h>
 #include <random>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <thread>
 
 namespace
 {
@@ -70,9 +73,9 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
     {
         return false;
     }
-    if (config.lagMs || config.jitterMs || config.lossPercent)
+    if (config.link.Any())
     {
-        mTransport.reset(CreateConditioner(mTransport.release(), config.lagMs, config.jitterMs, config.lossPercent));
+        mTransport.reset(CreateConditioner(mTransport.release(), config.link));
     }
     if (config.arena.size() > mSlots.size())
     {
@@ -89,19 +92,22 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
         mSlots[i].peer = kArenaPeer;
         mSlots[i].name = "bot" + std::to_string(i);
     }
-    std::vector<std::string> mapNames;
+    std::vector<std::string> mapNames, titles;
     for (const MapFiles& m : mConfig.voteMaps)
     {
         mapNames.push_back(m.name);
+        titles.push_back(MapTitle(m.name));
     }
     mMap = (size_t)(mConfig.currentMap >= 0 ? mConfig.currentMap : 0);
     mRounds.Start(mConfig.rules, mapNames, mConfig.currentMap);
+    mRounds.SetMapTitles(titles);
     engine::CurrentRound() = mRounds.State();
     mProbe.Start();
     mSession = std::random_device{}() | 1; // never 0: a welcome's session is always set
     mCarInfo = engine::DataFileCrc("nyc.gci");
     mPrint.gmp = engine::DataFileCrc(mConfig.game.gmp);
     mPrint.sty = engine::DataFileCrc(mConfig.game.sty);
+    mPrint.scr = engine::DataFileCrc(mConfig.game.scr);
     printf("net: server on port %u, %d player slots, %s, reG2 %s\n", config.port, config.game.players, config.game.scr.c_str(), config.build.c_str());
     return true;
 }
@@ -153,6 +159,19 @@ int net::Server::FreeSlot(const std::string& name) const
     return unclaimed < (int)mSlots.size() ? unclaimed : any;
 }
 
+// A client back after its connection dropped, whose old connection may not have timed out here yet
+int net::Server::ReturningSlot(const Hello& hello) const
+{
+    for (size_t i = 0; hello.token && hello.session == mSession && i < mSlots.size(); i++)
+    {
+        if (mSlots[i].token == hello.token && mSlots[i].peer != kArenaPeer)
+        {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
 void net::Server::OnHello(uint32_t peer, BitReader& r)
 {
     Hello hello;
@@ -176,9 +195,10 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
                 taken.push_back(s.name);
             }
         }
-        std::string name = PlayerName(hello.name, std::vector<std::string>());
-        int slot = FreeSlot(name);
-        if (slot < (int)mSlots.size() && mSlots[slot].name != name)
+        const int back = ReturningSlot(hello);
+        std::string name = back >= 0 ? mSlots[back].name : PlayerName(hello.name, std::vector<std::string>());
+        int slot = back >= 0 ? back : FreeSlot(name);
+        if (back < 0 && slot < (int)mSlots.size() && mSlots[slot].name != name)
         {
             name = PlayerName(name, taken); // a new player: a name nobody in the game has
         }
@@ -198,10 +218,17 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
         else
         {
             Slot& s = mSlots[slot];
+            const bool stillIn = back >= 0 && s.used; // its old connection hasn't timed out: dropped, the player stays
+            if (stillIn)
+            {
+                mTransport->Disconnect(s.peer);
+            }
+            const uint32_t token = back >= 0 ? s.token : std::random_device{}() | 1;
             s = Slot();
             s.used = true;
             s.peer = peer;
             s.name = name;
+            s.token = token;
             Welcome welcome;
             welcome.slot = (uint8_t)slot;
             welcome.players = (uint8_t)mSlots.size();
@@ -219,10 +246,17 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
             welcome.print = mPrint;
             welcome.serverTick = mTick;
             welcome.maps = mRounds.Maps();
+            welcome.token = token;
+            welcome.game = (uint16_t)(engine::MapChangePending() ? engine::GameGeneration() + 1 : engine::GameGeneration());
             WriteWelcome(w, welcome);
-            engine::PutInGame(slot, true); // a fresh start at the next restart zone
+            if (!stillIn)
+            {
+                engine::PutInGame(slot, back < 0); // at the next restart zone; a new player with an empty score
+            }
             engine::SetPlayerName(slot, name.c_str());
-            printf("net: %s joined as player %d%s\n", name.c_str(), slot, name != hello.name ? (" (asked for \"" + hello.name + "\")").c_str() : "");
+            printf("net: %s %s player %d%s\n", name.c_str(), back >= 0 ? "is back as" : "joined as", slot,
+                   name != hello.name ? (" (asked for \"" + hello.name + "\")").c_str() : "");
+            Notice(-1, name + (back >= 0 ? " is back" : " joined"), slot);
         }
     }
     if (w.ByteCount()) // a second hello from a client already in: nothing to say
@@ -252,11 +286,21 @@ void net::Server::OnCommands(int slot, BitReader& r)
         {
             s.lastCmdTick = cmds[i].tick > s.lastCmdTick ? cmds[i].tick : s.lastCmdTick;
         }
+        const uint32_t buttons = WithoutEscape(cmds[i].buttons);
         // Commands for ticks still to come (and not too far ahead) go into the buffer
         if (cmds[i].tick > mTick && cmds[i].tick <= mTick + kRing)
         {
             s.cmdTick[cmds[i].tick % kRing] = cmds[i].tick;
-            s.cmdButtons[cmds[i].tick % kRing] = WithoutEscape(cmds[i].buttons);
+            s.cmdButtons[cmds[i].tick % kRing] = buttons & ~kKeyEventBits;
+        }
+        // A key event, late or not, once (the packets repeat the commands)
+        const uint32_t key = buttons & kKeyEventBits, at = cmds[i].tick % kRing;
+        const bool seen = s.keySeenTick[at] == cmds[i].tick && s.keySeenBits[at] == key;
+        if (key && !seen && cmds[i].tick + kRing > mTick && cmds[i].tick <= mTick + kRing && s.keys.size() < (size_t)kRing)
+        {
+            s.keys.push_back({cmds[i].tick, key, cmds[i].typed});
+            s.keySeenTick[at] = cmds[i].tick;
+            s.keySeenBits[at] = key;
         }
     }
 }
@@ -293,9 +337,15 @@ void net::Server::OnReceive(const TransportEvent& e)
     }
 }
 
+namespace
+{
+const float kFullRateRadius = 12.0f; // blocks: beyond, an entity the client has gets new state every kFarAgeTicks
+const int kFarAgeTicks = 3;
+} // namespace
+
 // Each nearby entity with what it costs new and aged, and its priority: the age plus one, over one plus a sixth of the
 // distance (an entity new to the client counts as 8 ticks old: one near comes soon)
-std::vector<net::Server::Item> net::Server::PriceArea(const std::vector<const EntityState*>& area, const Snapshot* base, float x, float y) const
+std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::vector<const EntityState*>& area, const Snapshot* base, float x, float y) const
 {
     const Schema& schema = engine::NetSchema();
     std::vector<Item> items(area.size());
@@ -307,6 +357,7 @@ std::vector<net::Server::Item> net::Server::PriceArea(const std::vector<const En
         it.freshBits = EntryBits(schema, it.had, *it.now);
         it.pick = 0;
         it.agedBits = 0;
+        it.hold = false;
         if (it.had)
         {
             it.aged = *it.had;
@@ -318,6 +369,11 @@ std::vector<net::Server::Item> net::Server::PriceArea(const std::vector<const En
             }
             it.agedBits = EntryBits(schema, it.had, it.aged);
             it.priority = (float)(age + 1) / (1.0f + Distance(*it.now, x, y) / 6.0f);
+            // Off screen with a margin (a view is 8 to 11 blocks centre to corner), new state every third tick when it
+            // costs more than its age: the client's own simulation keeps it within a pixel meanwhile (netcode.md, "Drift")
+            const auto last = s.lastFresh.find(it.now->id);
+            it.hold = last != s.lastFresh.end() && mTick - last->second < (uint32_t)kFarAgeTicks &&
+                      Distance(*it.now, x, y) > kFullRateRadius && it.freshBits > it.agedBits;
         }
         else
         {
@@ -325,6 +381,30 @@ std::vector<net::Server::Item> net::Server::PriceArea(const std::vector<const En
         }
     }
     return items;
+}
+
+// The next tick's controls of every other player in the game, then the commands we hold for the ticks after it, as far as
+// they follow on
+net::ForwardedInputs net::Server::Forwarded(int slot) const
+{
+    ForwardedInputs f;
+    const bool held = InputsHeld(engine::CurrentRound().phase);
+    for (int i = 0; i < (int)mSlots.size() && i < kMaxForwardSlots; i++)
+    {
+        const Slot& o = mSlots[i];
+        if (i == slot || !o.used || !engine::SlotInGame(i))
+        {
+            continue;
+        }
+        f.controls[i][0] = (uint16_t)(o.next & 0xFFF);
+        int n = 1;
+        for (uint32_t t = mTick + 2; n < kMaxForwarded && o.peer != kArenaPeer && o.cmdTick[t % kRing] == t; t++)
+        {
+            f.controls[i][n++] = (uint16_t)(held ? 0 : o.cmdButtons[t % kRing] & 0xFFF);
+        }
+        f.count[i] = (uint8_t)n;
+    }
+    return f;
 }
 
 // Fit the snapshot into its packets by priority, as Quake 3's successors do. The entities the client has stay in every
@@ -347,8 +427,14 @@ bool net::Server::Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items,
         order[i] = i;
     }
     std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return items[a].priority > items[b].priority; });
-    const size_t room = mConfig.packets == 1 ? kMaxPayload : (size_t)mConfig.packets * (kMaxPayload - kPartHeader); // bytes
-    size_t budget = room * 8 - 96; // the header, the entry count, a margin
+    const size_t room = mConfig.packets == 1 ? MaxPayload() : (size_t)mConfig.packets * (MaxPayload() - kPartHeader); // bytes
+    const ForwardedInputs forwarded = Forwarded((int)(&s - &mSlots[0]));
+    size_t forwardedBits = 4;
+    for (int i = 0; i < kMaxForwardSlots; i++)
+    {
+        forwardedBits += forwarded.count[i] ? 5 + 13 * forwarded.count[i] : 0;
+    }
+    size_t budget = room * 8 - 96 - forwardedBits; // the header, the entry count, a margin, the forwarded controls
     for (;;)
     {
         size_t bits = fixedBits;
@@ -361,7 +447,7 @@ bool net::Server::Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items,
         {
             Item& it = items[order[k]];
             const size_t was = it.had ? it.agedBits : 0;
-            if (bits - was + it.freshBits <= budget)
+            if (!it.hold && bits - was + it.freshBits <= budget)
             {
                 bits += it.freshBits - was;
                 it.pick = 2;
@@ -384,7 +470,7 @@ bool net::Server::Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items,
         engine::SetSnapshotReach(candidate, mConfig.interestRadius); // nothing it has goes missing
         SortById(candidate);
         w = BitWriter();
-        SnapshotHeader h = {mTick, base ? base->tick : mTick, s.lastCmdTick};
+        SnapshotHeader h = {mTick, base ? base->tick : mTick, s.lastCmdTick, forwarded};
         WriteSnapshotHeader(w, h);
         WriteDelta(w, schema, base ? *base : kEmpty, candidate, Env().snapCheck);
         if (w.ByteCount() <= room || budget < 2048)
@@ -393,16 +479,23 @@ bool net::Server::Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items,
             mStats.fresh += (uint32_t)fresh;
             mStats.cut += fresh < items.size();
             s.sent[mTick % kRing] = candidate;
+            for (const Item& it : items)
+            {
+                if (it.pick == 2)
+                {
+                    s.lastFresh[it.now->id] = mTick;
+                }
+            }
             return w.ByteCount() <= room;
         }
         budget -= budget / 8; // the estimate was off (ids' gaps): a little less
     }
 }
 
-// One packet, or parts of at most kMaxPayload each: the client puts them together before reading it
+// One packet, or parts of at most MaxPayload() each: the client puts them together before reading it
 void net::Server::Transmit(const Slot& s, const BitWriter& w)
 {
-    if (w.ByteCount() > kMaxPayload)
+    if (w.ByteCount() > MaxPayload())
     {
         std::vector<uint8_t> message(w.Data().begin(), w.Data().begin() + w.ByteCount());
         std::vector<std::vector<uint8_t>> parts;
@@ -419,6 +512,8 @@ void net::Server::Transmit(const Slot& s, const BitWriter& w)
         mStats.parts++;
     }
     mStats.bytes += (uint32_t)w.ByteCount();
+    mStats.snapshots++;
+    mStats.maxBytes = std::max(mStats.maxBytes, (uint32_t)w.ByteCount());
 }
 
 // The client's area: every player and the cars they sit in (wherever they are: a player far off isn't a ped without its
@@ -454,7 +549,7 @@ void net::Server::SendSnapshot(int slot, Slot& s, const Snapshot& world)
     std::sort(area.begin(), area.end(), [&](const EntityState* a, const EntityState* b) { return Distance(*a, x, y) < Distance(*b, x, y); });
     const Snapshot& acked = s.sent[s.ackTick % kRing];
     const Snapshot* base = s.ackTick && acked.tick == s.ackTick && mTick - s.ackTick < (uint32_t)kRing ? &acked : NULL;
-    std::vector<Item> items = PriceArea(area, base, x, y);
+    std::vector<Item> items = PriceArea(s, area, base, x, y);
     BitWriter w;
     if (Fill(s, fixed, items, base, w))
     {
@@ -475,6 +570,9 @@ void net::Server::StartGameOnce()
     // The map script made a ped for every slot: those without a client are out, ped and all, until one joins
     for (size_t i = 0; i < mSlots.size(); i++)
     {
+        // Every slot starts a game with a fresh score and HUD, a map change's new game too: one away comes back to
+        // this game's, not the last one's
+        engine::FreshScores((int)i);
         if (!mSlots[i].used)
         {
             engine::NeverInGame((int)i); // and its ped
@@ -485,9 +583,7 @@ void net::Server::StartGameOnce()
             {
                 engine::PutInGame((int)i, true);
             }
-            // Every game's players start with the game's names and a fresh HUD: a map change's new game too
             engine::SetPlayerName((int)i, mSlots[i].name.c_str());
-            engine::FreshScores((int)i);
         }
     }
     if (mConfig.seed)
@@ -549,13 +645,18 @@ void net::Server::OnEvent(const TransportEvent& e)
         {
             printf("net: player %d (%s) left\n", slot, mSlots[slot].name.c_str());
             const std::string name = mSlots[slot].name;
+            const uint32_t token = mSlots[slot].token;
             mSlots[slot] = Slot();
             mSlots[slot].name = name; // kept for its return
+            mSlots[slot].token = token;
             engine::TakeOutOfGame(slot);
             mRounds.Left(slot);
+            Notice(-1, name + " left");
         }
     }
 }
+
+const uint32_t kHeldTicks = 6; // a late client's input is repeated this long at most
 
 // Inputs for the next tick: its command, or the last one again if it is late, or the arena bot's; nobody's slot
 // stands still
@@ -573,18 +674,46 @@ void net::Server::SetNextInputs(const Snapshot& world)
         {
             s.buttons = mStarted ? mArena.Buttons((int)i) : 0;
         }
-        else if (s.used && s.cmdTick[next % kRing] == next)
-        {
-            s.buttons = s.cmdButtons[next % kRing];
-        }
         else if (s.used)
         {
-            s.late++;
-            s.buttons &= 0xFFF; // the last one again, its controls only: a key event (chat) happens once
+            const bool came = s.cmdTick[next % kRing] == next;
+            if (came)
+            {
+                s.buttons = s.cmdButtons[next % kRing];
+                if (s.silent > kHeldTicks)
+                {
+                    float x = 0, y = 0;
+                    engine::PlayerPosition((int)i, &x, &y);
+                    printf("net: tick %u, player %zu back after %u ticks without commands, at (%.2f, %.2f)\n", mTick, i, s.silent, x, y);
+                }
+                s.silent = 0;
+            }
+            else
+            {
+                s.late++;
+                // The last controls again (a key event, the chat, comes from the key queue below); a client silent
+                // longer than a late command's few ticks plays nothing: its player stands, rather than running on blind
+                s.buttons = ++s.silent > kHeldTicks ? 0 : s.buttons & ~kKeyEventBits;
+                if (s.silent == kHeldTicks + 1)
+                {
+                    float x = 0, y = 0;
+                    engine::PlayerPosition((int)i, &x, &y);
+                    printf("net: tick %u, player %zu without commands for %u ticks: its input let go, at (%.2f, %.2f)\n", mTick, i, kHeldTicks, x, y);
+                }
+            }
+            s.typed = 0;
+            if (!s.keys.empty() && s.keys.front().tick <= next)
+            {
+                s.buttons |= s.keys.front().bits;
+                s.typed = s.keys.front().typed;
+                s.keys.erase(s.keys.begin());
+            }
         }
         // The results and the countdown: a player's key events (the chat) are all it has (round_state.hpp)
         const uint32_t buttons = InputsHeld(engine::CurrentRound().phase) ? s.buttons & kKeyEventBits : s.buttons;
-        engine::SetPlayerInput((int)i, s.used ? buttons : 0);
+        s.next = s.used ? buttons : 0;
+        engine::SetPlayerInput((int)i, s.next);
+        engine::SetPlayerTyped((int)i, s.next, s.typed);
     }
 }
 
@@ -707,13 +836,13 @@ void net::Server::ReportSent(int slot, const std::string& text)
            DescribeFields(engine::NetSchema(), *e, base.tick == baseTick ? was : NULL).c_str());
 }
 
-void net::Server::Notice(int slot, const std::string& text)
+void net::Server::Notice(int slot, const std::string& text, int except)
 {
     BitWriter w;
     WriteText(w, kMsgNotice, text);
     for (size_t i = 0; i < mSlots.size(); i++)
     {
-        if (mSlots[i].used && mSlots[i].peer != kArenaPeer && (slot < 0 || slot == (int)i))
+        if (mSlots[i].used && mSlots[i].peer != kArenaPeer && (slot < 0 || slot == (int)i) && (int)i != except)
         {
             mTransport->Send(mSlots[i].peer, kChannelReliable, w.Data().data(), w.ByteCount(), true);
         }
@@ -740,8 +869,10 @@ void net::Server::Kick(int slot)
     mTransport->Disconnect(s.peer);
     printf("net: player %d (%s) kicked\n", slot, s.name.c_str());
     mRounds.Left(slot);
+    const std::string name = s.name;
     s = Slot(); // the name isn't kept for a return
     engine::TakeOutOfGame(slot);
+    Notice(-1, name + " was kicked");
 }
 
 // A map for everyone: after a pause (the round's winner on the HUD), the game ends here and on the clients and the
@@ -755,6 +886,7 @@ void net::Server::ChangeToMap(int map)
     mConfig.game.scr = m.scr;
     mPrint.gmp = engine::DataFileCrc(m.gmp);
     mPrint.sty = engine::DataFileCrc(m.sty);
+    mPrint.scr = engine::DataFileCrc(m.scr);
     printf("net: the next map: %s\n", m.name.c_str());
     MapChange change;
     change.map = m.name;
@@ -777,6 +909,40 @@ void net::Server::ChangeToMap(int map)
     engine::ChangeMap(m.gmp, m.sty, m.scr, mConfig.rules.enabled ? 15 : 90);
 }
 
+void net::Server::Shutdown()
+{
+    if (!mTransport)
+    {
+        return;
+    }
+    BitWriter w;
+    Reject reject;
+    reject.reason = "the server closed";
+    WriteReject(w, reject);
+    int left = 0;
+    for (const Slot& s : mSlots)
+    {
+        if (s.used && s.peer != kArenaPeer)
+        {
+            mTransport->Send(s.peer, kChannelReliable, w.Data().data(), w.ByteCount(), true);
+            mTransport->Disconnect(s.peer); // once the reject is through: an abrupt one drops what came with it
+            left++;
+        }
+    }
+    mTransport->Flush();
+    TransportEvent e;
+    for (const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(500); left > 0 && std::chrono::steady_clock::now() < until;)
+    {
+        while (left > 0 && mTransport->Poll(e))
+        {
+            left -= e.type == TransportEvent::kDisconnect;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    mTransport.reset();
+    printf("net: server closed\n");
+}
+
 void net::Server::StartOver()
 {
     mGeneration = engine::GameGeneration();
@@ -784,6 +950,7 @@ void net::Server::StartOver()
     for (Slot& s : mSlots)
     {
         s.ackTick = 0; // the old game's snapshots are no baseline: full ones again
+        s.lastFresh.clear();
         for (Snapshot& sent : s.sent)
         {
             sent = Snapshot();
@@ -804,9 +971,10 @@ void net::Server::PrintStats(const Snapshot& world)
     }
     int sent = 0, driven = 0, same = 0;
     engine::DriverStats(world, &sent, &driven, &same);
-    printf("net: tick %u, %d players, %zu entities (%d drivers), %.0f bytes per snapshot, %u late commands; frags/deaths(health)%s\n", mTick, used,
-           world.entities.size(), sent, used ? mStats.bytes / 300.0 / used : 0.0, late, Scoreboard(world).c_str());
-    printf("net: tick %u, %.2f packets per snapshot; %s\n", mTick, used ? mStats.parts / 300.0 / used : 0.0, engine::SpawnStats().c_str());
+    const double snapshots = mStats.snapshots ? mStats.snapshots : 1;
+    printf("net: tick %u, %d players, %zu entities (%d drivers), %.0f bytes per snapshot (up to %u), %u late commands; frags/deaths(health)%s\n",
+           mTick, used, world.entities.size(), sent, mStats.bytes / snapshots, mStats.maxBytes, late, Scoreboard(world).c_str());
+    printf("net: tick %u, %.2f packets per snapshot; %s\n", mTick, mStats.parts / snapshots, engine::SpawnStats().c_str());
     for (size_t i = 0; i < mSlots.size(); i++)
     {
         if (mSlots[i].used)

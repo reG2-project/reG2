@@ -1,9 +1,10 @@
 // port/net transport over ENet 1.3.18 (port/net/enet), with the settings the probe found (port/docs/netcode.md,
-// "Wire format"): mtu 1400, two channels (unreliable and reliable never mixed), no packet throttle, a flush per
-// tick, and unreliable packets capped at kMaxPayload so ENet never fragments them.
+// "Wire format"): the link's MTU (--mtu), two channels (unreliable and reliable never mixed), no packet throttle, a flush per
+// tick, and unreliable packets capped at MaxPayload() so ENet never fragments them.
 #include "transport.hpp"
 #include "../core/protocol.hpp"
 #include <enet/enet.h>
+#include <unordered_map>
 
 namespace
 {
@@ -25,7 +26,7 @@ class EnetTransport : public net::Transport
   public:
     explicit EnetTransport(ENetHost* host) : mHost(host)
     {
-        mHost->mtu = 1400;
+        mHost->mtu = (enet_uint32)(net::LinkMtu() - 28); // UDP's payload: the link's IP packets less IP and UDP
     }
     ~EnetTransport() override
     {
@@ -72,7 +73,7 @@ class EnetTransport : public net::Transport
 
     bool Send(uint32_t peer, uint8_t channel, const void* data, size_t size, bool reliable) override
     {
-        if (peer >= mPeers.size() || !mPeers[peer] || (!reliable && size > net::kMaxPayload))
+        if (peer >= mPeers.size() || !mPeers[peer] || (!reliable && size > net::MaxPayload()))
         {
             return false;
         }
@@ -163,7 +164,7 @@ net::Transport* net::CreateServerTransport(uint16_t port, uint32_t maxPeers, std
     ENetHost* host = enet_host_create(&address, maxPeers, kChannelCount, 0, 0);
     if (!host)
     {
-        *error = "can't listen on that port";
+        *error = "can't listen on port " + std::to_string(port);
         return NULL;
     }
     return new EnetTransport(host);
@@ -181,8 +182,20 @@ net::Transport* net::CreateClientTransport(const char* hostName, uint16_t port, 
         *error = "can't create a client host";
         return NULL;
     }
+    // A name is looked up once: a lookup blocks the frame (up to the resolver's timeout while the network is down), and
+    // a client reconnects every 3 s during an outage (Client::Reconnect)
+    static std::unordered_map<std::string, enet_uint32> sResolved;
     ENetAddress address;
-    if (enet_address_set_host(&address, hostName) != 0)
+    auto known = sResolved.find(hostName);
+    if (known != sResolved.end())
+    {
+        address.host = known->second;
+    }
+    else if (enet_address_set_host(&address, hostName) == 0)
+    {
+        sResolved[hostName] = address.host;
+    }
+    else
     {
         enet_host_destroy(host);
         *error = std::string("unknown host ") + hostName;

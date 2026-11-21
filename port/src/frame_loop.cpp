@@ -1,16 +1,23 @@
 #include "frame_loop.hpp"
+#include "Car.hpp"
 #include "Draw.hpp"
+#include "ExplodingScore_100.hpp"
+#include "Object_5C.hpp"
 #include "Frontend.hpp"
 #include "Game.hpp"
 #include "Hud.hpp"
 #include "Player.hpp"
 #include "Ped.hpp"
 #include "interpolation.hpp"
+#include "net_hooks.hpp"
 #include "settings.hpp"
 #include "sprite.hpp"
 #include "view.hpp"
+#include "winmain.hpp"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <math.h>
 
 #if defined(GTA2_PORT_SDL)
 unsigned long long port_NowNs();
@@ -71,6 +78,8 @@ namespace
 const u32 kMaxStepsPerDraw = 4;
 // Nearer than this, the next step or frame is waited for by polling the message loop.
 const unsigned long long kMinDelayNs = 200000;
+// The longest wait while the netcode polls the network from the message loop (gPortIdleHook), so pings stay timed.
+const unsigned long long kMaxIdleDelayNs = 1000000;
 
 bool sStarted;
 unsigned long long sLast;
@@ -79,6 +88,7 @@ unsigned long long sStepNs = 33000000;
 u32 sStepsSinceDraw;
 unsigned long long sNextDraw; // timer pacing
 unsigned long long sLastPresent; // vsync pacing
+unsigned long long sDrawDueNs; // when a draw came due that steps still to run were put before; 0: none
 u32 sRepeatsLeft;
 u32 sRefreshesPerFrame;
 f32 sAlpha;
@@ -111,9 +121,9 @@ u32 RefreshesPerFrame(unsigned long long refreshNs)
     return n ? n : 1;
 }
 
-Sprite* PlayerSprite()
+Sprite* PlayerSprite(const Player* pPlayer)
 {
-    Ped* pPed = gGame_0x40 && gGame_0x40->mLocalPlayer ? gGame_0x40->mLocalPlayer->mPlayerPed : NULL;
+    Ped* pPed = pPlayer ? pPlayer->mPlayerPed : NULL;
     return pPed && (pPed->mCar || pPed->mGameObject) ? pPed->GetSprite() : NULL;
 }
 
@@ -123,13 +133,105 @@ void Trace(char kind)
     {
         return;
     }
-    const Sprite* pSprite = PlayerSprite();
+    const Sprite* pSprite = PlayerSprite(gGame_0x40 ? gGame_0x40->mLocalPlayer : NULL);
     const Camera* pCamera = gGame_0x40 && gGame_0x40->mDrawPlayer ? &gGame_0x40->mDrawPlayer->mViewCamera : NULL;
-    fprintf(spTrace, "%c %u %.4f cam %d %d %d player %d %d %d %d\n", kind, sStepCount, kind == 'D' ? sAlpha : 1.0f,
+    fprintf(spTrace, "%c %u %.4f cam %d %d %d player %d %d %d %d", kind, sStepCount, kind == 'D' ? sAlpha : 1.0f,
             pCamera ? pCamera->mCurPos.mX.mValue : 0, pCamera ? pCamera->mCurPos.mY.mValue : 0,
             pCamera ? pCamera->mCurPos.mZ.mValue : 0, pSprite ? pSprite->mXy.x.mValue : 0,
             pSprite ? pSprite->mXy.y.mValue : 0, pSprite ? pSprite->mZpos.mValue : 0,
             pSprite ? pSprite->mRotation.rValue : 0);
+    // A network game's other players, by slot.
+    for (s32 i = 0; gGame_0x40 && bStartNetworkGame && i < MAX_PLAYERS; i++)
+    {
+        const Player* pPlayer = gGame_0x40->GetPlayer(static_cast<u8>(i));
+        const Sprite* pOther = pPlayer != gGame_0x40->mLocalPlayer ? PlayerSprite(pPlayer) : NULL;
+        if (pOther)
+        {
+            fprintf(spTrace, " p%d %d %d %d %d", i, pOther->mXy.x.mValue, pOther->mXy.y.mValue, pOther->mZpos.mValue,
+                    pOther->mRotation.rValue);
+        }
+    }
+    // The local player's place its name and markers are drawn at (Ped::mCam) against its sprite, the exploding scores'
+    // size, and how far a car's attached objects are drawn off where its drawn place puts them (blocks)
+    Ped* pPed = gGame_0x40 && gGame_0x40->mLocalPlayer ? gGame_0x40->mLocalPlayer->mPlayerPed : NULL;
+    if (pSprite && pPed)
+    {
+        fprintf(spTrace, " pedcam %d %d", pPed->mCam.x.mValue - pSprite->mXy.x.mValue, pPed->mCam.y.mValue - pSprite->mXy.y.mValue);
+    }
+    for (ExplodingScore* pScore = gExplodingScorePool ? gExplodingScorePool->mPool.GetFirstUsed() : NULL; pScore; pScore = pScore->mpNext)
+    {
+        const f32 back = kind == 'D' && pScore->mExplodeCounter <= -2 ? StepNotElapsed() : 0.0f;
+        fprintf(spTrace, " score %.3f", pScore->mExplodeCounter < 0 ? -pScore->mExplodeCounter - back : 1.0f);
+    }
+    f32 attachedOff = 0;
+    for (Car* pCar = gCar_BC_Pool ? gCar_BC_Pool->mPool.mpPrev : NULL; pCar; pCar = pCar->mpNext)
+    {
+        const Sprite* pCarSprite = pCar->mCarSprite;
+        if (pCarSprite && kind == 'D' && !PortInterp::Steered(pCarSprite))
+        {
+            continue; // a train's carriage turning a corner: its lights stay put
+        }
+        for (AttachedSprite* a = pCarSprite ? pCar->mAttachments.mP18 : NULL; a; a = a->mpNext)
+        {
+            if (!a->mpSprite || !a->mpSprite->AsObject2C())
+            {
+                continue;
+            }
+            Fix16 x = pCarSprite->mXy.x, y = pCarSprite->mXy.y;
+            if (a->mOffsetX != Fix16(0) || a->mOffsetY != Fix16(0))
+            {
+                x = a->mOffsetX;
+                y = a->mOffsetY;
+                Ang16 rot = pCarSprite->mRotation;
+                Ang16::RotateVector(x, y, rot);
+                x += pCarSprite->mXy.x;
+                y += pCarSprite->mXy.y;
+            }
+            const f32 dx = (a->mpSprite->mXy.x.mValue - x.mValue) / 16384.0f, dy = (a->mpSprite->mXy.y.mValue - y.mValue) / 16384.0f;
+            const f32 off = dx * dx + dy * dy;
+            attachedOff = off > attachedOff ? off : attachedOff;
+        }
+    }
+    fprintf(spTrace, " attached %.4f", attachedOff > 0 ? sqrtf(attachedOff) : 0.0f);
+    // Each burning car's flames: the car's sprite, then each flame's sprite and its place on the car
+    for (Car* pCar = gCar_BC_Pool ? gCar_BC_Pool->mPool.mpPrev : NULL; pCar; pCar = pCar->mpNext)
+    {
+        bool any = false;
+        for (AttachedSprite* a = pCar->mCarSprite ? pCar->mAttachments.mP18 : NULL; a; a = a->mpNext)
+        {
+            Object* pObject = a->mpSprite ? a->mpSprite->AsObject2C() : NULL;
+            if (pObject && pObject->IsFlameObject())
+            {
+                if (!any)
+                {
+                    fprintf(spTrace, " flames %d", pCar->mCarSprite->mInstanceId);
+                    any = true;
+                }
+                fprintf(spTrace, " %d@%.2f,%.2f", a->mpSprite->mInstanceId, a->mOffsetX.mValue / 16384.0f, a->mOffsetY.mValue / 16384.0f);
+            }
+        }
+    }
+    fputc('\n', spTrace);
+}
+
+// Whether a new frame is due now, by the pacing Next uses.
+bool DrawDue(unsigned long long now)
+{
+    if (Original())
+    {
+        return false;
+    }
+    const unsigned long long refreshNs = port_SwapRefreshNs();
+    return refreshNs ? !sRepeatsLeft && now >= sLastPresent + refreshNs / 2 : now >= sNextDraw;
+}
+
+// Where a draw now sits between the last two steps. One that came due while steps ran shows the moment it came due:
+// otherwise the steps' time, a network rollback's few milliseconds, would put it that far ahead of the frames around it.
+f32 AlphaNow(unsigned long long now)
+{
+    const unsigned long long late = sDrawDueNs ? now - sDrawDueNs : 0;
+    sDrawDueNs = 0;
+    return sAccumulated > late ? static_cast<f32>(static_cast<f64>(sAccumulated - late) / sStepNs) : 0.0f;
 }
 
 void Stats(unsigned long long now)
@@ -183,6 +285,7 @@ void Reset()
     sAccumulated = 0;
     sStepsSinceDraw = 0;
     sRepeatsLeft = 0;
+    sDrawDueNs = 0;
     PortInterp::Clear();
     ApplySettings();
 }
@@ -210,6 +313,10 @@ Action Next(s32 stepMs, bool forceStep, bool noDraw)
     {
         if (sStepsSinceDraw < kMaxStepsPerDraw)
         {
+            if (!sDrawDueNs && DrawDue(now))
+            {
+                sDrawDueNs = now;
+            }
             sAccumulated -= sStepNs;
             return kStep;
         }
@@ -242,7 +349,7 @@ Action Next(s32 stepMs, bool forceStep, bool noDraw)
                 return kIdle;
             }
             sRepeatsLeft = sRefreshesPerFrame - 1;
-            sAlpha = static_cast<f32>(static_cast<f64>(sAccumulated) / sStepNs);
+            sAlpha = AlphaNow(now);
             return kDraw;
         }
         if (due < wake)
@@ -257,7 +364,7 @@ Action Next(s32 stepMs, bool forceStep, bool noDraw)
         {
             const unsigned long long interval = sMaxFps ? 1000000000ull / sMaxFps : 0;
             sNextDraw = now - sNextDraw > interval ? now + interval : sNextDraw + interval;
-            sAlpha = static_cast<f32>(static_cast<f64>(sAccumulated) / sStepNs);
+            sAlpha = AlphaNow(now);
             return kDraw;
         }
         if (sNextDraw < wake)
@@ -267,7 +374,8 @@ Action Next(s32 stepMs, bool forceStep, bool noDraw)
     }
     if (wake > now + kMinDelayNs)
     {
-        port_DelayNs(wake - now - kMinDelayNs / 2);
+        const unsigned long long delay = wake - now - kMinDelayNs / 2;
+        port_DelayNs(gPortIdleHook && delay > kMaxIdleDelayNs ? kMaxIdleDelayNs : delay);
     }
     return kIdle;
 }
@@ -279,6 +387,16 @@ void BeforeStep()
 
 void AfterStep()
 {
+    // GTA2_TEST_SCORE=<step>,...: an exploding score over the local player at those steps (the trace's test)
+    static const char* sTestScore = getenv("GTA2_TEST_SCORE");
+    for (const char* p = sTestScore; p && *p; p = strchr(p, ',') ? strchr(p, ',') + 1 : "")
+    {
+        Ped* pPed = gGame_0x40 && gGame_0x40->mLocalPlayer ? gGame_0x40->mLocalPlayer->mPlayerPed : NULL;
+        if (pPed && gExplodingScorePool && static_cast<u32>(atoi(p)) == sStepCount)
+        {
+            gExplodingScorePool->PushScore(pPed->mCam.x, pPed->mCam.y, pPed->mCam.z, 1000);
+        }
+    }
     sStepsSinceDraw++;
     sStepCount++;
     sStatsSteps++;
@@ -342,5 +460,10 @@ u32 StepCount()
 f32 DrawAlpha()
 {
     return sInDraw && !Original() ? sAlpha : 1.0f;
+}
+
+f32 StepNotElapsed()
+{
+    return 1.0f - DrawAlpha();
 }
 } // namespace PortFrameLoop

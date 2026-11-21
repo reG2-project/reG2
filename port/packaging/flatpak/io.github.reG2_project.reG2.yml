@@ -14,6 +14,7 @@ command: reg2
 # to what the player picks. The game's data is copied into the app's own data folder.
 finish-args:
   - --share=ipc
+  - --share=network
   - --socket=wayland
   - --socket=fallback-x11
   - --socket=pulseaudio

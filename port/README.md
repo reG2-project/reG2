@@ -123,7 +123,7 @@ data (`data/fstyle.sty`), and writes its settings and saves there:
 It holds `data/` (the game's data, the music in `data/GTAudio/`), `gta2_registry.ini` (settings),
 `gta2gl.ini` (renderer options), `player/` (saves and high scores) and `test/` (replays, logs).
 
-After an error message or, on Windows, a crash, `reG2.log` (the start-up steps, the OpenGL driver,
+After an error message or, on Windows, a crash, `reG2.log` (a network server's: `reG2-server.log`; the start-up steps, the OpenGL driver,
 errors, message boxes and the crash report) is written next to the executable when that folder is
 writable, else in the per-user folder, and the message gives its path. A run without an error
 writes no log.
@@ -440,13 +440,14 @@ the AppImage in a clean Debian, Ubuntu or Arch Linux container with the librarie
 
 | Variable | Effect |
 |---|---|
-| `GTA2_INPUT=<frame>:<key>[:<frames held>],...` | key presses at given frames (SDL key names: `Return`, `Up`, `Left Ctrl`, `Alt+Return`), a virtual gamepad (`pad.a`, `pad.dpup`, `pad.lefty-`, `pad.rightx=0.5` for part of an axis; `pad2.` a second one, the first then idle; it logs the rumble it gets), or the mouse (`mouse.<x>x<y>` moves it to that window position, `mouse.left`, `mouse.right`, `mouse.wheelup`, `mouse.wheeldown`) |
+| `GTA2_INPUT=<frame>:<key>[:<frames held>],...` | key presses at given frames (SDL key names: `Return`, `Up`, `Left Ctrl`, `Alt+Return`, `Shift+1`, `Comma`), a virtual gamepad (`pad.a`, `pad.dpup`, `pad.lefty-`, `pad.rightx=0.5` for part of an axis; `pad2.` a second one, the first then idle; it logs the rumble it gets), or the mouse (`mouse.<x>x<y>` moves it to that window position, `mouse.left`, `mouse.right`, `mouse.wheelup`, `mouse.wheeldown`) |
 | `GTA2_EXIT_AT=<frame>` | quit at that frame |
 | `GTA2_WELCOME=1` | the first start's CHOOSE YOUR STYLE screen shown again |
 | `GTA2_CURSOR_BMP=<file>` | the mouse cursor's image written to that BMP |
 | `GTA2GL_CAPTURE=<dir>,<frame>,<a>-<b>,...` | write those frames as BMP (the first frame drawn at each); `GTA2GL_CAPTURE_FLIPS=1` counts presented frames instead |
 | `GTA2_LOOP_STATS=1` | logic steps and frames per second on stderr, every 5 seconds |
-| `GTA2_LOOP_TRACE=<file>` | the player's and the camera's position after each step (`S`) and as drawn (`D`) |
+| `GTA2_LOOP_TRACE=<file>` | the player's and the camera's position after each step (`S`) and as drawn (`D`), in a network game the other players' too (`p<slot>`); then the player's place its markers are drawn at against its sprite (`pedcam`), each exploding score's size (`score`) and how far objects on cars are drawn off their car (`attached`, blocks), and each burning car's flames (`flames <car sprite> <flame sprite>@<x>,<y>`) |
+| `GTA2_TEST_SCORE=<step>,...` | an exploding score over the player at those steps (for the trace) |
 | `GTA2_PRESENT_LOG=<file>` | every presented frame with the time it reached the screen (Wayland's presentation-time protocol; elsewhere when the swap returned), and every 10 seconds and at exit a summary: frame to frame times, how many refreshes each frame was shown, the shown time against the game time it depicts, on Wayland how many frames the compositor showed on vblank and scanned out directly, and the GPU time of each frame and how long before its presentation the GPU finished it |
 | `GTA2_NO_SOUND=1` | no audio device |
 | `GTA2_HEADLESS=1` | no window content, sound or gamepads (a network server is headless without `--window`) |

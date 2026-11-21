@@ -1479,8 +1479,10 @@ bool Hud_ChatInput::HandleChatInputKey(s32 action, Player* pPlayer)
         else
         {
 #if defined(GTA2_PORT_SDL)
-            // the game's table where no keyboard typed it: a network server's copy of a client's line (the key events)
-            const u16 typed = port_TypedChar(action);
+            // the game's table where no keyboard typed it: a network server's copy of a client's line (the key events),
+            // unless the client said what it typed
+            const u16 sent = gPortChatChar ? gPortChatChar(pPlayer, action) : 0;
+            const u16 typed = sent ? sent : port_TypedChar(action);
             const u16 char_value = gText_0x14->RemapExtendedChar(typed ? typed : gKeybrd_0x204->GetKey(action));
 #else
             const u16 char_value = gText_0x14->RemapExtendedChar(gKeybrd_0x204->GetKey(action));

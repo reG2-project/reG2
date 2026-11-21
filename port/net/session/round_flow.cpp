@@ -44,6 +44,11 @@ int net::RoundFlow::Seconds(uint32_t ticks) const
     return (int)((ticks + tps - 1) / tps);
 }
 
+std::string net::RoundFlow::Title(int map) const
+{
+    return map < (int)mTitles.size() ? mTitles[map] : mMaps[map];
+}
+
 void net::RoundFlow::Start(const RoundRules& rules, const std::vector<std::string>& maps, int currentMap)
 {
     mRules = rules;
@@ -82,7 +87,7 @@ void net::RoundFlow::Enter(uint32_t tick, RoundPhase phase, RoundActions& out)
     else
     {
         mPhaseEnd = 0; // the warmup's clock starts once the minimum is in
-        out.notices.push_back({-1, "Warmup: /ready (or F1) when you are"});
+        out.notices.push_back({-1, "Warmup: F1 ready, F10 chat, Esc leave"});
     }
     printf("net: round flow: %s (round %d)\n", PhaseName(phase), mState.number);
 }
@@ -148,6 +153,10 @@ net::RoundActions net::RoundFlow::Tick(uint32_t tick, const std::vector<RoundPla
         if (players[i].in)
         {
             in++;
+            if (players[i].alwaysReady && mState.phase == kPhaseWarmup)
+            {
+                mState.ready |= (uint8_t)(1u << i); // shown ready to the clients, as it counts
+            }
             allReady = allReady && (players[i].alwaysReady || (mState.ready >> i & 1));
             allLoaded = allLoaded && players[i].loaded;
         }
@@ -397,13 +406,13 @@ void net::RoundFlow::Command(uint32_t tick, int slot, const std::string& text, c
         if (mState.phase == kPhaseResults && mRules.enabled)
         {
             mState.mapChoice[slot] = (uint8_t)(m + 1); // the results' choice, no vote needed
-            out.notices.push_back({-1, name + " votes for " + mMaps[m]});
+            out.notices.push_back({-1, name + " votes for " + Title(m)});
             return;
         }
         if (mState.phase == kPhaseCountdown && m == mCurrentMap)
         {
             // A fresh game on it is starting (a results' choice that came late, too): nothing to vote on
-            out.notices.push_back({slot, mMaps[m] + " is starting"});
+            out.notices.push_back({slot, Title(m) + " is starting"});
             return;
         }
         OpenVote(tick, slot, kVoteMap, m, players, out);
@@ -446,7 +455,7 @@ void net::RoundFlow::OpenVote(uint32_t tick, int slot, VoteKind kind, int arg, c
     mState.voteNo = 0;
     mVoteEnd = tick + (uint32_t)(mRules.voteSec * tps);
     mState.voteLeft = (uint8_t)mRules.voteSec;
-    const std::string what = kind == kVoteStart ? "start the round" : kind == kVoteMap ? "change to " + mMaps[arg] : "kick " + players[arg].name;
+    const std::string what = kind == kVoteStart ? "start the round" : kind == kVoteMap ? "change to " + Title(arg) : "kick " + players[arg].name;
     out.notices.push_back({-1, players[slot].name + " calls a vote: " + what + " (Y / N)"});
     printf("net: round flow: vote %d (%d) by player %d\n", (int)kind, arg, slot);
     DecideVote(tick, players, out);

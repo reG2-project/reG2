@@ -20,6 +20,8 @@ permissions:
 # The scripts' version: the tag on a tag, else CMake's default.
 env:
   GTA2_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+  # The commit for the builds in containers without git (their first 10 characters, as git prints it for a dev build)
+  GTA2_COMMIT: ${{ github.sha }}
 
 jobs:
   package:
@@ -55,7 +57,7 @@ jobs:
       - name: Build and package
         run: |
           mkdir -p "$WORK"
-          docker run --rm -e GTA2_VERSION -v "$PWD:/src:ro" -v "$WORK:/work" -w /src ${{ matrix.image }} \
+          docker run --rm -e GTA2_VERSION -e GTA2_COMMIT -v "$PWD:/src:ro" -v "$WORK:/work" -w /src ${{ matrix.image }} \
               ${{ matrix.setarch }} sh port/packaging/ci.sh ${{ matrix.target }} /work
           docker run --rm -v "$WORK:/work" ${{ matrix.image }} chown -R "$(id -u):$(id -g)" /work
 
@@ -117,7 +119,7 @@ jobs:
       - name: Build
         run: |
           mkdir -p "$WORK"
-          docker run --rm $BWRAP -e GTA2_VERSION -v "$PWD:/src:ro" -v "$WORK:/work" -v flatpak-var:/var/lib/flatpak -w /src $IMAGE \
+          docker run --rm $BWRAP -e GTA2_VERSION -e GTA2_COMMIT -v "$PWD:/src:ro" -v "$WORK:/work" -v flatpak-var:/var/lib/flatpak -w /src $IMAGE \
               sh port/packaging/flatpak.sh /work
           docker run --rm -v "$WORK:/work" debian:trixie chown -R "$(id -u):$(id -g)" /work
 

@@ -88,16 +88,25 @@ void net::ClientRecorder::Frame(uint32_t frame, uint32_t rttMs, uint32_t input, 
     {
         return;
     }
+    if (mBytes >= kMaxRecordingBytes)
+    {
+        printf("net: the recording stops at frame %u (%llu MB)\n", frame, (unsigned long long)(mBytes >> 20));
+        fclose(mFile);
+        mFile = nullptr;
+        return;
+    }
     Put(mFile, frame);
     Put(mFile, rttMs);
     Put(mFile, input);
     Put(mFile, (uint32_t)events.size());
+    mBytes += 16;
     for (size_t i = 0; i < events.size(); i++)
     {
         Put(mFile, (uint32_t)events[i].type);
         Put(mFile, events[i].channel);
         Put(mFile, (uint32_t)events[i].data.size());
         fwrite(events[i].data.data(), 1, events[i].data.size(), mFile);
+        mBytes += 12 + events[i].data.size();
     }
     fflush(mFile); // a crash keeps everything up to it
 }

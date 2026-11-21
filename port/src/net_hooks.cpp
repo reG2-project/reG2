@@ -5,6 +5,7 @@
 void (*gPortCrashHook)();
 void (*gPortSpriteMovedHook)(Sprite*);
 void (*gPortIdleHook)();
+bool gPortNetFrameLoop;
 
 bool gPortNoAudio;
 bool gPortNoRumble;
@@ -23,7 +24,9 @@ bool gPortKeepWantedPoints;
 bool gPortServerKillNotices;
 bool gPortServerKillAwards;
 bool gPortTagTimeCounts;
+u16 (*gPortChatChar)(Player*, s32);
 bool gPortProtectsPlayers;
 bool (*gPortScoreBonusHook)(Player* pPlayer, s32 voice);
 bool gPortNoFireEngines;
 bool gPortLeavePromptShown;
+int gPortNetRoundPad;

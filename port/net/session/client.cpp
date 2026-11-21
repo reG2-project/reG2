@@ -2,7 +2,9 @@
 // (repeating the last few commands), and puts the server's snapshots into its game.
 #include "client.hpp"
 #include "env.hpp"
+#include "../maps.hpp"
 #include <algorithm>
+#include <ctype.h>
 #include <chrono>
 #include <math.h>
 #include <set>
@@ -15,6 +17,8 @@
 namespace
 {
 const int kSaves = 32; // ticks a snapshot may be behind and still be reconciled (about 1 s)
+const int kMaxFastForward = 8; // ticks our commands may come late and be caught up at once (FastForward); more: a jump
+const int kMaxAhead = 20; // ticks our commands may be early beyond two before a jump back; from 12 on, slower pacing
 const int kStallMs = 700; // no snapshot for this long: the connection is out (ENet drops it after 5 to 10 s)
 const int kReconnectMs = 3000; // between attempts to connect again
 const int kGiveUpMs = 30000; // reconnecting this long: the server is gone, back to the menu
@@ -36,8 +40,15 @@ void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
 {
     mSlot = welcome.slot;
     mSession = welcome.session;
+    mToken = welcome.token;
+    mServerGame = welcome.game; // during a map change's pause, the next game: the old one's snapshots aren't for us
     mConfig.name = welcome.name; // a reconnect asks for it: the server keeps our slot under it
     mMaps = welcome.maps;
+    mMapTitles.clear();
+    for (const std::string& m : mMaps)
+    {
+        mMapTitles.push_back(MapTitle(m)); // every client has the maps (the data check)
+    }
     mConnected = true;
     pGame->players = welcome.players;
     pGame->localPlayer = welcome.slot;
@@ -47,6 +58,7 @@ void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
     pGame->tickMs = welcome.tickMs;
     mTickMs = welcome.tickMs ? welcome.tickMs : 33;
     mGameType = welcome.gameType;
+    mFragLimit = (int)welcome.fragLimit;
     pGame->police = welcome.police;
     pGame->gmp = welcome.gmp;
     pGame->sty = welcome.sty;
@@ -77,13 +89,20 @@ bool net::Client::BeginConnect(const ClientConfig& config, std::string* error)
     {
         return false;
     }
-    if (config.lagMs || config.jitterMs || config.lossPercent)
+    if (config.link.Any())
     {
-        mTransport.reset(CreateConditioner(mTransport.release(), config.lagMs, config.jitterMs, config.lossPercent));
+        mTransport.reset(CreateConditioner(mTransport.release(), config.link));
     }
     mHelloSent = false;
     mJoinWaitMs = NowMs();
     return true;
+}
+
+// With what to check: the port is written out, as a forgotten ":port" is a common cause
+std::string net::Client::NoAnswer() const
+{
+    const std::string port = std::to_string(mConfig.port);
+    return "no answer from " + mConfig.host + ":" + port + ": is the server running, is UDP " + port + " open?";
 }
 
 // The connection, our hello, the server's welcome: 1 welcomed (the game to start is in <pGame>), 0 not yet, -1 failed
@@ -94,7 +113,7 @@ int net::Client::PollConnect(engine::NetworkGame* pGame, std::string* error)
     {
         if (e.type == TransportEvent::kDisconnect)
         {
-            *error = mHelloSent ? "the server closed the connection" : "no answer from " + mConfig.host;
+            *error = mHelloSent ? "the server closed the connection" : NoAnswer();
             return -1;
         }
         if (e.type == TransportEvent::kConnect && !mHelloSent)
@@ -117,7 +136,7 @@ int net::Client::PollConnect(engine::NetworkGame* pGame, std::string* error)
     }
     if (NowMs() - mJoinWaitMs > 6000)
     {
-        *error = mHelloSent ? "the server didn't welcome us" : "no answer from " + mConfig.host;
+        *error = mHelloSent ? "the server didn't welcome us" : NoAnswer();
         return -1;
     }
     return 0;
@@ -151,9 +170,13 @@ static bool HaveMap(const std::string& gmp, const std::string& sty, const std::s
 }
 
 // The same map as the server's: its files as the server has them, else <error> says which differs
-static bool SameMap(const std::string& map, const std::string& gmp, const std::string& sty, const net::MapPrint& print, std::string* error)
+static bool SameMap(const std::string& map, const std::string& gmp, const std::string& sty, const std::string& scr, const net::MapPrint& print,
+                    std::string* error)
 {
-    const std::string* differs = net::engine::DataFileCrc(gmp) != print.gmp ? &gmp : net::engine::DataFileCrc(sty) != print.sty ? &sty : NULL;
+    const std::string* differs = net::engine::DataFileCrc(gmp) != print.gmp   ? &gmp
+                                 : net::engine::DataFileCrc(sty) != print.sty ? &sty
+                                 : net::engine::DataFileCrc(scr) != print.scr ? &scr
+                                                                              : NULL;
     if (!differs)
     {
         return true;
@@ -179,7 +202,7 @@ bool net::Client::OnWelcome(const TransportEvent& e, engine::NetworkGame* pGame,
         *error = "a welcome we don't understand";
         return false;
     }
-    if (!HaveMap(welcome.gmp, welcome.sty, welcome.scr, error) || !SameMap(welcome.map, welcome.gmp, welcome.sty, welcome.print, error))
+    if (!HaveMap(welcome.gmp, welcome.sty, welcome.scr, error) || !SameMap(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, error))
     {
         SendLeave(*error);
         Leave();
@@ -301,7 +324,9 @@ void net::Client::OnSnapshot(BitReader& r)
     }
     snap.tick = h.tick;
     mReceived[h.tick % kRing] = snap;
+    mForwarded[h.tick % kRing] = h.forwarded;
     mLatestTick = h.tick;
+    mLink.snapshots++;
     mSlack = (int)h.lastCmdTick - (int)(h.tick + 1);
     mSlackKnown = mSynced && h.lastCmdTick > mJumpTick; // it has heard of the ticks since our last jump
     mNewSnapshot = true;
@@ -314,7 +339,19 @@ uint32_t net::Client::Lead() const
     return (mRtt / 2 + mTickMs - 1) / mTickMs + 2;
 }
 
-// The display error: what tick S showed of the cars and peds against the server's S
+int net::Client::InView(float x, float y) const
+{
+    float px, py;
+    if (!engine::PlayerPosition(mSlot, &px, &py))
+    {
+        return 1;
+    }
+    const float dx = x - px, dy = y - py;
+    const float r = engine::PlayerViewRadius(mSlot) + 1.0f;
+    return dx * dx + dy * dy <= r * r ? 0 : 1;
+}
+
+// The display error: what tick S showed of the cars, peds and players against the server's S
 void net::Client::MeasureShownError(const Snapshot& snap)
 {
     const TickRecord& rec = mHist[snap.tick % kRing];
@@ -322,22 +359,67 @@ void net::Client::MeasureShownError(const Snapshot& snap)
     {
         return;
     }
+    auto error = [&](const engine::ReplicaPos& shown, float* pError) {
+        for (const EntityState& e : snap.entities) // sorted by id
+        {
+            if (e.id == shown.id)
+            {
+                if (engine::EntityAge(e))
+                {
+                    return false; // only against new state: an aged entry carries what the client had, from ticks before
+                }
+                const float dx = engine::Blocks(e.f[0]) - shown.x, dy = engine::Blocks(e.f[1]) - shown.y;
+                *pError = sqrtf(dx * dx + dy * dy);
+                return true;
+            }
+            if (e.id > shown.id)
+            {
+                break;
+            }
+        }
+        return false;
+    };
+    float e = 0;
     for (const engine::ReplicaPos& shown : rec.shown)
     {
-        size_t j = 0;
-        while (j < snap.entities.size() && snap.entities[j].id != shown.id)
+        if (error(shown, &e))
         {
-            j++;
-        }
-        if (j < snap.entities.size())
-        {
-            const float dx = engine::Blocks(snap.entities[j].f[0]) - shown.x, dy = engine::Blocks(snap.entities[j].f[1]) - shown.y;
-            const float e = sqrtf(dx * dx + dy * dy);
             mStats.shownErrorSum += e;
             mStats.shownErrorCount++;
             mStats.shownErrorMax = e > mStats.shownErrorMax ? e : mStats.shownErrorMax;
+            const int v = InView(shown.x, shown.y);
+            mStats.shownViewSum[v] += e;
+            mStats.shownViewCount[v]++;
+            mStats.shownViewMax[v] = e > mStats.shownViewMax[v] ? e : mStats.shownViewMax[v];
         }
     }
+    for (const engine::ReplicaPos& shown : rec.players)
+    {
+        if (error(shown, &e) && e <= 2) // further: a respawn or a car entered, which jumps
+        {
+            (shown.id == (uint32_t)mSlot + 1 ? mStats.self : mStats.others).Add(e);
+        }
+    }
+}
+
+void net::Client::RecordShown()
+{
+    TickRecord& rec = mHist[mTick % kRing];
+    if (rec.tick != mTick)
+    {
+        return;
+    }
+    engine::ReplicaPositions(rec.shown);
+    rec.players.clear();
+    for (int i = 0; i < engine::PlayerCount(); i++)
+    {
+        float x, y;
+        if (engine::PlayerPosition(i, &x, &y))
+        {
+            rec.players.push_back(engine::ReplicaPos{(uint32_t)i + 1, x, y});
+        }
+    }
+    rec.shownTick = mTick;
 }
 
 // The other players' inputs (we predict them with these), the marker, and the prediction error: where we had ourselves
@@ -345,6 +427,8 @@ void net::Client::MeasureShownError(const Snapshot& snap)
 void net::Client::TakePlayerStates(const Snapshot& snap)
 {
     const TickRecord& rec = mHist[snap.tick % kRing];
+    mKnown = Env().noForward ? ForwardedInputs() : mForwarded[snap.tick % kRing];
+    mKnownTick = snap.tick;
     for (const EntityState& e : snap.entities)
     {
         int player = 0;
@@ -353,7 +437,13 @@ void net::Client::TakePlayerStates(const Snapshot& snap)
         {
             continue;
         }
-        mRemote[player] = buttons;
+        // Past the controls the server forwarded, the last of them is held, a turn only if the one before had it too
+        const uint32_t turn = kBtnLeft | kBtnRight;
+        const int n = player < kMaxForwardSlots ? mKnown.count[player] : 0;
+        const uint32_t last = n ? mKnown.controls[player][n - 1] : buttons;
+        const uint32_t before = n > 1 ? mKnown.controls[player][n - 2] : n ? buttons & 0xFFF : mRemoteSeen[player];
+        mRemote[player] = (last & ~turn) | (last & before & turn);
+        mRemoteSeen[player] = buttons;
         if (player == mSlot)
         {
             mProbe.Marker(e);
@@ -365,6 +455,23 @@ void net::Client::TakePlayerStates(const Snapshot& snap)
             mStats.maxError = err > mStats.maxError ? err : mStats.maxError;
         }
     }
+}
+
+// The server's forwarded controls for that tick if it sent them, else the held input. With no snapshot for a while the
+// held one is let go: the fire after 5 ticks, the rest after 10 (nobody runs on or shoots on through a stall)
+uint32_t net::Client::RemoteInput(int player, uint32_t tick) const
+{
+    const uint32_t k = tick - mKnownTick - 1;
+    if (player < kMaxForwardSlots && tick > mKnownTick && k < mKnown.count[player])
+    {
+        return mKnown.controls[player][k];
+    }
+    const int stalled = mSynced && !Env().holdAll ? (int)(tick - mTakenAt) : 0;
+    if (stalled == 11 && tick == mTick + 1 && mRemote[player])
+    {
+        printf("net: frame %u, no snapshot for 10 ticks: player %d's held input 0x%x let go\n", mFrame, player, mRemote[player]);
+    }
+    return stalled > 10 ? 0 : stalled > 5 ? mRemote[player] & ~(uint32_t)kBtnAttack : mRemote[player];
 }
 
 // A snapshot of tick S: back to the game as it was after S, the server's state on top, then the ticks since then
@@ -384,28 +491,60 @@ void net::Client::Reconcile(const Snapshot& snap)
     {
         engine::Apply(snap); // too old (or too new, or saved with another rollback set) to reconcile: take it as it is
         mProbe.AfterPlainApply(snap);
+        mStats.plainApplies += mSynced;
         engine::ApplyScores(snap);
         return;
     }
     std::vector<engine::Pose> before; // what this frame would have shown, to blend the correction in
     engine::Poses(before);
     const engine::LocalChat chat = engine::TakeLocalChat();
+    using Clock = std::chrono::steady_clock;
+    const auto us = [](Clock::time_point a, Clock::time_point b) {
+        return (double)std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
+    };
+    const Clock::time_point start = Clock::now();
+    mStats.staleRestores += mStale[s % kSaves];
     engine::RestoreGame(*saved);
     mProbe.AfterRestore(snap);
     engine::Apply(snap);
     engine::ApplyScores(snap); // the resimulated ticks and their saves carry the server's scores
     mProbe.AfterApply(snap, mTick);
+    Clock::time_point mark = Clock::now();
+    mStats.restoreUs += us(start, mark);
     std::vector<uint32_t> buttons(mRemote);
     for (uint32_t t = s + 1; t <= mTick; t++)
     {
+        for (size_t i = 0; i < buttons.size(); i++)
+        {
+            buttons[i] = RemoteInput((int)i, t);
+        }
         buttons[mSlot] = mHist[t % kRing].tick == t ? mHist[t % kRing].buttons : 0;
         engine::ResimTick(buttons.data(), (int)buttons.size());
         mProbe.AfterResim();
-        engine::SaveGame(*mSaves[t % kSaves], t);
+        const Clock::time_point ticked = Clock::now();
+        mStats.resimUs += us(mark, ticked);
+        // Only the first ticks: the next snapshots restore those (a save is 3 MB, most of a rollback's time); the later
+        // ones keep their save of before, still a world of that tick, which a snapshot after a few lost ones restores
+        const int keep = Env().resimSaves;
+        if (keep <= 0 || t <= s + (uint32_t)keep)
+        {
+            engine::SaveGame(*mSaves[t % kSaves], t);
+            mStale[t % kSaves] = false;
+        }
+        else
+        {
+            mStale[t % kSaves] = true;
+        }
+        mark = Clock::now();
+        mStats.saveUs += us(ticked, mark);
         mStats.resimTicks++;
+        mLink.resimTicks++;
     }
+    const double total = us(start, mark);
+    mStats.reconcileWorstUs = total > mStats.reconcileWorstUs ? total : mStats.reconcileWorstUs;
     engine::PutLocalChat(chat);
     mStats.rollbacks++;
+    mLink.rollbacks++;
     engine::ApplyScores(snap);
     Blend(before);
 }
@@ -415,8 +554,8 @@ void net::Client::Reconcile(const Snapshot& snap)
 // before the next snapshot's resimulation; more than 2 blocks off (a respawn, a car entered) jumps.
 void net::Client::Blend(const std::vector<engine::Pose>& shown)
 {
-    const float alpha = Env().blend;
-    if (alpha >= 1 || alpha <= 0)
+    const SessionEnv& env = Env();
+    if ((env.blend >= 1 || env.blend <= 0) && (env.blendSelf >= 1 || env.blendSelf <= 0))
     {
         return;
     }
@@ -428,6 +567,14 @@ void net::Client::Blend(const std::vector<engine::Pose>& shown)
         before[p.id] = &p;
     }
     const int32_t kFar = 2 << 14;
+    uint32_t selfCar = 0; // the car the local player drives, as the newest snapshot has it
+    for (const EntityState& e : mReceived[mLatestTick % kRing].entities)
+    {
+        if (e.id == (uint32_t)mSlot + 1)
+        {
+            selfCar = engine::PlayerCarId(e);
+        }
+    }
     for (const engine::Pose& n : now)
     {
         auto it = before.find(n.id);
@@ -446,11 +593,22 @@ void net::Client::Blend(const std::vector<engine::Pose>& shown)
             {
                 stats->Add(sqrtf((float)dx * dx + (float)dy * dy) / 16384.0f, jumped);
             }
+            if (stats == &mStats.cars)
+            {
+                mStats.carsView[InView(engine::Blocks(n.x), engine::Blocks(n.y))].Add(sqrtf((float)dx * dx + (float)dy * dy) / 16384.0f, jumped);
+            }
         }
         mProbe.Correction(mFrame, n, dx, dy, dr, mReceived[mLatestTick % kRing]);
         if (jumped || abs(dz) > kFar || (!dx && !dy && !dz && !dr))
         {
             continue;
+        }
+        // A larger part of a larger error (it shows the wrong place longer), and its own part for the local player
+        const float error = sqrtf((float)dx * dx + (float)dy * dy) / (float)kFar;
+        const float alpha = n.id == (uint32_t)mSlot + 1 || (selfCar && n.id == selfCar) ? env.blendSelf : env.blend + (env.blendFar - env.blend) * (error < 1 ? error : 1);
+        if (alpha >= 1 || alpha <= 0)
+        {
+            continue; // the corrected state as it is
         }
         const engine::Pose p = {n.id, b.x + (int32_t)(dx * alpha), b.y + (int32_t)(dy * alpha), b.z + (int32_t)(dz * alpha),
                                 ((b.rot + (int32_t)(dr * alpha)) % 1440 + 1440) % 1440};
@@ -568,12 +726,15 @@ uint32_t net::Client::ChooseInput(uint32_t recordedInput)
     // Neither the game here nor the server gets them: the game's own quit prompt is on its player, which the snapshots
     // and resimulations set again (it showed for a moment), and the server's yes ended everyone's game
     // Enter says yes too: a gamepad's A while the prompt shows (port_QuitMessageShown)
-    const uint32_t kKeyBits = 0x1FF000, kEscape = 0x01, kYes = 0x15, kNo = 0x31, kEnter = 0x1C; // DIK_ESCAPE, _Y, _N, _RETURN
-    if (!mReplay && (local & kKeyDown) && (key == kEscape || (mLeavePrompt && (key == kYes || key == kNo || key == kEnter))))
+    // While a chat line is typed, Escape is the line's (dropped: the game has no use for it there), and while the prompt
+    // shows any other key says no, so typing on doesn't answer it
+    const uint32_t kKeyBits = 0x1FF000, kEscape = 0x01, kEnter = 0x1C; // DIK_ESCAPE, DIK_RETURN
+    const bool chatting = !mLeavePrompt && engine::TakeLocalChat().chatting;
+    if (!mReplay && (local & kKeyDown) && (key == kEscape || mLeavePrompt))
     {
-        if (mFrame != mPromptKeyFrame + 1) // held: once
+        if (mFrame != mPromptKeyFrame + 1 && !chatting) // held: once
         {
-            if (key == kYes || key == kEnter)
+            if (mLeavePrompt && (tolower(engine::TypedChar(local) & 0xFF) == 'y' || key == kEnter))
             {
                 printf("net: frame %u, left the game\n", mFrame);
                 mLeavePrompt = false;
@@ -630,10 +791,10 @@ void net::Client::RecordTick()
 {
     mTick++;
     engine::SaveGame(*mSaves[mTick % kSaves], mTick);
+    mStale[mTick % kSaves] = false;
     TickRecord& rec = mHist[mTick % kRing];
     engine::PlayerPosition(mSlot, &rec.predX, &rec.predY);
-    engine::ReplicaPositions(rec.shown);
-    rec.shownTick = mTick;
+    rec.shownTick = 0; // until RecordShown
 }
 
 void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
@@ -679,7 +840,8 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
             else if (type == kMsgReject && mConnected && ReadReject(r, reject))
             {
                 printf("net: frame %u, the server put us out: %s\n", mFrame, reject.reason.c_str());
-                LeaveToMenu(reject.reason == "kicked by vote" ? "kicked by vote" : "the server put us out");
+                const bool shown = reject.reason == "kicked by vote" || reject.reason == "the server closed";
+                LeaveToMenu(shown ? reject.reason.c_str() : "the server put us out");
             }
             else if (type == kMsgReject && !mConnected && ReadReject(r, reject))
             {
@@ -696,8 +858,10 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
         {
             Hello hello;
             hello.build = mConfig.build;
-            hello.name = mConfig.name; // the server gives us our slot back by it
+            hello.name = mConfig.name;
             hello.carInfo = engine::DataFileCrc("nyc.gci");
+            hello.session = mSession; // the server gives us our slot back by them, with its score
+            hello.token = mToken;
             BitWriter w;
             WriteHello(w, hello);
             mTransport->Send(0, kChannelReliable, w.Data().data(), w.ByteCount(), true);
@@ -710,6 +874,7 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
                 printf("net: frame %u, lost the server\n", mFrame);
                 mReconnects = 0;
                 std::fill(mRemote.begin(), mRemote.end(), 0u); // the others stand still meanwhile
+                mKnown = ForwardedInputs();
             }
             mConnected = false;
             mTransport.reset();
@@ -723,19 +888,26 @@ void net::Client::OnMapChange(BitReader& r)
     MapChange m;
     if (ReadMapChange(r, m))
     {
-        std::string missing;
-        if (!HaveMap(m.gmp, m.sty, m.scr, &missing) || !SameMap(m.map, m.gmp, m.sty, m.print, &missing))
-        {
-            printf("net: frame %u, %s\n", mFrame, missing.c_str());
-            SendLeave(missing);
-            LeaveToMenu(missing.c_str());
-            return;
-        }
-        printf("net: frame %u, the next map: %s\n", mFrame, m.scr.c_str());
-        engine::ChangeMap(m.gmp, m.sty, m.scr, 90);
-        mScr = m.scr;
-        mServerGame = m.game; // from now on: the old game's snapshots would put its things into the next map's
+        ChangeGame(m.map, m.gmp, m.sty, m.scr, m.print, m.game, 90);
     }
+}
+
+bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, const std::string& sty, const std::string& scr, const MapPrint& print,
+                             int game, int pauseTicks)
+{
+    std::string missing;
+    if (!HaveMap(gmp, sty, scr, &missing) || !SameMap(map, gmp, sty, scr, print, &missing))
+    {
+        printf("net: frame %u, %s\n", mFrame, missing.c_str());
+        SendLeave(missing);
+        LeaveToMenu(missing.c_str());
+        return false;
+    }
+    printf("net: frame %u, the next map: %s\n", mFrame, scr.c_str());
+    engine::ChangeMap(gmp, sty, scr, pauseTicks);
+    mScr = scr;
+    mServerGame = game; // from now on: the old game's snapshots would put its things into the next map's
+    return true;
 }
 
 void net::Client::StartOver()
@@ -753,19 +925,60 @@ void net::Client::StartOver()
         p = Parts();
     }
     std::fill(mRemote.begin(), mRemote.end(), 0u);
+    std::fill(mRemoteSeen.begin(), mRemoteSeen.end(), 0u);
+    mKnown = ForwardedInputs();
+    mKnownTick = 0;
     mBot.reset(); // and its map of the old one
     mNavMap.reset();
     printf("net: frame %u, a new game\n", mFrame);
 }
 
 // Not running ahead of the server (yet, or any more), or far off: jump to where we should be
+bool net::Client::Saved(uint32_t tick) const
+{
+    const engine::SavedWorld* saved = tick <= mTick && tick + kSaves > mTick ? mSaves[tick % kSaves].get() : NULL;
+    return saved && saved->valid && saved->tick == tick && engine::Restorable(*saved);
+}
+
+// Our commands came late: the ticks they lack, as live ticks with the input held now (sent as commands for them), each
+// saved, as the frame loop runs a few steps at once after a stall
+void net::Client::FastForward(int ticks)
+{
+    const uint32_t local = mHist[mTick % kRing].tick == mTick ? mHist[mTick % kRing].buttons : 0;
+    std::vector<uint32_t> buttons(mRemote.size());
+    for (int i = 0; i < ticks; i++)
+    {
+        for (size_t p = 0; p < buttons.size(); p++)
+        {
+            buttons[p] = (int)p == mSlot ? local : RemoteInput((int)p, mTick + 1); // as a live tick would have them
+        }
+        SetNextInputs(local);
+        engine::ResimTick(buttons.data(), (int)buttons.size());
+        RecordTick();
+    }
+    mSlackKnown = false; // until a snapshot answers commands for the new ticks
+    mJumpTick = mTick;
+    mStats.fastForwards++;
+    printf("net: frame %u, our commands came late: %d ticks run at once\n", mFrame, ticks);
+}
+
 void net::Client::Resync(const Snapshot& snap)
 {
     const int off = mSynced && mSlackKnown ? mSlack - 2 : 0;
+    const uint32_t before = mTick;
+    const bool back = mSynced && mLatestTick <= mTick && off > 0;
     mTick = !mSynced || mLatestTick > mTick ? mLatestTick + Lead() : mTick - off;
+    if (mSynced)
+    {
+        mStats.jumps++;
+        printf("net: frame %u, a jump to tick %u (our commands %d ticks off two early)\n", mFrame, mTick, off);
+    }
     mSynced = true;
     mSlackKnown = false; // until a snapshot answers commands for the new ticks
-    mJumpTick = mTick;
+    // Back: the server keeps the newest command it had, ours from before the jump, and its slack would have us jump
+    // back again: known once our commands go past those
+    mJumpTick = back ? before + 1 : mTick;
+    mTakenAt = mTick;
     for (size_t i = 0; i < mSaves.size(); i++)
     {
         mSaves[i]->valid = false;
@@ -805,9 +1018,18 @@ void net::Client::TakeSnapshot()
         return;
     }
     // How far our commands are from two ticks early. ENet's round trip doesn't see a link conditioner, and the server's
-    // word is better anyway: it says which tick's command it had last
+    // word is better anyway: it says which tick's command it had last. Late by a few ticks: the snapshot reconciles on
+    // its save and the ticks the commands lack are run at once, so the saves go on; else a jump (Resync), which loses
+    // every save and with them the prediction until snapshots of the new ticks come. Far ahead is paced back slowly
     const int off = mSynced && mSlackKnown ? mSlack - 2 : 0;
-    if (!mProbe.Alone() && (!mSynced || mLatestTick > mTick || off < -3 || off > 12))
+    mTakenAt = mTick; // before the resimulation: its ticks have this snapshot's news
+    const bool behind = mSynced && mLatestTick <= mTick && off < -3;
+    if (!mProbe.Alone() && behind && -off <= kMaxFastForward && Saved(mLatestTick))
+    {
+        Reconcile(snap);
+        FastForward(-off);
+    }
+    else if (!mProbe.Alone() && (!mSynced || mLatestTick > mTick || behind || off > kMaxAhead))
     {
         Resync(snap);
     }
@@ -834,6 +1056,20 @@ void net::Client::PrintStats(const Snapshot& snap)
            "%.1f ticks resimulated each, prediction error up to %.2f blocks, cars and peds shown %.2f blocks off (up to %.2f)\n",
            mFrame, mTick, mLatestTick, mSlack, snap.entities.size(), cars, peds, st.rollbacks, st.rollbacks ? (float)st.resimTicks / st.rollbacks : 0.0f,
            st.maxError, st.shownErrorCount ? (float)(st.shownErrorSum / st.shownErrorCount) : 0.0f, st.shownErrorMax);
+    printf("net: frame %u, players shown off the server's: the others %.3f blocks on average (up to %.2f), ourselves %.3f (up to %.2f)\n",
+           mFrame, st.others.Mean(), st.others.max, st.self.Mean(), st.self.max);
+    if (st.rollbacks)
+    {
+        printf("net: frame %u, a rollback takes %.2f ms on average (worst %.2f): restore and apply %.2f, %.1f ticks resimulated %.2f, "
+               "their saves %.2f\n",
+               mFrame, (st.restoreUs + st.resimUs + st.saveUs) / st.rollbacks / 1000, st.reconcileWorstUs / 1000, st.restoreUs / st.rollbacks / 1000,
+               (float)st.resimTicks / st.rollbacks, st.resimUs / st.rollbacks / 1000, st.saveUs / st.rollbacks / 1000);
+    }
+    if (st.jumps || st.fastForwards || st.plainApplies || st.staleRestores)
+    {
+        printf("net: frame %u, %u jumps, %u catch-ups at once, %u snapshots taken without their save, %u on a save from before a correction\n",
+               mFrame, st.jumps, st.fastForwards, st.plainApplies, st.staleRestores);
+    }
     std::string local;
     for (size_t i = 0; i < mLocalDeaths.size(); i++)
     {
@@ -861,6 +1097,13 @@ void net::Client::PrintStats(const Snapshot& snap)
     }
     st.players.Print(mFrame, "players");
     st.cars.Print(mFrame, "cars");
+    st.carsView[0].Print(mFrame, "cars in view");
+    st.carsView[1].Print(mFrame, "cars beyond the view");
+    for (int v = 0; v < 2; v++)
+    {
+        printf("net: frame %u, cars and peds %s shown %.3f blocks off (up to %.2f, %u compared)\n", mFrame, v ? "beyond the view" : "in view",
+               st.shownViewCount[v] ? (float)(st.shownViewSum[v] / st.shownViewCount[v]) : 0.0f, st.shownViewMax[v], st.shownViewCount[v]);
+    }
     mStats = Stats();
 }
 
@@ -871,7 +1114,8 @@ int net::Client::PacedTickMs() const
     {
         return mTickMs;
     }
-    return mSlack < 1 ? mTickMs - mTickMs / 10 : mSlack > 4 ? mTickMs + mTickMs / 10 : mTickMs;
+    // Late: a quarter faster; far ahead: a fifth slower, before it comes to a jump (kMaxAhead)
+    return mSlack < 1 ? mTickMs * 3 / 4 : mSlack - 2 > 12 ? mTickMs + mTickMs / 5 : mSlack > 4 ? mTickMs + mTickMs / 10 : mTickMs;
 }
 
 // The next tick's inputs: ours (predicted and sent), the others' last known
@@ -880,9 +1124,10 @@ void net::Client::SetNextInputs(uint32_t local)
     const uint32_t next = mTick + 1;
     mHist[next % kRing].tick = next;
     mHist[next % kRing].buttons = local;
+    mHist[next % kRing].typed = engine::TypedChar(local);
     for (size_t i = 0; i < mRemote.size(); i++)
     {
-        engine::SetPlayerInput((int)i, (int)i == mSlot ? local : mRemote[i]);
+        engine::SetPlayerInput((int)i, (int)i == mSlot ? local : RemoteInput((int)i, next));
     }
 }
 
@@ -898,6 +1143,7 @@ void net::Client::SendCommands()
         {
             cmds[n].tick = t;
             cmds[n].buttons = mHist[t % kRing].buttons;
+            cmds[n].typed = mHist[t % kRing].typed;
             n++;
         }
         else
@@ -935,9 +1181,9 @@ void net::Client::Reconnect()
     printf("net: frame %u, connecting to %s:%u again (attempt %d)\n", mFrame, mConfig.host.c_str(), mConfig.port, mReconnects);
     std::string error;
     mTransport.reset(CreateClientTransport(mConfig.host.c_str(), mConfig.port, &error));
-    if (mTransport && (mConfig.lagMs || mConfig.jitterMs || mConfig.lossPercent))
+    if (mTransport && mConfig.link.Any())
     {
-        mTransport.reset(CreateConditioner(mTransport.release(), mConfig.lagMs, mConfig.jitterMs, mConfig.lossPercent));
+        mTransport.reset(CreateConditioner(mTransport.release(), mConfig.link));
     }
 }
 
@@ -951,11 +1197,16 @@ void net::Client::Rejoined(const Welcome& welcome)
         LeaveToMenu("the server was restarted");
         return;
     }
-    if (welcome.version != kProtocolVersion || welcome.slot != mSlot || welcome.scr != mScr)
+    if (welcome.version != kProtocolVersion || welcome.slot != mSlot)
     {
-        printf("net: frame %u, the server has us back as player %d on %s, not %d on %s: start the game again to play on\n", mFrame,
-               welcome.slot, welcome.scr.c_str(), mSlot, mScr.c_str());
-        LeaveToMenu("the server started another game");
+        printf("net: frame %u, the server has us back as player %d, not %d: start the game again to play on\n", mFrame, welcome.slot, mSlot);
+        LeaveToMenu("the server has us back as another player");
+        return;
+    }
+    // The server's game went on to another (a round's fresh game, another map) while we were away: that one here too
+    if ((welcome.scr != mScr || (mServerGame >= 0 && welcome.game != mServerGame)) &&
+        !ChangeGame(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, welcome.game, 1))
+    {
         return;
     }
     printf("net: frame %u, back in as player %d\n", mFrame, mSlot);
@@ -963,7 +1214,7 @@ void net::Client::Rejoined(const Welcome& welcome)
     mSynced = false;
     mNewSnapshot = false;
     mLatestTick = 0;
-    mServerGame = -1; // the server's newest, which may have started while we were away (a round's fresh game)
+    mServerGame = welcome.game;
     mLastSnapshotMs = NowMs();
     for (Snapshot& s : mReceived)
     {
@@ -975,6 +1226,28 @@ void net::Client::Rejoined(const Welcome& welcome)
     }
 }
 
+// While a round is played: its clock and goal ("9:42   FIRST TO 10"), a line of its own; empty otherwise
+std::string net::Client::RoundCorner() const
+{
+    const engine::Round& r = engine::CurrentRound();
+    if (r.phase != kPhasePlaying || !mConnected || mLeft)
+    {
+        return "";
+    }
+    std::string line;
+    if (r.secondsLeft > 0)
+    {
+        char clock[16];
+        snprintf(clock, sizeof(clock), "%d:%02d", r.secondsLeft / 60, r.secondsLeft % 60);
+        line = clock;
+    }
+    if (mFragLimit > 0 && mGameType != 3)
+    {
+        line += (line.empty() ? "" : "   ") + std::string("FIRST TO ") + (mGameType == 2 ? "$" : "") + std::to_string(mFragLimit);
+    }
+    return line.empty() ? line : line + "\n";
+}
+
 void net::Client::ShowStatus()
 {
     const long long now = NowMs();
@@ -982,6 +1255,18 @@ void net::Client::ShowStatus()
     {
         mPingShown = mPingMs;
         mPingShownMs = now;
+        if (Env().stats)
+        {
+            // The server sends a snapshot every tick: the ones missing since the last second are lost (or came too late)
+            const uint32_t sent = mLink.fromTick && mLatestTick > mLink.fromTick ? mLatestTick - mLink.fromTick : 0;
+            const uint32_t lost = sent > mLink.snapshots ? sent - mLink.snapshots : 0;
+            char text[64];
+            snprintf(text, sizeof(text), "loss %u%%  snap %u/s  ahead %d  resim %.1f", sent ? (lost * 100 + sent / 2) / sent : 0,
+                     mLink.snapshots, (int)(mTick - mLatestTick), mLink.rollbacks ? (float)mLink.resimTicks / mLink.rollbacks : 0.0f);
+            mLinkShown = std::string(text) + "\n";
+            mLink = LinkStats();
+            mLink.fromTick = mLatestTick;
+        }
     }
     std::string centre;
     if (mLeft)
@@ -1000,7 +1285,7 @@ void net::Client::ShowStatus()
     {
         centre = "Connection interrupted";
     }
-    engine::SetNetStatus(mConnected && mPingShown ? "ping " + std::to_string(mPingShown) : "", centre);
+    engine::SetNetStatus(RoundCorner() + (mConnected && mPingShown ? mLinkShown + "ping " + std::to_string(mPingShown) : ""), centre);
 }
 
 void net::Client::SendLeave(const std::string& why)
@@ -1074,7 +1359,9 @@ void net::Client::Step()
         {
             mSaves.emplace_back(new engine::SavedWorld());
         }
+        mStale.assign(kSaves, false);
         mRemote.assign(engine::PlayerCount(), 0);
+        mRemoteSeen.assign(engine::PlayerCount(), 0);
     }
     CountTestStats();
     mProbe.AfterTick();
@@ -1088,6 +1375,7 @@ void net::Client::Step()
         ShowStatus();
         ShowRound();
         WatchChat();
+        KeepChatLines();
         mProbe.Say(mFrame, mConnected, [this](const std::string& command) { SendCommand(command); });
         BotRound();
     }
@@ -1105,7 +1393,11 @@ void net::Client::Step()
         TakeSnapshot();
         AnnounceRound();
     }
-    mProbe.Jerk(mFrame, mSlot, mSynced);
+    if (mSynced)
+    {
+        RecordShown();
+    }
+    mProbe.Jerk(mFrame, mSlot, mSynced, mReceived[mLatestTick % kRing], mReceived[(mLatestTick - 1) % kRing]);
     engine::SetTickMs(mReplay ? 1 : PacedTickMs()); // every frame: a restore brings back the game's tick length too (a replay: no waiting)
     SetNextInputs(local);
     if (mSynced)
@@ -1132,23 +1424,40 @@ void net::Client::SendCommand(const std::string& text)
     printf("net: frame %u, command %s\n", mFrame, text.c_str());
 }
 
-// F1 in the warmup (ready), Y or N while a vote is open; not while typing a chat line, whose keys they are then. The
-// keys go to neither the game here nor the server
+// F1 in the warmup (ready), else while a vote is open (yes); Y or N, as the keyboard's layout types them, while a vote
+// is open; in the results, the number keys, or Up, Down and Enter, choose the next map. A gamepad's Back is F1, its
+// d-pad and A in the results the arrows and Enter (SetRoundPad). Not while typing a chat line, whose keys they are
+// then. The keys go to neither the game here nor the server
 void net::Client::RoundKeys(uint32_t& local, uint32_t key)
 {
-    const uint32_t kKeyDown = 0x200000, kKeyBits = 0x1FF000, kF1 = 0x3B, kYes = 0x15, kNo = 0x31; // DIK_F1, DIK_Y, DIK_N
+    const uint32_t kKeyDown = 0x200000, kKeyBits = 0x1FF000, kF1 = 0x3B; // DIK_F1
+    const uint32_t kUp = 0xC8, kDown = 0xD0, kEnter = 0x1C, kPadEnter = 0x9C; // DIK_UP, DIK_DOWN, DIK_RETURN, DIK_NUMPADENTER
     const engine::Round& round = engine::CurrentRound();
-    const bool ready = key == kF1 && round.phase == kPhaseWarmup && round.minPlayers;
-    const bool vote = (key == kYes || key == kNo) && round.voteKind != kVoteNone;
-    // In the results, 1-9 chooses the next map (DIK_1 is 2 .. DIK_9 is 10)
-    const uint32_t map = key >= 0x02 && key <= 0x0A && round.phase == kPhaseResults && key - 1 <= mMaps.size() ? key - 1 : 0;
-    if ((!ready && !vote && !map) || engine::TakeLocalChat().chatting)
+    const int typed = tolower(engine::TypedChar(local) & 0xFF);
+    const bool voteOpen = round.voteKind != kVoteNone && !(mSlot < kRoundSlots && ((round.voteYes | round.voteNo) >> mSlot & 1));
+    const bool unready = round.phase == kPhaseWarmup && round.minPlayers && !(mSlot < kRoundSlots && (round.ready >> mSlot & 1));
+    const bool ready = key == kF1 && (unready || (round.phase == kPhaseWarmup && round.minPlayers && !voteOpen));
+    const bool yes = round.voteKind != kVoteNone && (typed == 'y' || (key == kF1 && !ready));
+    const bool no = round.voteKind != kVoteNone && typed == 'n';
+    const bool results = round.phase == kPhaseResults && !mMaps.empty();
+    const bool move = results && (key == kUp || key == kDown);
+    // In the results, 1-9 chooses the next map (DIK_1 is 2 .. DIK_9 is 10), Enter the one under the cursor
+    uint32_t map = key >= 0x02 && key <= 0x0A && results && key - 1 <= mMaps.size() ? key - 1 : 0;
+    map = results && (key == kEnter || key == kPadEnter) ? mMapCursor + 1 : map;
+    if ((!ready && !yes && !no && !map && !move) || engine::TakeLocalChat().chatting)
     {
         return;
     }
     if (mFrame != mRoundKeyFrame + 1) // held: once
     {
-        SendCommand(ready ? "/ready" : map ? "/map " + std::to_string(map) : key == kYes ? "/yes" : "/no");
+        if (move)
+        {
+            mMapCursor = (mMapCursor + (key == kDown ? 1 : (uint32_t)mMaps.size() - 1)) % (uint32_t)mMaps.size();
+        }
+        else
+        {
+            SendCommand(ready ? "/ready" : map ? "/map " + std::to_string(map) : yes ? "/yes" : "/no");
+        }
     }
     mRoundKeyFrame = mFrame;
     local &= ~(kKeyDown | kKeyBits);
@@ -1214,6 +1523,36 @@ void net::Client::WatchChat()
     mWasChatting = chat.chatting != 0;
 }
 
+// A line ends in a received snapshot (a resimulated one would end it again); commands stay out
+void net::Client::KeepChatLines()
+{
+    if (mLatestTick == mChatTick)
+    {
+        return;
+    }
+    mChatTick = mLatestTick;
+    uint32_t chatting = 0;
+    for (const EntityState& e : mReceived[mLatestTick % kRing].entities)
+    {
+        int p = 0;
+        uint32_t b = 0;
+        std::string line;
+        if (!engine::PlayerOf(e, &p, &b) || p < 0 || p >= 32)
+        {
+            continue;
+        }
+        if (engine::PlayerChat(e, &line))
+        {
+            chatting |= 1u << p;
+        }
+        else if ((mChatting >> p & 1) && !line.empty() && line[0] != '/')
+        {
+            engine::AddChatLine(engine::PlayerName(p) + ": " + line);
+        }
+    }
+    mChatting = chatting;
+}
+
 void net::Client::ShowRound()
 {
     const engine::Round& r = engine::CurrentRound();
@@ -1225,7 +1564,7 @@ void net::Client::ShowRound()
         uint32_t b = 0;
         if (engine::PlayerOf(e, &p, &b))
         {
-            rows.push_back(ScoreRow{p, engine::PlayerFrags(e), engine::PlayerDeaths(e), engine::TagSeconds(p)});
+            rows.push_back(ScoreRow{p, engine::PlayerFrags(e), engine::PlayerDeaths(e), engine::TagSeconds(p), engine::PlayerPoints(e)});
         }
     }
     // The results show the scores the round ended with: the game goes on meanwhile, and so do the frags
@@ -1245,6 +1584,12 @@ void net::Client::ShowRound()
         }
         return n;
     };
+    if (r.phase != kPhaseResults)
+    {
+        mMapCursor = 0;
+    }
+    engine::SetRoundPad(r.phase == kPhaseResults && !mMaps.empty());
+    const bool pad = engine::PadMode();
     std::string banner;
     const bool hidden = !mConnected || mLeft || mLeavePrompt; // the leave prompt (ShowStatus) alone over the frame
     if (r.phase == kPhaseCountdown && !hidden)
@@ -1275,25 +1620,33 @@ void net::Client::ShowRound()
             lines.push_back(std::to_string(ready) + " of " + std::to_string(rows.size()) + " ready" +
                             (r.phaseLeft ? ", the round starts in " + std::to_string(r.phaseLeft) + " s anyway" : ""));
         }
-        lines.push_back(mSlot < kRoundSlots && (r.ready >> mSlot & 1) ? "You are ready" : "Press F1 when ready");
+        if (mSlot < kRoundSlots && (r.ready >> mSlot & 1))
+        {
+            lines.push_back("You are ready");
+        }
+        lines.push_back(pad ? "Back ready   Start leave" : "F1 ready   F10 chat   Esc leave");
     }
     else if (r.phase == kPhaseResults)
     {
         lines.push_back("Round " + std::to_string(r.number - 1) + ": " + (r.winner ? engine::PlayerName(r.winner - 1) + " wins" : std::string("a draw")));
         std::vector<ScoreRow> board = mResultsRows;
         const bool tag = mGameType == 3; // the longest "it" wins
-        std::sort(board.begin(), board.end(), [tag](const ScoreRow& a, const ScoreRow& b) { return tag ? a.tag > b.tag : a.frags > b.frags; });
+        const bool points = mGameType == 2; // the most money wins
+        std::sort(board.begin(), board.end(), [tag, points](const ScoreRow& a, const ScoreRow& b) {
+            return tag ? a.tag > b.tag : points ? a.points > b.points : a.frags > b.frags;
+        });
         lines.push_back("");
-        lines.push_back(tag ? "Player\tIt (s)\tFrags\tDeaths" : "Player\tFrags\tDeaths"); // tables: the overlay lines up rows with tabs
+        // tables: the overlay lines up rows with tabs
+        lines.push_back(tag ? "Player\tIt (s)\tFrags\tDeaths" : points ? "Player\tPoints\tFrags\tDeaths" : "Player\tFrags\tDeaths");
         for (const ScoreRow& row : board)
         {
-            lines.push_back(engine::PlayerName(row.slot) + "\t" + (tag ? std::to_string(row.tag) + "\t" : "") + std::to_string(row.frags) + "\t" +
-                            std::to_string(row.deaths));
+            const std::string first = tag ? std::to_string(row.tag) + "\t" : points ? std::to_string(row.points) + "\t" : "";
+            lines.push_back(engine::PlayerName(row.slot) + "\t" + first + std::to_string(row.frags) + "\t" + std::to_string(row.deaths));
         }
         lines.push_back("");
         lines.push_back("The next round in " + std::to_string(r.phaseLeft) + " s");
         lines.push_back("");
-        lines.push_back("\tNext map (press its number)\tVotes\t");
+        lines.push_back(pad ? "\tNext map (d-pad and A)\tVotes\t" : "\tNext map (its number, or arrows and Enter)\tVotes\t");
         for (size_t m = 0; m < mMaps.size(); m++)
         {
             int votes = 0;
@@ -1302,20 +1655,45 @@ void net::Client::ShowRound()
                 votes += r.mapChoice[i] == m + 1;
             }
             const bool mine = mSlot < kRoundSlots && r.mapChoice[mSlot] == m + 1;
-            lines.push_back(std::to_string(m + 1) + "\t" + mMaps[m] + "\t" + (votes ? std::to_string(votes) : std::string("-")) + "\t" + (mine ? "you" : ""));
+            const std::string name = m == mMapCursor ? "(" + mMapTitles[m] + ")" : mMapTitles[m]; // the font has no '>'
+            lines.push_back(std::to_string(m + 1) + "\t" + name + "\t" + (votes ? std::to_string(votes) : std::string("-")) + "\t" + (mine ? "you" : ""));
         }
     }
     if (r.voteKind != kVoteNone && !hidden)
     {
         const std::string what = r.voteKind == kVoteStart ? "start the round"
-                                 : r.voteKind == kVoteMap ? "change to " + (r.voteArg < mMaps.size() ? mMaps[r.voteArg] : std::string("a map"))
+                                 : r.voteKind == kVoteMap ? "change to " + (r.voteArg < mMapTitles.size() ? mMapTitles[r.voteArg] : std::string("a map"))
                                                           : "kick " + engine::PlayerName(r.voteArg);
         const bool mine = mSlot < kRoundSlots && ((r.voteYes | r.voteNo) >> mSlot & 1);
         lines.push_back("");
         lines.push_back("Vote: " + what + "   " + std::to_string(bits(r.voteYes)) + " yes, " + std::to_string(bits(r.voteNo)) + " no   " +
-                        std::to_string(r.voteLeft) + " s" + (mine ? "" : "   Y / N"));
+                        std::to_string(r.voteLeft) + " s" + (mine ? "" : pad ? "   Back: yes" : "   Y / N"));
     }
     engine::SetNetPanel(lines);
+}
+
+// A bot's map in the results: one of the others, picked by its slot and the frame (a vote among bots isn't always the
+// same map); map 2 for a test (GTA2_NET_BOTMAP2)
+uint32_t net::Client::BotMapChoice() const
+{
+    if (Env().botVoteMap2 || mMaps.size() < 2)
+    {
+        return mMaps.size() > 1 ? 2 : 1;
+    }
+    auto lower = [](std::string t) {
+        std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) { return (char)tolower(c); });
+        return t;
+    };
+    const std::string now = lower(mScr.substr(0, mScr.rfind('.')));
+    std::vector<uint32_t> others;
+    for (size_t m = 0; m < mMaps.size(); m++)
+    {
+        if (lower(mMaps[m]) != now)
+        {
+            others.push_back((uint32_t)m + 1);
+        }
+    }
+    return others.empty() ? 1 : others[(mSlot * 7 + mFrame) % others.size()];
 }
 
 void net::Client::BotRound()
@@ -1332,7 +1710,7 @@ void net::Client::BotRound()
     }
     else if (r.phase == kPhaseResults && !mMaps.empty() && mSlot < kRoundSlots && !r.mapChoice[mSlot])
     {
-        SendCommand(mMaps.size() > 1 ? "/map 2" : "/map 1"); // the same choice for every bot: a test sees the map change
+        SendCommand("/map " + std::to_string(BotMapChoice()));
     }
     else if (r.voteKind != kVoteNone && mSlot < kRoundSlots && !((r.voteYes | r.voteNo) >> mSlot & 1))
     {

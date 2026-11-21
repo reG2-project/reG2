@@ -3,7 +3,8 @@
 # installed. The Linux builds link against the system root of deps.sh, with the C++ runtime static, and find
 # libSDL3.so.0 next to themselves (linux64 also in ../lib, the AppImage's layout). macos makes a universal reg2.app
 # (arm64 and x86_64). mingw64 fails on a 64-bit value truncated into a long, 32 bits on Windows and 64 on Linux.
-# $GTA2_VERSION, if set, is the version (a leading v is dropped: the tag v0.2.0 gives 0.2.0).
+# $GTA2_VERSION, if set, is the version (a leading v is dropped: the tag v0.2.0 gives 0.2.0). $GTA2_COMMIT, if set, is
+# the git commit for a source tree git can't see (a container's), which the network game's join compares.
 set -eu
 T=$1; P=$2; B=$3
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -27,7 +28,7 @@ case $T in
     *) echo "build.sh: unknown target $T" >&2; exit 1 ;;
 esac
 cmake -S "$PORT" -B "$B" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo "$@" -DGTA2_SETUP_DEPS_DIR="$P" -DGTA2_OPENAL_DIR="$P" \
-    ${GTA2_VERSION:+"-DGTA2_VERSION=${GTA2_VERSION#v}"}
+    ${GTA2_VERSION:+"-DGTA2_VERSION=${GTA2_VERSION#v}"} ${GTA2_COMMIT:+"-DGTA2_COMMIT=$GTA2_COMMIT"}
 if [ "$T" != mingw64 ]; then
     ninja -C "$B" -j"$(getconf _NPROCESSORS_ONLN)"
     exit

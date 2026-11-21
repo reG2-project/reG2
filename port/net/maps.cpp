@@ -1,6 +1,7 @@
 // port/net (port/docs/netcode.md, "Running"): see maps.hpp.
 #include "maps.hpp"
 #include "cmdline.hpp"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +40,42 @@ bool ReadMmp(const std::string& name, net::engine::NetworkGame& g)
     return !g.gmp.empty() && !g.sty.empty() && !g.scr.empty();
 }
 } // namespace
+
+std::string net::MapTitle(const std::string& name)
+{
+    FILE* f = fopen(("data/" + name + ".mmp").c_str(), "r");
+    if (!f)
+    {
+        return name;
+    }
+    std::string title;
+    char line[512];
+    while (fgets(line, sizeof(line), f) && title.empty())
+    {
+        char key[64], value[260];
+        if (sscanf(line, " %63[^= ] = %259[^\r\n]", key, value) == 2 && !strcmp(key, "Description"))
+        {
+            title = value;
+        }
+    }
+    fclose(f);
+    while (!title.empty() && isspace((unsigned char)title.back()))
+    {
+        title.pop_back();
+    }
+    // " 6player", " 3Player"
+    const size_t space = title.rfind(' ');
+    std::string last = space == std::string::npos ? "" : title.substr(space + 1);
+    for (char& c : last)
+    {
+        c = (char)tolower((unsigned char)c);
+    }
+    if (last.size() == 7 && isdigit((unsigned char)last[0]) && last.compare(1, 6, "player") == 0)
+    {
+        title.erase(space);
+    }
+    return title.empty() ? name : title;
+}
 
 bool net::SetUpMaps(const std::string& firstMap, const std::string& maps, ServerConfig& sc)
 {

@@ -137,7 +137,7 @@ void net::engine::PutInGame(int slot, bool freshScore)
         if (Weapon* weapon = p->mWeapons[w])
         {
             weapon->set_pPed(ped);
-            weapon->mAmmo = 0;
+            weapon->mAmmo = freshScore ? 0 : weapon->mAmmo; // a player back after a drop keeps its ammo
         }
     }
     p->mCurrWeaponIdx = -1;

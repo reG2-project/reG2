@@ -253,8 +253,11 @@ void TestMessages()
     w.map = "downtown-6p";
     w.print.gmp = 0x80000001;
     w.print.sty = 7;
+    w.print.scr = 9;
     w.serverTick = 123456;
     w.maps = {"mp1-6p", "mp2-6p", "downtown-6p"};
+    w.token = 0xC0FFEE11;
+    w.game = 513;
     net::BitWriter bw;
     net::WriteWelcome(bw, w);
     net::BitReader br(bw.Data().data(), bw.ByteCount());
@@ -263,18 +266,21 @@ void TestMessages()
     CHECK(net::ReadWelcome(br, got));
     CHECK(got.slot == 2 && got.players == 6 && got.gameType == 3 && got.fragLimit == 25 && got.gmp == w.gmp &&
           got.scr == w.scr && got.serverTick == 123456 && got.maps == w.maps && got.session == w.session && got.name == w.name &&
-          got.map == w.map && got.print.gmp == w.print.gmp && got.print.sty == 7);
+          got.map == w.map && got.print.gmp == w.print.gmp && got.print.sty == 7 && got.print.scr == 9 && got.token == w.token &&
+          got.game == 513);
 
     net::Hello hello;
     hello.build = "0.1.0-dev 1a2b3c4d5e";
     hello.name = "me";
     hello.carInfo = 0xFFFFFFFF;
+    hello.session = 0x12345678;
+    hello.token = 0x9ABCDEF0;
     net::BitWriter hw2;
     net::WriteHello(hw2, hello);
     net::BitReader hr2(hw2.Data().data(), hw2.ByteCount());
     net::Hello hgot;
     CHECK(hr2.Bits(8) == net::kMsgHello && net::ReadHello(hr2, hgot) && hgot.version == net::kProtocolVersion && hgot.build == hello.build &&
-          hgot.name == "me" && hgot.carInfo == 0xFFFFFFFF);
+          hgot.name == "me" && hgot.carInfo == 0xFFFFFFFF && hgot.session == hello.session && hgot.token == hello.token);
 
     // A command and a notice: a line of text each, cut at 120 characters
     for (net::MsgType type : {net::kMsgCommand, net::kMsgNotice})
@@ -306,10 +312,11 @@ void TestMessages()
     CHECK(net::ReadMapChange(mr, mgot) && mgot.gmp == mc.gmp && mgot.sty == mc.sty && mgot.scr == mc.scr && mgot.game == 513 && mgot.map == mc.map &&
           mgot.print.sty == 12345 && mgot.print.gmp == 0);
 
-    net::InputCmd cmds[5] = {{100, 1}, {101, 1}, {102, 0x10}, {103, 0x3FFFFF}, {104, 0x3FFFFF}};
+    // The last two have a key press: what it typed follows each (0xE9: an AZERTY's é)
+    net::InputCmd cmds[5] = {{100, 1, 0}, {101, 1, 0}, {102, 0x10, 0}, {103, 0x3FFFFF, 0xE9}, {104, 0x3FFFFF, 'q'}};
     net::BitWriter cw;
     net::WriteCommands(cw, 98, cmds, 5);
-    CHECK(cw.ByteCount() <= 16); // 8 + 8 + 4 + 8 + 3 x 23 + 2 bits
+    CHECK(cw.ByteCount() <= 20); // 8 + 8 + 4 + 8 + 3 x 23 + 2 + 2 x 16 bits
     net::BitReader cr(cw.Data().data(), cw.ByteCount());
     CHECK(cr.Bits(8) == net::kMsgCommands);
     uint32_t ack = 0;
@@ -318,15 +325,24 @@ void TestMessages()
     CHECK(ack == 98);
     for (int i = 0; i < 5; i++)
     {
-        CHECK(back[i].tick == cmds[i].tick && back[i].buttons == cmds[i].buttons);
+        CHECK(back[i].tick == cmds[i].tick && back[i].buttons == cmds[i].buttons && back[i].typed == cmds[i].typed);
     }
 
     net::SnapshotHeader h = {5000, 4990, 4998}, hb;
+    h.forwarded.count[1] = 3;
+    h.forwarded.controls[1][0] = 0x101;
+    h.forwarded.controls[1][1] = 0x101;
+    h.forwarded.controls[1][2] = 0xFFF;
+    h.forwarded.count[5] = 1;
+    h.forwarded.controls[5][0] = 0x020;
     net::BitWriter hw;
     net::WriteSnapshotHeader(hw, h);
     net::BitReader hr(hw.Data().data(), hw.ByteCount());
     CHECK(hr.Bits(8) == net::kMsgSnapshot);
     CHECK(net::ReadSnapshotHeader(hr, hb) && hb.tick == 5000 && hb.baseTick == 4990 && hb.lastCmdTick == 4998);
+    CHECK(hb.forwarded.count[0] == 0 && hb.forwarded.count[1] == 3 && hb.forwarded.count[5] == 1);
+    CHECK(hb.forwarded.controls[1][0] == 0x101 && hb.forwarded.controls[1][1] == 0x101 && hb.forwarded.controls[1][2] == 0xFFF);
+    CHECK(hb.forwarded.controls[5][0] == 0x020);
 }
 
 // zlib's CRC-32, in one go or in pieces
@@ -356,7 +372,7 @@ void TestNames()
 // A message cut into parts and put together again, in any order, is the message
 void TestParts()
 {
-    for (size_t size = 1; size < 6 * net::kMaxPayload; size += 997)
+    for (size_t size = 1; size < 6 * net::MaxPayload(); size += 997)
     {
         std::vector<uint8_t> message(size);
         for (size_t i = 0; i < size; i++)
@@ -365,11 +381,11 @@ void TestParts()
         }
         std::vector<std::vector<uint8_t>> parts;
         net::WriteSnapshotParts(message, 1234, parts);
-        CHECK(parts.size() == (size + net::kMaxPayload - net::kPartHeader - 1) / (net::kMaxPayload - net::kPartHeader));
+        CHECK(parts.size() == (size + net::MaxPayload() - net::kPartHeader - 1) / (net::MaxPayload() - net::kPartHeader));
         std::vector<std::vector<uint8_t>> pieces(parts.size());
         for (size_t k = parts.size(); k-- > 0;) // backwards
         {
-            CHECK(parts[k].size() <= net::kMaxPayload);
+            CHECK(parts[k].size() <= net::MaxPayload());
             net::BitReader r(parts[k].data(), parts[k].size());
             CHECK(r.Bits(8) == net::kMsgSnapshotPart);
             uint32_t tick = 0;

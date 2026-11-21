@@ -241,8 +241,8 @@ BOOL WINAPI PeekMessageA(MSG* pMsg, HWND, UINT, UINT, UINT flags)
     }
     if (Queue().empty())
     {
-        // A network game paces itself as the original does, spinning on this and RunGameFrame: the netcode polls the
-        // network here (a ping answered at once) and sleeps while the next step is far enough away
+        // The netcode polls the network here (a ping answered at once): reG2's frame loop waits a millisecond at
+        // most in a network game, and a server, paced as the original, sleeps while its next step is far enough away
         if (gPortIdleHook)
         {
             gPortIdleHook();

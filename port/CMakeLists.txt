@@ -173,9 +173,12 @@ else()
     add_executable(gta2 ${lib_src} ${net_game_src} ${ROOT}/test.cpp ${ROOT}/StdAfx.cpp
         src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp src/port_globals.cpp src/rand/rand.cpp src/rand/particle.cpp src/net_hooks.cpp src/build_id.cpp ${compat_src})
     target_compile_definitions(gta2 PRIVATE GTA2_PORT_SDL)
-    # The git commit, looked up at every build (the network game's join compares it)
+    # The git commit, looked up at every build (the network game's join compares it); GTA2_COMMIT where git can't see the
+    # source tree (the packages' containers)
+    set(GTA2_COMMIT "$ENV{GTA2_COMMIT}" CACHE STRING "The git commit when git can't find it")
     add_custom_target(reg2_commit BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/reg2_commit.h
-        COMMAND ${CMAKE_COMMAND} -DSRC=${ROOT} -DOUT=${CMAKE_CURRENT_BINARY_DIR}/reg2_commit.h -P ${CMAKE_CURRENT_LIST_DIR}/git_commit.cmake)
+        COMMAND ${CMAKE_COMMAND} -DSRC=${ROOT} -DOUT=${CMAKE_CURRENT_BINARY_DIR}/reg2_commit.h -DFALLBACK=${GTA2_COMMIT}
+            -P ${CMAKE_CURRENT_LIST_DIR}/git_commit.cmake)
     add_dependencies(gta2 reg2_commit)
     # Off in the Flatpak, which has no network access and updates itself.
     option(GTA2_UPDATE_CHECK "Look for a newer release on GitHub at start, through curl or wget" ON)

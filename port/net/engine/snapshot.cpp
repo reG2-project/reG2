@@ -145,6 +145,7 @@ void net::engine::MovePed(Ped* ped, const Fix16& x, const Fix16& y, const Fix16&
     }
     gSpriteGrid_1->RemoveFromRegionBuckets(s);
     s->set_xyz_lazy(x, y, z);
+    s->set_ang_lazy(rot); // what is drawn: the char's own rotation only reaches its sprite in its next update
     ped->SetRotation(rot);
     gSpriteGrid_1->AddToRegionBuckets(s);
     ped->mCam.x = x;
@@ -182,9 +183,55 @@ void net::engine::SetPlayerInput(int player, uint32_t buttons)
     }
 }
 
+unsigned short port_TypedChar(int dik); // compat/src/dinput.cpp: the character a key's last press typed, with shift
+
+namespace
+{
+struct Typed
+{
+    s32 dik;
+    u16 typed;
+};
+Typed gTyped[MAX_PLAYERS];
+const uint32_t kKeyDown = 0x200000; // a key event's press, its DirectInput code in bits 12-20 (Source/input_bits.hpp)
+
+u16 ChatChar(Player* pPlayer, s32 dik)
+{
+    const int i = pPlayer ? pPlayer->mPlayerIdx : -1;
+    return i >= 0 && i < MAX_PLAYERS && gTyped[i].dik == dik ? gTyped[i].typed : 0;
+}
+} // namespace
+
+void net::engine::SetPlayerTyped(int player, uint32_t buttons, uint16_t typed)
+{
+    if (player >= 0 && player < MAX_PLAYERS)
+    {
+        gTyped[player].dik = buttons & kKeyDown ? (s32)((buttons >> 12) & 0x1FF) : -1;
+        gTyped[player].typed = typed;
+        gPortChatChar = ChatChar;
+    }
+}
+
+uint16_t net::engine::TypedChar(uint32_t buttons)
+{
+    return buttons & kKeyDown ? port_TypedChar((int)((buttons >> 12) & 0x1FF)) : 0;
+}
+
 void net::engine::ShowLeavePrompt(bool shown)
 {
     gPortLeavePromptShown = shown;
+}
+
+bool port_PadMode(); // compat/src/pad.cpp
+
+void net::engine::SetRoundPad(bool results)
+{
+    gPortNetRoundPad = results ? 2 : 1;
+}
+
+bool net::engine::PadMode()
+{
+    return port_PadMode();
 }
 
 void net::engine::IdleWait()

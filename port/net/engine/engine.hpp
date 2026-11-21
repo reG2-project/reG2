@@ -34,9 +34,15 @@ bool GameRunning(); // a game with its players exists
 int PlayerCount();
 uint32_t LocalInput(); // what this machine's controls give for the next tick
 void SetPlayerInput(int player, uint32_t buttons); // for the next tick
+// A server's: what the player's client typed with the next tick's key press (0: the game's table), for its chat line
+void SetPlayerTyped(int player, uint32_t buttons, uint16_t typed);
+uint16_t TypedChar(uint32_t buttons); // a client's: the character its key press in <buttons> typed here (0: none)
 // The length of a network tick (the game's own setting offers 50, 40 or 33 ms)
 void SetTickMs(int ms);
 void ShowLeavePrompt(bool shown); // the client's "Leave the game?": the gamepad's A and B answer it (net_hooks.hpp)
+// The client's round keys on the gamepad: Back as F1, and in the results the d-pad and A as the arrows and Enter
+void SetRoundPad(bool results);
+bool PadMode(); // the gamepad gave the last input: the hints name its buttons
 void IdleWait(); // while the game waits for its next step: a millisecond's sleep when that is more than 1 ms away
 void SeedRandom(uint32_t seed); // the game's rand() state (a server's: clients take it from snapshots)
 // A network game's random draws: each entity's update and each server service its own (port/src/rand/owner.hpp)
@@ -136,6 +142,8 @@ struct LocalChat
 };
 LocalChat TakeLocalChat();
 void PutLocalChat(const LocalChat& chat);
+// A player entity's chat line, and whether it is still being typed (the game keeps the line once Enter ends it)
+bool PlayerChat(const EntityState& e, std::string* pLine);
 
 // --- Rounds (rounds.cpp, netplay.cpp, slots.cpp, world_entity.cpp): the frag and time limits are the netcode's (the game gets none it would end on), a
 // round that reaches one starts the next on the same map. The server keeps the round; snapshots carry it ---
@@ -145,6 +153,8 @@ Round& CurrentRound();
 void NewRound(); // every slot in the game respawned with no score, weapons or power-ups
 void FreshScores(int slot); // its frags, points and HUD (money, frags, multiplier) as at a game's start (a new game's players)
 void ShowHudMessage(const char* text); // a line over the frame for a few seconds (overlay.cpp, with the status lines)
+// A chat line someone sent, over the frame above the lines being typed: the last 5, each for 10 s (overlay.cpp)
+void AddChatLine(const std::string& line);
 // Lines drawn over the frame until changed, centred near the top (the round's warmup, votes, results; overlay.cpp)
 void SetNetPanel(const std::vector<std::string>& lines);
 // One line drawn large in the middle of the frame (the game's message font) until changed; empty: none

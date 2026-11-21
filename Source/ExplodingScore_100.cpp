@@ -435,8 +435,19 @@ void ExplodingScore::DrawSingleNumber(s32 number_to_draw, s32 xpos_sub)
         base_scale = kFpOne_702DE4;
     }
 
+#if defined(GTA2_PORT)
+    // Port: drawn between logic steps, the explosion's spread and size are the last step's less the part of a step
+    // not yet elapsed (each step adds one to both), and its fade likewise (two a step)
+    const f32 back = mExplodeCounter <= -2 ? PortFrameLoop::StepNotElapsed() : 0.0f; // -1: no change from the step before
+    Fix16 x_to_use = proj_x + Fix16(static_cast<f32>(x_off) - back * (x_base - xpos_sub));
+    Fix16 y_to_use = proj_y + Fix16(static_cast<f32>(y_off) + back * 7);
+    base_scale = Fix16(base_scale.ToFloat() - back);
+    const s32 faded = static_cast<u8>(this->mAlpha) + static_cast<s32>(back * 2 + 0.5f);
+    const char_type drawn_alpha = static_cast<char_type>(faded > 255 ? 255 : faded);
+#else
     Fix16 x_to_use = proj_x + Fix16(x_off);
     Fix16 y_to_use = proj_y + Fix16(y_off);
+#endif
 
     if (x_to_use >= kFpZero_702DE0)
     {
@@ -457,7 +468,11 @@ void ExplodingScore::DrawSingleNumber(s32 number_to_draw, s32 xpos_sub)
                                palette_type,
                                this->mPalette,
                                1,
+#if defined(GTA2_PORT)
+                               drawn_alpha,
+#else
                                this->mAlpha,
+#endif
                                true);
                 }
             }

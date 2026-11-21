@@ -12,10 +12,13 @@
 //            [--ticks N]  (prints the arena's result and ends at tick N: port/net/scripts/rl_bots.py)
 //            [--seed N]  (the game's random state at the start: another match from the same start)
 //   --connect host[:port] [--name <name>] [--bot [brain]]  (brain: simple, carhop, rammer, soldier, hunter, nn:<file>)
-//   either: [--lag ms] [--jitter ms] [--loss percent]  a link conditioner on this end's sends (tests)
+//   either: [--lag ms] [--jitter ms] [--loss percent] [--lossburst N] [--spike ms:on:every]  a link conditioner on this
+//           end's sends (tests): losses in bursts of N on average; ms more delay for <on> s every <every> s
+//           [--mtu N]  (the link's MTU, IP packets: 1280 by default, one that fits the VPNs; 1428 the most)
 //   --replay <file>  a client session recorded with GTA2_NET_RECORD=<file>, played back without a server
 // The map is a multiplayer map's .mmp in data/ (default downtown-6p). The game then starts that network game.
 #include "cmdline.hpp"
+#include "core/protocol.hpp"
 #include <algorithm>
 #include <ctype.h>
 #include <stdio.h>
@@ -56,7 +59,13 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
         }
         else if (a == "--port" && more)
         {
-            sc.port = (uint16_t)atoi(args[++i].c_str());
+            const int port = atoi(args[++i].c_str());
+            if (port < 1 || port > 65535)
+            {
+                fprintf(stderr, "net: --port %s isn't a port (1-65535)\n", args[i].c_str());
+                return false;
+            }
+            sc.port = (uint16_t)port;
         }
         else if (a == "--map" && more)
         {
@@ -158,17 +167,35 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
         {
             o.replay = args[++i];
         }
+        else if (a == "--mtu" && more)
+        {
+            SetLinkMtu(atoi(args[++i].c_str()));
+        }
         else if (a == "--lag" && more)
         {
-            sc.lagMs = cc.lagMs = atoi(args[++i].c_str());
+            sc.link.lagMs = cc.link.lagMs = atoi(args[++i].c_str());
         }
         else if (a == "--jitter" && more)
         {
-            sc.jitterMs = cc.jitterMs = atoi(args[++i].c_str());
+            sc.link.jitterMs = cc.link.jitterMs = atoi(args[++i].c_str());
         }
         else if (a == "--loss" && more)
         {
-            sc.lossPercent = cc.lossPercent = atoi(args[++i].c_str());
+            sc.link.lossPercent = cc.link.lossPercent = atoi(args[++i].c_str());
+        }
+        else if (a == "--lossburst" && more)
+        {
+            sc.link.lossBurst = cc.link.lossBurst = atoi(args[++i].c_str());
+        }
+        else if (a == "--spike" && more)
+        {
+            LinkShape& l = cc.link;
+            if (sscanf(args[++i].c_str(), "%d:%d:%d", &l.spikeMs, &l.spikeOnS, &l.spikeEveryS) != 3 || l.spikeEveryS <= 0)
+            {
+                fprintf(stderr, "net: --spike ms:on:every (seconds)\n");
+                return false;
+            }
+            sc.link.spikeMs = l.spikeMs, sc.link.spikeOnS = l.spikeOnS, sc.link.spikeEveryS = l.spikeEveryS;
         }
         else
         {

@@ -5,6 +5,8 @@
 #include "Source/Camera.hpp"
 #include "Source/Draw.hpp"
 #include "Source/Frontend.hpp"
+#include "Source/Game.hpp"
+#include "Source/Player.hpp"
 #include "Source/gtx_0x106C.hpp"
 #include <algorithm>
 #include <ctype.h>
@@ -36,6 +38,12 @@ namespace
 wchar_t gAnnouncement[128];
 long long gAnnouncementUntilMs;
 std::vector<std::vector<wchar_t>> gPanel; // SetNetPanel's lines, widened
+struct ChatLine
+{
+    std::vector<wchar_t> text;
+    long long untilMs;
+};
+std::vector<ChatLine> gChatLines; // AddChatLine's, the oldest first
 long long NowMs()
 {
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -48,6 +56,18 @@ void net::engine::ShowHudMessage(const char* text)
 {
     Widen(text, gAnnouncement, sizeof(gAnnouncement) / sizeof(gAnnouncement[0]));
     gAnnouncementUntilMs = NowMs() + 4000;
+}
+
+void net::engine::AddChatLine(const std::string& line)
+{
+    const size_t kKept = 5;
+    if (gChatLines.size() == kKept)
+    {
+        gChatLines.erase(gChatLines.begin());
+    }
+    ChatLine chat{std::vector<wchar_t>(line.size() + 1, 0), NowMs() + 10000};
+    Widen(line, chat.text.data(), chat.text.size());
+    gChatLines.push_back(chat);
 }
 
 void net::engine::SetNetPanel(const std::vector<std::string>& lines)
@@ -203,12 +223,40 @@ void net::engine::DrawOverlay()
     {
         return;
     }
-    // In the HUD's 640-wide units (DrawStringScaled scales them as it does the HUD's)
-    const float scale = cam->mUiScale.ToFloat() > 0 ? cam->mUiScale.ToFloat() : 1.0f;
-    const s32 w = (s32)(cam->mScreenPxWidth / scale), h = (s32)(cam->mScreenPxHeight / scale);
-    if (gStatusCorner[0])
+    // In the HUD's 640x480 layout: DrawStringScaled scales it and keeps a text near an edge at the screen's edge
+    const s32 w = 640, h = 480;
+    // The corner's lines, right-aligned, the last one at the bottom
+    s32 cornerY = h - 24;
+    wchar_t* cornerEnd = gStatusCorner;
+    while (*cornerEnd)
     {
-        DrawStringScaled(gStatusCorner, w - 8 - Frontend::GetMaxTextWidth(gStatusCorner, gStyleTextFont), h - 24, gStyleTextFont);
+        cornerEnd++;
+    }
+    for (wchar_t* end = cornerEnd; end > gStatusCorner; cornerY -= 16)
+    {
+        wchar_t* start = end;
+        while (start > gStatusCorner && start[-1] != '\n')
+        {
+            start--;
+        }
+        std::vector<wchar_t> line(start, end);
+        line.push_back(0);
+        DrawStringScaled(line.data(), w - 8 - Frontend::GetMaxTextWidth(line.data(), gStyleTextFont), cornerY, gStyleTextFont);
+        end = start > gStatusCorner ? start - 1 : start;
+    }
+    // The chat lines sent, left-aligned above the lines being typed (the game's, at the bottom: Hud_ChatInput)
+    const long long nowMs = NowMs();
+    gChatLines.erase(std::remove_if(gChatLines.begin(), gChatLines.end(), [nowMs](const ChatLine& c) { return c.untilMs <= nowMs; }),
+                     gChatLines.end());
+    const s32 chatLine = GetLineSpacingFromFontType(gStyleTextFont);
+    s32 chatY = h - chatLine;
+    for (Player* p = gGame_0x40 ? gGame_0x40->IterateFirstPlayer() : NULL; p; p = gGame_0x40->IterateNextPlayer())
+    {
+        chatY -= p->mIsChatting ? chatLine : 0;
+    }
+    for (size_t i = gChatLines.size(); i-- > 0; chatY -= chatLine)
+    {
+        DrawStringScaled(gChatLines[i].text.data(), 8, chatY, gStyleTextFont);
     }
     // The panel near the top (the HUD's score and wanted level are above it), the announcement under it
     const s32 kLine = 16;

@@ -19,6 +19,9 @@ extern void (*gPortSpriteMovedHook)(Sprite*);
 // While the game waits for its next step: the netcode's polling, so a ping is answered at once and neither a step nor
 // a frame wait adds to the round trip
 extern void (*gPortIdleHook)();
+// A network client's: reG2's frame loop runs its game (winmain.cpp), the netcode's frame hook after each step and
+// frames drawn in between; a server and a replay run the original's, a step then a frame
+extern bool gPortNetFrameLoop;
 
 // No audio device for the game: sound_obj then doesn't run at all. A network server's: nobody hears it, and its
 // listener follows slot 0's camera, whose ped (once that player left) can be any ped's, in any car
@@ -71,6 +74,9 @@ extern bool gPortServerKillAwards;
 // A network game's: the tag game counts the fugitive's seconds (TagGame::ExecuteGamemodeTick) though the game has no
 // time limit (the netcode ends the rounds), whose flag the original counts by
 extern bool gPortTagTimeCounts;
+// A network server's: the character a player's client typed with the key <dik> this tick, in its keyboard's layout
+// (0: none), for its chat line (Hud_ChatInput::HandleChatInputKey); the server's own table is a US keyboard's
+extern u16 (*gPortChatChar)(Player* pPlayer, s32 dik);
 // A network client's: its players are kept at mInvulnerability 2 so that only the server takes their health
 // (ProtectPlayers); how a ped reacts to a car, a blast or fire goes by the invulnerability the server gives
 extern bool gPortProtectsPlayers;
@@ -88,3 +94,6 @@ extern bool gPortNoFireEngines;
 // A network client's "Leave the game? Y / N" is up: a gamepad's A and B answer it as they do the game's quit message
 // (port_QuitMessageShown, compat/src/pad.cpp)
 extern bool gPortLeavePromptShown;
+// A network client's round keys on the gamepad (port_NetRoundPad, compat/src/pad.cpp): 0 none (no network game), 1
+// Back is F1 (ready, or yes to a vote), 2 the round's results: also the d-pad and A as the arrows and Enter (a map)
+extern int gPortNetRoundPad;

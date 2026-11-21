@@ -246,14 +246,25 @@ bool net::engine::SetCarState(Car* car, const EntityState& e, bool fresh)
         car->mDamagedAreas.m_var = (u32)e.f[kCarAreas];
         // And its fire, which only crossing a threshold here starts: a car the server set on fire burnt only where its
         // damage was predicted, and one that burnt here alone burnt on to a wreck the server didn't have
+        // Up, the flames it lacks are added as Car::AccumulateDamage adds them (the small one at 16000, the huge one at
+        // 25000), and those it has stay where they burn; down, they go out and the level's are lit again
         const int level = FireLevel(car->mDamage);
         if (car->mDamageLevel != level)
         {
-            car->mAttachments.ExpireAttachedFlames();
-            if (level)
+            const Fix16_Point atDefault(0, 0); // where the game puts its flames when no hit position is given
+            int had = car->mDamageLevel;
+            if (had > level)
             {
-                const Fix16_Point atDefault(0, 0); // where the game puts its flames when no hit position is given
-                car->SpawnDamageFireEffect(level == 4 ? 2 : 1, &atDefault);
+                car->mAttachments.ExpireAttachedFlames();
+                had = 0;
+            }
+            if (had < 3 && level >= 3)
+            {
+                car->SpawnDamageFireEffect(1, &atDefault);
+            }
+            if (had < 4 && level == 4)
+            {
+                car->SpawnDamageFireEffect(2, &atDefault);
             }
             car->mDamageLevel = (u8)level;
         }

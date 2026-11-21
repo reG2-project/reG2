@@ -5,6 +5,7 @@
 // d-pad, A and B drive, as they answer the quit message. In the frontend it drives the menus as the
 // arrows, Enter and Escape. With TWIN STICK on foot, the sticks move and aim (port_TwinStickInput) and RT
 // attacks. Each control's second key (alt_<n>), a key, mouse button or wheel notch, presses it the same way.
+// A network game's round: Back is F1 (ready, or yes to a vote), and the results' map list takes the d-pad and A.
 #define DIRECTINPUT_VERSION 0x0700
 #include <windows.h>
 #include <dinput.h>
@@ -474,7 +475,7 @@ int port_DefaultAltBinding(int control)
 
 bool port_AltKeyInGame(DWORD dik)
 {
-    if (!port_GameRunning() || port_QuitMessageShown())
+    if (!port_GameRunning() || port_QuitMessageShown() || port_ChatTyping())
     {
         return false;
     }
@@ -687,9 +688,11 @@ void port_UpdatePad()
     const bool start = Button(SDL_GAMEPAD_BUTTON_START);
     const bool a = Button(SDL_GAMEPAD_BUTTON_SOUTH);
     const bool b = Button(SDL_GAMEPAD_BUTTON_EAST);
+    const bool back = Button(SDL_GAMEPAD_BUTTON_BACK);
     static bool sPrevStart;
     static bool sPrevA;
     static bool sPrevB;
+    static bool sPrevBack;
 
     const bool inGame = port_GameRunning();
     static bool sWasInGame;
@@ -709,6 +712,9 @@ void port_UpdatePad()
         sMenuBlocked = anyDown;
     }
     const bool quitShown = inGame && port_QuitMessageShown();
+    const int roundPad = inGame && !quitShown ? port_NetRoundPad() : 0;
+    const bool roundMenu = roundPad == 2;
+    const bool chatting = inGame && port_ChatTyping(); // W, A, S, D and F type: they are no controls' second keys then
     const int twin = inGame && !quitShown ? port_TwinStick() : 0;
     sAccelHeld = CodeDown(11) && (sAccelHeld || port_Driving() || port_EnteringCar());
     // The vehicle's triggers, unless FORWARD or BACKWARD has a pad input of the player's choice.
@@ -736,8 +742,8 @@ void port_UpdatePad()
         const bool move = twin == 1 && i < 4;
         const bool pad = (car ? CarPadDown(i, code, l3Free) : CodeDown(code) && !(twin == 1 && (code == 11 || (code == 10 && lt)))) &&
             !(rbFires && code == 5);
-        const bool down = !move && (pad || AltDown(i) || (twin == 1 && i == 4 && CodeDown(11) && !sAccelHeld) || (rbFires && i == 4 && CodeDown(5)));
-        Press(i, inGame && !quitShown && down);
+        const bool down = !move && (pad || (AltDown(i) && !chatting) || (twin == 1 && i == 4 && CodeDown(11) && !sAccelHeld) || (rbFires && i == 4 && CodeDown(5)));
+        Press(i, inGame && !quitShown && !roundMenu && down);
     }
     if (inGame)
     {
@@ -745,9 +751,18 @@ void port_UpdatePad()
         {
             Tap(DIK_ESCAPE);
         }
-        if (quitShown && a && !sPrevA)
+        if ((quitShown || roundMenu) && a && !sPrevA)
         {
             Tap(DIK_RETURN);
+        }
+        bool backFree = true; // unless a control has it
+        for (int i = 0; i < kNumControls; i++)
+        {
+            backFree = backFree && port_GetPadBinding(i) != 6;
+        }
+        if (roundPad && backFree && back && !sPrevBack)
+        {
+            Tap(DIK_F1);
         }
         if (quitShown && b && !sPrevB)
         {
@@ -760,7 +775,7 @@ void port_UpdatePad()
         for (int d = 0; d < 6; d++)
         {
             const bool down = CodeDown(dirs[d]);
-            if (quitShown && down && !sPrevDir[d])
+            if ((quitShown || (roundMenu && d < 2)) && down && !sPrevDir[d])
             {
                 Tap(keys[d]);
             }
@@ -770,4 +785,5 @@ void port_UpdatePad()
     sPrevStart = start;
     sPrevA = a;
     sPrevB = b;
+    sPrevBack = back;
 }

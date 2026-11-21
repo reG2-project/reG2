@@ -1459,6 +1459,10 @@ EXPORT void __stdcall do_network_and_local_inputs()
 
             sCurrentNetInputs.mInputs[sNetworkPlayerIdx].mInputs = gInputRecorder.get_input_bits();
             Net_Send_Our_Inputs();
+#if defined(GTA2_PORT)
+            // Port: in reG2's frame loop the frames are drawn between the steps (PortRunGameFrame).
+            if (!gPortNetFrameLoop)
+#endif
             DrawAndFlip();
             Net_Receive_Players_Inputs();
             memcpy(&sPrevNetInputs, &sCurrentNetInputs, sizeof(sPrevNetInputs));
@@ -1501,6 +1505,18 @@ static bool PortRunGameFrame()
     switch (PortFrameLoop::Next(gGame_0x40->GetFrameDurationMs(), sbForceGameUpdate, bSkip_draw))
     {
         case PortFrameLoop::kStep:
+            if (bStartNetworkGame)
+            {
+                // A network step as the original's: the tick, then the netcode's frame hook (snapshots, rollback, the
+                // next tick's inputs), all before the next frame is drawn.
+                PortFrameLoop::BeforeStep();
+                exit_requested = ExecuteGameTimed();
+                do_network_and_local_inputs();
+                PortFrameLoop::AfterStep();
+                sbForceGameUpdate = false;
+                updated_logic = true;
+                break;
+            }
             if (sbInputsPending)
             {
                 do_network_and_local_inputs();
@@ -1539,8 +1555,8 @@ MATCH_FUNC(0x4DA850)
 EXPORT bool RunGameFrame()
 {
 #if defined(GTA2_PORT)
-    // Port: the port's frame loop for local games; a network game keeps the original's.
-    if (!bStartNetworkGame)
+    // Port: the port's frame loop for local games and network clients; a server and a replay keep the original's.
+    if (!bStartNetworkGame || gPortNetFrameLoop)
     {
         return PortRunGameFrame();
     }
@@ -2468,7 +2484,14 @@ s32 __stdcall GameWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lp
             }
             else
             {
-                if (!bQuit && sMinimizedState != 2 && !sbVideoModeResetPending)
+#if defined(GTA2_PORT)
+                // Port: a network game runs on minimised (gPortIdleHook: the netcode polls), else a minimised server
+                // stops everyone's game and a minimised client holds its keys there
+                const bool bMinimisedStop = sMinimizedState == 2 && !gPortIdleHook;
+#else
+                const bool bMinimisedStop = sMinimizedState == 2;
+#endif
+                if (!bQuit && !bMinimisedStop && !sbVideoModeResetPending)
                 {
                     if (bDoFrontEnd)
                     {

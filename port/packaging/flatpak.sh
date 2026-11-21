@@ -21,9 +21,9 @@ awk '$1 == "url:" {url = $2} $1 == "sha256:" {print url, $2}' "$M" | while read 
     fi
 done
 
-# $GTA2_VERSION as build.sh takes it, in a copy of the manifest.
-if [ -n "${GTA2_VERSION:-}" ]; then
-    sed -e "s|-DCMAKE_PREFIX_PATH=/app|& -DGTA2_VERSION=${GTA2_VERSION#v}|" \
+# $GTA2_VERSION and $GTA2_COMMIT as build.sh takes them, in a copy of the manifest.
+if [ -n "${GTA2_VERSION:-}${GTA2_COMMIT:-}" ]; then
+    sed -e "s|-DCMAKE_PREFIX_PATH=/app|& ${GTA2_VERSION:+-DGTA2_VERSION=${GTA2_VERSION#v}} ${GTA2_COMMIT:+-DGTA2_COMMIT=$GTA2_COMMIT}|" \
         -e "s|path: \.\./\.\./\.\.\$|path: $(cd "$HERE/../.." && pwd)|" "$M" > "$W/$APP_ID.yml"
     M=$W/$APP_ID.yml
 fi

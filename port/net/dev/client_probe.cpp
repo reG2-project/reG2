@@ -152,8 +152,8 @@ void net::ClientProbe::Correction(uint32_t frame, const engine::Pose& n, int32_t
            engine::IsPlayerId(n.id) ? ("; " + engine::DebugPlayerCar((int)n.id - 1, latest)).c_str() : "");
 }
 
-// GTA2_NET_JERKLOG: what can be seen (within 12 blocks; a camera shows 6 to 8)
-void net::ClientProbe::Jerk(uint32_t frame, int slot, bool synced)
+// GTA2_NET_JERKLOG: what can be seen (within 12 blocks; a camera shows 6 to 8), and the players wherever they are
+void net::ClientProbe::Jerk(uint32_t frame, int slot, bool synced, const Snapshot& newest, const Snapshot& before)
 {
     if (!Env().jerkLog || !synced)
     {
@@ -166,11 +166,12 @@ void net::ClientProbe::Jerk(uint32_t frame, int slot, bool synced)
     for (const engine::Pose& q : all)
     {
         const float dx = engine::Blocks(q.x) - lx, dy = engine::Blocks(q.y) - ly;
-        if (dx * dx + dy * dy < 12 * 12)
+        if (dx * dx + dy * dy < 12 * 12 || engine::IsPlayerId(q.id))
         {
             shown.push_back(q);
         }
     }
+    mJerk.Reference(newest, before);
     mJerk.Feed(frame, shown, (uint32_t)slot + 1);
     if (frame % 900 == 0)
     {
