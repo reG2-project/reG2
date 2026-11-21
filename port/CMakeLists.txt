@@ -47,6 +47,18 @@ endif()
 # Windows can also build with DMA's DLLs (DirectX renderer and video, Miles, Bink) next to the exe.
 option(GTA2_PORT_DIRECTX "Windows: use the original DirectX, Miles and Bink DLLs instead of SDL3" OFF)
 
+# Stack canaries wherever the toolchain links them (Linux, MinGW's libmingwex, macOS): a network game feeds the game's
+# code what a server sends
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_FLAGS "${arch_flags} -fstack-protector-strong")
+check_cxx_source_compiles("#include <string.h>
+int f(const char* s) { char b[64]; strcpy(b, s); return b[1]; }
+int main(int argc, char** argv) { return f(argv[0]); }" GTA2_STACK_PROTECTOR)
+unset(CMAKE_REQUIRED_FLAGS)
+if(GTA2_STACK_PROTECTOR)
+    add_compile_options(-fstack-protector-strong)
+endif()
+
 # The network game's ENet and the netcode's tests (ctest -L net); GTA2_GAME=OFF builds only those, without SDL3
 option(GTA2_GAME "the game; OFF: only the netcode's tests" ON)
 if(NOT (WIN32 AND GTA2_PORT_DIRECTX))

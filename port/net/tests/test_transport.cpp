@@ -2,6 +2,7 @@
 #include "check.hpp"
 #include "../core/protocol.hpp"
 #include "../transport/transport.hpp"
+#include <enet/enet.h>
 #include <chrono>
 #include <stdio.h>
 #include <stdlib.h>
@@ -120,6 +121,46 @@ int main()
     CHECK(WaitFor(server, client, client, net::TransportEvent::kReceive, &e));
     CHECK(e.channel == net::kChannelUnreliable && e.data == snap);
     CHECK(server->RoundTripMs(clientOnServer) < 1000);
+
+    // The packet cap: our hosts send nothing bigger, and a server drops what a host without the cap sends
+    std::vector<uint8_t> big(net::kMaxPacket, 7), huge(net::kMaxPacket + 1, 9);
+    CHECK(client->Send(0, net::kChannelReliable, big.data(), big.size(), true));
+    CHECK(!client->Send(0, net::kChannelReliable, huge.data(), huge.size(), true));
+    client->Flush();
+    CHECK(WaitFor(server, client, server, net::TransportEvent::kReceive, &se) && se.data == big);
+    {
+        ENetHost* raw = enet_host_create(NULL, 1, net::kChannelCount, 0, 0);
+        CHECK(raw);
+        ENetAddress address;
+        enet_address_set_host(&address, "127.0.0.1");
+        address.port = port;
+        ENetPeer* peer = enet_host_connect(raw, &address, net::kChannelCount, 0);
+        bool connected = false, received = false;
+        for (int i = 0; i < 3000 && !received; i++)
+        {
+            ENetEvent ev;
+            while (enet_host_service(raw, &ev, 0) > 0)
+            {
+                if (ev.type == ENET_EVENT_TYPE_CONNECT)
+                {
+                    connected = true;
+                    enet_peer_send(peer, net::kChannelReliable, enet_packet_create(huge.data(), huge.size(), ENET_PACKET_FLAG_RELIABLE));
+                    enet_host_flush(raw);
+                }
+            }
+            while (server->Poll(se))
+            {
+                received = received || (se.type == net::TransportEvent::kReceive && se.data.size() > net::kMaxPacket);
+            }
+            if (connected && i > 1500)
+            {
+                break; // 1.5 s after: never came
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        CHECK(connected && !received);
+        enet_host_destroy(raw);
+    }
 
     client->Disconnect(0);
     client->Flush();

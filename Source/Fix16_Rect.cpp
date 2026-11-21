@@ -22,6 +22,13 @@ void Fix16_Rect::DoSetCurrentRect()
     gSpriteGrid_right = mRight.ToInt();
     gSpriteGrid_top = mTop.ToInt();
     gSpriteGrid_bottom = mBottom.ToInt();
+#if defined(GTA2_PORT)
+    // Port: the sprite grid's 256 rows: a rect off the map (moved there by a network game's state) stays on its edge.
+    gSpriteGrid_left = gSpriteGrid_left < 0 ? 0 : gSpriteGrid_left > 255 ? 255 : gSpriteGrid_left;
+    gSpriteGrid_right = gSpriteGrid_right < 0 ? 0 : gSpriteGrid_right > 255 ? 255 : gSpriteGrid_right;
+    gSpriteGrid_top = gSpriteGrid_top < 0 ? 0 : gSpriteGrid_top > 255 ? 255 : gSpriteGrid_top;
+    gSpriteGrid_bottom = gSpriteGrid_bottom < 0 ? 0 : gSpriteGrid_bottom > 255 ? 255 : gSpriteGrid_bottom;
+#endif
 }
 
 // 0x4BA6C0 9.6f

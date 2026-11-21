@@ -146,6 +146,10 @@ void net::engine::ApplyPickups(const Snapshot& snap)
                        e.f[kObjY] / 16384.0f, live.size());
             }
         }
+        if (!o && !ObjectModelUsable(e.f[kObjModel]))
+        {
+            continue; // a model the server never sends: CreateObject reads its definition (sanitize.cpp)
+        }
         if (!o)
         {
             o = gObject_5C->NewPhysicsObj(e.f[kObjModel], Raw(e.f[kObjX]), Raw(e.f[kObjY]), Raw(e.f[kObjZ]), Angle(e.f[kObjRot]));

@@ -15,6 +15,7 @@
 #include "Source/Weapon.hpp"
 #include "Source/PedGroup.hpp"
 #include "Source/Game.hpp"
+#include "Source/PublicTransport.hpp"
 #include <stddef.h>
 #include <string.h>
 #include <algorithm>
@@ -50,6 +51,7 @@ const Member kValues[] = {
 const size_t kValueCount = sizeof(kValues) / sizeof(kValues[0]);
 
 const int kObjective = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, mObjective));
+const int kInternalObjective = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, mInternalObjective));
 const int kPassenger = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, mEnterCarAsPassenger));
 const int kDoor = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, mTargetCarDoor));
 const int kType = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, mPedType));
@@ -288,10 +290,10 @@ Car* LocalCar(uint32_t id, bool* pResolved)
 }
 
 // A char's states that go with those: not jumping or colliding with a car (Char_B4_state 15, 27), not jumping, at a car
-// door or falling (animations 5-8, 11, 12)
+// door, carjacking or falling (animations 5-9, 11, 12)
 bool CharPlain(int32_t charState, int32_t anim)
 {
-    return charState != Char_B4_state::Jumping_15 && charState != Char_B4_state::Colliding_With_Car_27 && !(anim >= 5 && anim <= 8) && anim != 11 &&
+    return charState != Char_B4_state::Jumping_15 && charState != Char_B4_state::Colliding_With_Car_27 && !(anim >= 5 && anim <= 9) && anim != 11 &&
            anim != 12;
 }
 
@@ -307,6 +309,83 @@ bool Plain(int32_t state1, int32_t state2)
 bool PlainStored(int32_t state1, int32_t state2)
 {
     return Plain(state1, state2) || (state1 == 11 && state2 == ped_state_2::initial_28);
+}
+
+// The targets the objectives' code reads without a check (Ped::KillCharOnFoot, FollowCarInCurrCar, FleeFromPedTillSafe,
+// WaitForTrain...): the server's ped always has them, so a state that lacks one isn't taken
+bool ObjectiveTargetsThere(const Ped* p, const net::EntityState& e)
+{
+    using namespace objectives_enum;
+    switch (e.f[kFirst + kObjective])
+    {
+        case flee_char_on_foot_till_safe_2:
+        case flee_char_on_foot_always_3:
+        case goto_char_on_foot_16:
+        case kill_char_any_means_19:
+        case kill_char_on_foot_20:
+        case punch_char_23:
+        case pull_driver_out_32:
+            if (!e.f[kPedRefs + kRefObjectivePed])
+            {
+                return false;
+            }
+            break;
+        case enter_car_as_driver_35:
+        case enter_train_37:
+        case leave_train_38:
+        case follow_car_on_foot_with_offset_56:
+        case destroy_car_59:
+            if (!e.f[kCarRefs + kRefObjectiveCar])
+            {
+                return false;
+            }
+            break;
+        case follow_car_in_car_55:
+        case turret_put_out_car_fire_60:
+            if (!e.f[kCarRefs + kRefObjectiveCar] || !p->mCar)
+            {
+                return false;
+            }
+            break;
+        case follow_char_in_car_10:
+        case patrol_in_car_43:
+        case chase_char_in_car_52:
+        case fire_at_object_from_vehicle_57:
+        case tank_fire_at_player_61:
+            if (!p->mCar)
+            {
+                return false;
+            }
+            break;
+    }
+    switch (e.f[kFirst + kInternalObjective])
+    {
+        case flee_char_on_foot_till_safe_2:
+        case flee_char_on_foot_always_3:
+        case run_to_char_7:
+        case follow_char_9:
+        case stay_close_to_char_11:
+        case punch_char_23:
+        case pull_driver_out_32:
+            if (!e.f[kPedRefs + kRefInternalPed])
+            {
+                return false;
+            }
+            break;
+        case wait_for_train_29:
+        {
+            bool ok;
+            Car* car = LocalCar((uint32_t)e.f[kCarRefs + kRefTargetToEnter], &ok);
+            return car && gPublicTransport_181C->GetTrainFromCarExcludingLeadCar(car);
+        }
+    }
+    return true;
+}
+
+bool RobbedDriver(int32_t occupation) // Ped::RobbedDriver_AI's: it reads its car thief and its car unchecked
+{
+    return occupation == ped_ocupation_enum::robbed_driver_10 || occupation == ped_ocupation_enum::angry_armed_robbed_driver_12 ||
+           occupation == ped_ocupation_enum::very_angry_armed_robbed_driver_13;
 }
 
 // Its weapons, the game's way of arming a ped (Ped::ForceWeapon drops the one it had): a gang member here had
@@ -534,6 +613,12 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
             return true;
         }
     }
+    if (!ObjectiveTargetsThere(p, e) ||
+        (RobbedDriver(e.f[kFirst + kOccupation]) && (!(pedKept[kRefCarThief] ? p->mCarThief : pedRefs[kRefCarThief]) ||
+                                                     !(carKept[kRefStolenCar] ? p->mStolenCar : carRefs[kRefStolenCar]))))
+    {
+        return true;
+    }
     ApplyMembers(p, kValues, kValueCount, e, kFirst);
     u32 flags;
     memcpy(&flags, &p->mBf21C, sizeof(flags));
@@ -586,7 +671,14 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
 void net::engine::SetPedKind(Ped* p, const EntityState& e)
 {
     p->SetPedType(e.f[kFirst + kType]);
-    p->set_occupation(e.f[kFirst + kOccupation]);
+    // A robbed driver whose thief or car this game doesn't have (yet)
+    int32_t occupation = e.f[kFirst + kOccupation];
+    bool ok;
+    if (RobbedDriver(occupation) && (!LocalPed((uint32_t)e.f[kPedRefs + kRefCarThief], &ok) || !LocalCar((uint32_t)e.f[kCarRefs + kRefStolenCar], &ok)))
+    {
+        occupation = ped_ocupation_enum::dummy;
+    }
+    p->set_occupation(occupation);
 }
 
 bool net::engine::PassengerThere(const EntityState& e)

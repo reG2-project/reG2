@@ -16,6 +16,12 @@
 namespace
 {
 const uint32_t kArenaPeer = ~0u; // an arena bot's slot (no transport peer has it)
+const int kHelloWaitMs = 10000;
+
+long long NowMs()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 float Distance(const net::EntityState& e, float x, float y)
 {
@@ -183,7 +189,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
         Reject reject;
         reject.reason = refusal;
         WriteReject(w, reject);
-        printf("net: turned away a client: %s\n", refusal.c_str());
+        printf("net: turned away a client: %s\n", Printable(refusal).c_str());
     }
     else if (SlotOfPeer(peer) < 0)
     {
@@ -329,7 +335,7 @@ void net::Server::OnReceive(const TransportEvent& e)
     }
     else if (slot >= 0 && type == kMsgLeave && ReadText(r, why))
     {
-        printf("net: player %d (%s) leaves: %s\n", slot, mSlots[slot].name.c_str(), why.c_str());
+        printf("net: player %d (%s) leaves: %s\n", slot, mSlots[slot].name.c_str(), Printable(why).c_str());
     }
     else if (slot >= 0 && type == kMsgCommand)
     {
@@ -610,6 +616,21 @@ void net::Server::PollTransport()
     {
         OnEvent(e);
     }
+    // A connection holds a slot of the host's: one that says no hello in 10 s is dropped (a client says it at once)
+    const long long now = NowMs();
+    for (auto it = mHelloWait.begin(); it != mHelloWait.end();)
+    {
+        if (now - it->second > kHelloWaitMs)
+        {
+            printf("net: dropped a connection that said no hello in %d s\n", kHelloWaitMs / 1000);
+            mTransport->Disconnect(it->first);
+            it = mHelloWait.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 }
 
 // Between frames: a client's ping goes back at once (its round trip is then the network's alone, not our tick's
@@ -634,12 +655,21 @@ void net::Server::Idle()
 
 void net::Server::OnEvent(const TransportEvent& e)
 {
-    if (e.type == TransportEvent::kReceive)
+    if (e.type == TransportEvent::kConnect)
     {
+        mHelloWait[e.peer] = NowMs();
+    }
+    else if (e.type == TransportEvent::kReceive)
+    {
+        if (!e.data.empty() && e.data[0] == kMsgHello)
+        {
+            mHelloWait.erase(e.peer); // welcomed, or refused and disconnected
+        }
         OnReceive(e);
     }
     else if (e.type == TransportEvent::kDisconnect)
     {
+        mHelloWait.erase(e.peer);
         const int slot = SlotOfPeer(e.peer);
         if (slot >= 0)
         {
@@ -797,7 +827,7 @@ void net::Server::OnCommand(int slot, BitReader& r)
         ReportSent(slot, text);
         return;
     }
-    printf("net: player %d (%s): %s\n", slot, mSlots[slot].name.c_str(), text.c_str());
+    printf("net: player %d (%s): %s\n", slot, mSlots[slot].name.c_str(), Printable(text).c_str());
     RoundActions actions;
     mRounds.Command(mTick, slot, text, mRoundPlayers, actions);
     Carry(actions);

@@ -3790,6 +3790,13 @@ const char_type* sound_obj::GetFileName(const char_type* pStr)
         {
             break;
         }
+#if defined(GTA2_PORT)
+        // Port: a style name is cut to the buffer's size (it comes from the network).
+        if (src_idx == GTA2_COUNTOF(sSoundFileName) - 1)
+        {
+            break;
+        }
+#endif
         sSoundFileName[src_idx] = pTmp[src_idx];
         src_idx++;
     }

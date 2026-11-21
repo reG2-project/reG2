@@ -586,7 +586,15 @@ void ScriptManager::GetScrFileName()
         {
             if (pSlashPos[lenAfterSlash] == '.')
             {
+#if defined(GTA2_PORT)
+                // Port: bounded by mBasePointers (the name comes from the network); the original's longest names
+                // ("Industrial-6P") already reach the unused bytes before it.
+                const u32 room = reinterpret_cast<char_type*>(mBasePointers) - mScrFileName;
+                memset(mScrFileName, 0, room);
+                memcpy(mScrFileName, pSlashPos, lenAfterSlash < room - 1 ? lenAfterSlash : room - 1);
+#else
                 strncpy(mScrFileName, pSlashPos, lenAfterSlash);
+#endif
                 return;
             }
             lenAfterSlash--;

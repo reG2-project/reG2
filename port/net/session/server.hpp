@@ -124,6 +124,7 @@ class Server
     std::unique_ptr<Transport> mTransport;
     std::vector<Slot> mSlots;
     std::vector<TransportEvent> mPending; // what Idle polled, for the next frame
+    std::unordered_map<uint32_t, long long> mHelloWait; // peers connected that haven't said hello: since when (ms)
     uint32_t mTick = 0;
     bool mStarted = false;
     uint32_t mGameStartTick = 0; // the tick the running game started at: its snapshots' first

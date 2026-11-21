@@ -152,6 +152,17 @@ class EnetTransport : public net::Transport
 };
 } // namespace
 
+namespace
+{
+// ENet's defaults take 32 MB packets and 32 MB waiting per peer: a message here is at most a few kB (a welcome, a
+// snapshot's parts), so a peer sending more is refused before it costs memory
+void Limit(ENetHost* host)
+{
+    host->maximumPacketSize = net::kMaxPacket;
+    host->maximumWaitingData = 4 * net::kMaxPacket;
+}
+} // namespace
+
 net::Transport* net::CreateServerTransport(uint16_t port, uint32_t maxPeers, std::string* error)
 {
     if (!Init(error))
@@ -167,6 +178,7 @@ net::Transport* net::CreateServerTransport(uint16_t port, uint32_t maxPeers, std
         *error = "can't listen on port " + std::to_string(port);
         return NULL;
     }
+    Limit(host);
     return new EnetTransport(host);
 }
 
@@ -182,6 +194,7 @@ net::Transport* net::CreateClientTransport(const char* hostName, uint16_t port, 
         *error = "can't create a client host";
         return NULL;
     }
+    Limit(host);
     // A name is looked up once: a lookup blocks the frame (up to the resolver's timeout while the network is down), and
     // a client reconnects every 3 s during an outage (Client::Reconnect)
     static std::unordered_map<std::string, enet_uint32> sResolved;

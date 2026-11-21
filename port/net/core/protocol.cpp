@@ -1,6 +1,7 @@
 // port/net core: see protocol.hpp.
 #include "protocol.hpp"
 #include <ctype.h>
+#include <string.h>
 
 namespace
 {
@@ -70,6 +71,68 @@ std::string net::PlayerName(const std::string& asked, const std::vector<std::str
             return name;
         }
     }
+}
+
+std::string net::Printable(const std::string& s)
+{
+    std::string out = s;
+    for (char& c : out)
+    {
+        c = c >= ' ' && c <= '~' ? c : '?';
+    }
+    return out;
+}
+
+bool net::BareFileName(const std::string& name, const char* ext)
+{
+    const size_t extLen = strlen(ext);
+    if (name.size() <= extLen || name.size() > kMaxFileName + extLen)
+    {
+        return false;
+    }
+    const size_t base = name.size() - extLen;
+    for (size_t i = 0; i < base; i++)
+    {
+        const char c = name[i];
+        if (!isalnum((unsigned char)c) && c != '_' && c != '-')
+        {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < extLen; i++)
+    {
+        if (tolower((unsigned char)name[base + i]) != tolower((unsigned char)ext[i]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string net::BadMapName(const std::string& map, const std::string& gmp, const std::string& sty, const std::string& scr)
+{
+    return !BareFileName(map, "")      ? "map"
+           : !BareFileName(gmp, ".gmp") ? "gmp"
+           : !BareFileName(sty, ".sty") ? "sty"
+           : !BareFileName(scr, ".scr") ? "scr"
+                                        : "";
+}
+
+std::string net::BadMapName(const Welcome& m)
+{
+    const std::string bad = BadMapName(m.map, m.gmp, m.sty, m.scr);
+    if (!bad.empty())
+    {
+        return bad;
+    }
+    for (const std::string& name : m.maps)
+    {
+        if (!BareFileName(name, ""))
+        {
+            return "vote map";
+        }
+    }
+    return "";
 }
 
 void net::WriteHello(BitWriter& w, const Hello& m)

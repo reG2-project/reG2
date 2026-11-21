@@ -2,6 +2,7 @@
 // and the server's put into a client's game: health, deaths, weapons, power-ups, its car, its place.
 #include "internal.hpp"
 #include "world.hpp"
+#include "../core/protocol.hpp"
 #include "dev/dev.hpp"
 #include "port/src/rand/owner.hpp"
 #include "port/src/net_hooks.hpp"
@@ -165,7 +166,7 @@ void UnpackChat(Player* p, const net::EntityState& e)
         {
             line += (char)text[k];
         }
-        printf("net: chat, %s: %s\n", NarrowName(p).c_str(), line.c_str()); // the log's copy of the line as typed
+        printf("net: chat, %s: %s\n", net::Printable(NarrowName(p)).c_str(), net::Printable(line).c_str()); // the log's copy of the line as typed
     }
     p->mIsChatting = (char_type)chatting;
     memcpy(p->mChatText, text, (n + 1) * sizeof(s16));

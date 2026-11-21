@@ -8,9 +8,15 @@
 
 namespace
 {
-// data/<name>.mmp's files into <g> ([MapFiles] GMPFile, STYFile, SCRFile); false: no such map
+// data/<name>.mmp's files into <g> ([MapFiles] GMPFile, STYFile, SCRFile); false: no such map, or one whose names a
+// client would refuse (net::BareFileName), printed
 bool ReadMmp(const std::string& name, net::engine::NetworkGame& g)
 {
+    if (!net::BareFileName(name, ""))
+    {
+        fprintf(stderr, "net: %s: a map's name is letters, digits, - and _ (at most %u)\n", name.c_str(), (unsigned)net::kMaxFileName);
+        return false;
+    }
     FILE* f = fopen(("data/" + name + ".mmp").c_str(), "r");
     if (!f)
     {
@@ -37,12 +43,27 @@ bool ReadMmp(const std::string& name, net::engine::NetworkGame& g)
         }
     }
     fclose(f);
-    return !g.gmp.empty() && !g.sty.empty() && !g.scr.empty();
+    if (g.gmp.empty() || g.sty.empty() || g.scr.empty())
+    {
+        return false;
+    }
+    const std::string bad = net::BadMapName(name, g.gmp, g.sty, g.scr);
+    if (!bad.empty())
+    {
+        fprintf(stderr, "net: data/%s.mmp: its %s file isn't a plain file name in data/ (letters, digits, - and _, at most %u, and its extension)\n",
+                name.c_str(), bad.c_str(), (unsigned)net::kMaxFileName);
+        return false;
+    }
+    return true;
 }
 } // namespace
 
 std::string net::MapTitle(const std::string& name)
 {
+    if (!BareFileName(name, ""))
+    {
+        return name;
+    }
     FILE* f = fopen(("data/" + name + ".mmp").c_str(), "r");
     if (!f)
     {

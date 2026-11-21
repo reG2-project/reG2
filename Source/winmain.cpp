@@ -2726,12 +2726,22 @@ EXPORT bool __stdcall Start_NetworkGame(HINSTANCE hInstance)
         networkUi.CopyGameSettings(&gNetworkGameSettings);
 
         char_type path[MAX_PATH];
+#if defined(GTA2_PORT)
+        // Port: bounded, as the names come from the network.
+        snprintf(path, sizeof(path), "data\\%s", networkUi.GetMapName());
+        gGameSession.SetMapName(path);
+        snprintf(path, sizeof(path), "data\\%s", networkUi.GetMapStyName());
+        gGameSession.SetStyleName(path);
+        snprintf(path, sizeof(path), "data\\%s", networkUi.GetMapScrName());
+        gGameSession.SetScriptName(path);
+#else
         wsprintfA(path, "data\\%s", networkUi.GetMapName());
         gGameSession.SetMapName(path);
         wsprintfA(path, "data\\%s", networkUi.GetMapStyName());
         gGameSession.SetStyleName(path);
         wsprintfA(path, "data\\%s", networkUi.GetMapScrName());
         gGameSession.SetScriptName(path);
+#endif
 
         gGameSession.SetMultiplayerParams(gNetworkGameSettings.mGameType,
                                                            gNetworkGameSettings.mFragLimit,

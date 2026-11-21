@@ -84,4 +84,9 @@ void net::engine::ApplyCarAi(Car* car, const EntityState& e)
     ApplyMembers(a, kValues, kCount, e, gFirst + 1);
     a->mCarInCollision = refs[0];
     a->mYieldToCar = refs[1];
+    // A collision with no car to have collided with: CarAI::ManageCollisions reads it unchecked (the server never has one)
+    if (!a->mCarInCollision)
+    {
+        a->mBf24.bCollidedWithCar = 0;
+    }
 }

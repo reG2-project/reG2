@@ -89,6 +89,10 @@ inline float Blocks(int32_t raw)
 }
 // Every player, car, ped, pickup and train
 void Capture(Snapshot& out);
+// A snapshot from the server made safe for the game, before anything uses it (sanitize.cpp): each field into its valid
+// range, a changed one printed as a CHECK line. SnapshotClamps counts the fields changed so far
+void SanitizeSnapshot(Snapshot& snap);
+int SnapshotClamps();
 // Puts a snapshot's players, cars, peds and pickups into this game
 void Apply(const Snapshot& snap);
 // The scores (frags, points) of a snapshot's players: before a resimulation, and after it so the server's count is shown

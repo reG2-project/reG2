@@ -133,6 +133,21 @@ void PlaceWagons(Train* t)
 }
 
 int gMismatched; // for the log: trains this game has otherwise
+
+// A train's place on a railway, with a block under it, and within 16 blocks of where it is here: its wagons are
+// placed along the rails from it (Map_0x370::SnapZToRailway and AdvanceAlongRailway read the blocks unchecked)
+bool OnRails(const Train* t, const net::EntityState& e)
+{
+    using namespace net::engine;
+    const Fix16 x = Raw(e.f[kTrainX]), y = Raw(e.f[kTrainY]), z = Raw(e.f[kTrainZ]);
+    const Sprite* lead = t->mCarriages[0]->mCarSprite;
+    if (Fix16::MaxAbsDistance(lead->mXy.x, lead->mXy.y, x, y) > Fix16(16))
+    {
+        return false;
+    }
+    s32 railZ = 0;
+    return gMap_0x370->FindRailwayAtCoord(x.ToInt(), y.ToInt(), railZ) && gMap_0x370->GetBlock(x.ToInt(), y.ToInt(), (z - Fix16(1)).ToInt());
+}
 } // namespace
 
 void net::engine::CaptureTrains(Snapshot& out)
@@ -192,7 +207,7 @@ bool net::engine::ApplyTrain(const EntityState& e, std::vector<std::pair<uint32_
 {
     carriages.clear();
     Train* t = LiveTrain((int)(e.id - kTrainIdBase));
-    if (!t || t->mWagonCount != e.f[kTrainWagons] || !MatchReversed(t, e.f[kTrainReversed] != 0))
+    if (!t || t->mWagonCount != e.f[kTrainWagons] || !MatchReversed(t, e.f[kTrainReversed] != 0) || !OnRails(t, e))
     {
         gMismatched++;
         return false;
@@ -211,13 +226,16 @@ bool net::engine::ApplyTrain(const EntityState& e, std::vector<std::pair<uint32_
     t->mPassengersFleeing = e.f[kTrainFleeing] != 0;
     t->mPassengerTimer = (char_type)e.f[kTrainPassengerTimer];
     t->mPassengerCount = (char_type)e.f[kTrainPassengerCount];
+    // A train station only (the stop phases read its points); the train it says stopped there, a live one
     const int station = e.f[kTrainStation] - 1;
-    t->mStation = station >= 0 && station < kStations ? &gPublicTransport_181C->mStations[station] : NULL;
+    if (station >= 0 && station < kStations && gPublicTransport_181C->mStations[station].mStationType == 2)
+    {
+        t->mStation = &gPublicTransport_181C->mStations[station];
+    }
     if (TrainStation* s = t->mStation)
     {
-        const int stopped = e.f[kTrainStopped] - 1;
         s->mPlatformState = e.f[kTrainPlatform];
-        s->mpStoppedTrain = stopped >= 0 && stopped < kTrains ? &gPublicTransport_181C->mTrainArray[stopped] : NULL;
+        s->mpStoppedTrain = LiveTrain(e.f[kTrainStopped] - 1);
     }
     for (int k = 0; k < kTrainCarriages; k++)
     {

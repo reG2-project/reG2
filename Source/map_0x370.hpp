@@ -159,6 +159,12 @@ struct gmp_compressed_map_32
     // 9.6f 0x42A830
     u32* get_base(s32 y, s32 x)
     {
+#if defined(GTA2_PORT)
+        // Port: a lookup off the map reads its edge column, not memory before or after the map: what moves there in a
+        // network game is the server's to say (port/docs/netcode.md, "Security").
+        y = y < 0 ? 0 : y > 255 ? 255 : y;
+        x = x < 0 ? 0 : x > 255 ? 255 : x;
+#endif
         return &mBase[y][x];
     }
 };

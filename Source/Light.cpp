@@ -32,10 +32,25 @@ Light::~Light()
     mpGridNext = NULL;
 }
 
+#if defined(GTA2_PORT)
+// Port: gLightGrid's cell of a block, one on the map's edge for a block off it (a light on what a network game's state
+// put there): never one before or after the grid.
+static u32 PortLightCell(s32 x, s32 y)
+{
+    x = x < 0 ? 0 : x > 255 ? 255 : x;
+    y = y < 0 ? 0 : y > 255 ? 255 : y;
+    return (x >> 2) + (y >> 2) * 64;
+}
+#endif
+
 MATCH_FUNC(0x4D6D70)
 void Light::AddToGrid()
 {
+#if defined(GTA2_PORT)
+    u32 cell_idx = PortLightCell(mX.ToInt(), mY.ToInt());
+#else
     u32 cell_idx = (mX.ToInt() >> 2) + ((mY.ToInt() >> 2) * 64);
+#endif
     Light* pFirst = gLightGrid[cell_idx];
     
     if (!pFirst)
@@ -63,7 +78,11 @@ Light* Light::RemoveFromGrid()
     }
     else
     {
+#if defined(GTA2_PORT)
+        gLightGrid[PortLightCell(mX.ToInt(), mY.ToInt())] = mpGridNext; // Port: as AddToGrid
+#else
         *(&gLightGrid[64 * (mY.ToInt() >> 2)] + (mX.ToInt() >> 2)) = mpGridNext;
+#endif
     }
 
     Light* pNext = mpGridNext;

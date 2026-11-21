@@ -40,6 +40,11 @@ const net::SessionEnv& net::Env()
         e.say = getenv("GTA2_NET_SAY");
         e.botVoteMap2 = getenv("GTA2_NET_BOTMAP2") != NULL;
         e.testWanted = getenv("GTA2_NET_TESTWANTED");
+        e.fuzz = 0, e.fuzzRate = 20;
+        if (const char* f = getenv("GTA2_NET_FUZZ"))
+        {
+            sscanf(f, "%u:%u", &e.fuzz, &e.fuzzRate);
+        }
         return e;
     }();
     return sEnv;

@@ -264,6 +264,7 @@ void CaptureCar(Car* c, Snapshot& out);
 bool CarHasPhysics(const EntityState& e); // a car entity's physics is there (awake): not all zeros
 Car* TowedTrailer(const Car* cab); // the trailer a cab tows (Car::mpTrailer), NULL: none
 void ApplyTrailer(Car* cab, const EntityState& e); // hitched or not as the server has it
+bool ObjectModelUsable(int model); // an object model the game has a definition for (sanitize.cpp)
 void SetCarPhysics(Car* car, const EntityState& e); // the physics the snapshot has for it, after MoveCar
 // Whether it has exploded (or is burning out); its state as the server has it: an explosion the server had is carried
 // out (the game's own), damage, dents, lights, horn and colour are set. False: it is a wreck here and not there (it has

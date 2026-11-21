@@ -336,6 +336,33 @@ so `--replay <file>` plays the session again without a server, tick for tick, as
 about 2 s, the same every time. **F12, or the key under Esc, marks a moment** in play: the client and its replay print
 `net: mark <n> at frame <f>`, so a bug seen in play is "the last session, mark 2".
 
+## Security
+
+What a network game trusts, and what it doesn't:
+
+- **Not encrypted, not authenticated**: ENet sends everything in the clear, and anyone on the path (the same Wi-Fi, a
+  LAN party, a VPN) can read the chat and answer as the server. Play with people and networks you trust.
+- **A map pack is like an executable mod**: the game's loaders (GMP, STY, SCR) are the 1999 originals and trust every
+  size, count and offset in their files, so a crafted map can run code on the machine that loads it. Install only map
+  packs from people you trust. A server sends no files: it only names files the player has in `data/`.
+- **The name rule**: a file name from the network (the welcome's and a map change's map, gmp, sty and scr, the vote's
+  maps, a recording's) is taken only as a bare name, `[A-Za-z0-9_-]{1,20}` and its extension (`.gmp`, `.sty`, `.scr`;
+  none for a map's `.mmp` name), any case; otherwise the join, map change or replay is refused with which name is
+  wrong (`BareFileName`, `core/protocol.cpp`). A server checks its own `.mmp` files the same way at its start. The
+  game's own copies of those names are bounded in port builds too (`sound_obj::GetFileName`, `LoadWavSdtData`,
+  `ScriptManager::GetScrFileName`, `Start_NetworkGame`), and port builds have stack canaries.
+- **Snapshots**: a client puts every field the game uses as an index, a table's entry, an angle into the sine table,
+  a place it looks the map up at or a count of a fixed array into its valid range before anything uses it
+  (`engine/sanitize.cpp`; a changed field is a `net: CHECK` line, as a real server never sends one), and refuses at
+  the place it is applied what needs the game to check: a car model without a `car_info`, a remap beyond the style's,
+  a trailer the game wouldn't hitch, an object without a definition, a station that isn't a train's, a ped state whose
+  objective lacks its target, a carjacking animation on foot. In port builds the map's lookups stay on the map
+  (`Map_0x370`'s `get_base`). `port/net/scripts/fuzz.sh` plays games whose client turns random fields of each
+  snapshot into random values (`GTA2_NET_FUZZ`), best under AddressSanitizer.
+- **Text** a peer sent goes to the terminal and the log as printable ASCII, anything else a `?` (`Printable`).
+- **The transport**: 64 KB packets at most (ENet's `maximumPacketSize`, 32 MB by default), and a connection that
+  says no hello within 10 s is dropped.
+
 ## Bots
 
 Bots are players whose input comes from a brain (`session/bot.hpp`), on the same path as a person's. A brain sees a
@@ -463,6 +490,7 @@ client runs reG2's frame loop and interpolation ("The game loop").
 |---|---|---|
 | Unit tests | `ctest --test-dir build_mac -L net`; without the game or SDL3: `cmake -S port -B build_nettests -G Ninja -DGTA2_GAME=OFF` (with UBSan: `-DCMAKE_CXX_FLAGS=-fsanitize=undefined -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=undefined`), then `ninja` and `ctest` there | the core's coding, the transport over loopback, the bots' navigation, the round flow |
 | The network check | `port/net/scripts/net_check.sh [--quick] [step...]` (`BUILD=<cmake build folder>`, `build_mac` by default; `GAME=<game folder>`, `$BUILD/game` by default), about 6 minutes | PASS or FAIL per step, below |
+| The fuzz test | `port/net/scripts/fuzz.sh [-s seconds] [-r per mille] [-p map] [seed...]` (`CLIENT=<an AddressSanitizer build's reg2>`), a minute a seed | no crash with random snapshot fields ("Security") |
 | The stress run | `port/net/scripts/stress.sh [-m minutes] [-n servers] [-s speed] [-p map] [-c seconds] [-g]`, 10 minutes by default | crashes and `CHECK` lines per process, below |
 
 `net_check.sh`'s steps, on the macOS build; logs and fixtures in `build_mac/net_check/`:
@@ -553,6 +581,7 @@ off by default:
 | `GTA2_NET_BOTCARFIRE=1` | both | bots fire their car weapons while driving (a second in three) |
 | `GTA2_NET_BOTTURRET=1` | both | bots turn their roof turret while driving (a second in three) |
 | `GTA2_NET_SAY=<frame>:<command>;...` | client | commands sent at those frames |
+| `GTA2_NET_FUZZ=<seed>[:<per mille>]` | client | that many of each snapshot's fields (20) turned into random values of their width (the fuzz test) |
 | `GTA2_SIMBENCH=...`, `GTA2_SIMBENCH_FILL=<cars>`, `GTA2_NETEVAL=...`, `GTA2_OFFLINE_MP=...` | game | the measurements below (`port/net/eval`, `engine/netplay.cpp`) |
 
 `GTA2_SPEED=<k>` runs the game's clock k times faster, `GTA2_HEADLESS=1` without window content, sound or gamepads
@@ -597,7 +626,11 @@ own (`single`) and rollback in scenes with explosions (`explode`).
   literal 6s, a `u8` bitmask, the results screen, colours, the scripts' six `PLAYER_PED`s). A port-only cap with a
   runtime count covers most; spawn points beyond the scripts' from the restart zones.
 - **Modes** beyond the game's frags, points and tag (team deathmatch, CTF) as a mode module, reusing the game's assets.
-- **Hardening**: rate limits, fuzzed input.
+- **Hardening**: the game's loaders (GMP, STY, SCR) on a hostile map pack: port-only checks in their write paths
+  first (a sprite delta's apply, `LoadMissionScript`, `LoadStringTbl`), then a validator; rate limits on a server;
+  the update check runs `curl` by name, which Windows looks for in the game's folder first (its full path,
+  `%SystemRoot%\System32\curl.exe`, would close it); a ped's objectives beyond the ones checked whose target the
+  game reads unchecked; a remote player's state against its own objectives.
 - **Tick rates above 30 Hz** would need every per-tick constant and timer scaled (a project of its own, port-only).
 - **Whole-map simulation**: a server could keep everything everywhere, with a cleanup policy as a server setting
   (none, wrecks only, the game's own). Every cleanup and spawn decision goes through `Game::IsSpriteInPlayerBounds`

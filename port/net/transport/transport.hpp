@@ -38,6 +38,10 @@ class Transport
     virtual uint32_t RoundTripMs(uint32_t peer) const = 0;
 };
 
+// The largest packet a host sends or takes (64 KB): ENet drops a bigger one it receives, and a peer's data waiting to be
+// read is capped at four of them
+const size_t kMaxPacket = 64 * 1024;
+
 // Listens on <port>; nullptr and <error> on failure
 Transport* CreateServerTransport(uint16_t port, uint32_t maxPeers, std::string* error);
 // A link's conditions for tests (--lag, --jitter, --loss, --lossburst, --spike): a delay with jitter, a part of the

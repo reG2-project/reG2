@@ -33,12 +33,16 @@ void SpriteRenderer::DisplayAdd(Sprite* pSprite)
     if (pSprite->mZpos >= kFpOne_67B434)
     {
 #if defined(GTA2_PORT)
-        // Port: a sprite at z >= 8 (a car thrown off a roof, a corrected network state) gives a layer past mLayers,
-        // read out of bounds by the original too. It goes on the top layer.
+        // Port: a sprite's layer outside mLayers (z of 8 and up, or so high its char wraps: a car thrown off a roof, a
+        // network game's state), read out of bounds by the original too, is the nearest one.
         s32 layer = pSprite->ComputeZLayer();
         if (layer > k_num_layers - 1)
         {
             layer = k_num_layers - 1;
+        }
+        else if (layer < 0)
+        {
+            layer = 0;
         }
         mLayers[layer]->AddSprite(pSprite);
 #else

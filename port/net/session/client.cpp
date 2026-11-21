@@ -30,6 +30,18 @@ long long NowMs()
 
 } // namespace
 
+// The names a server (or a recording) gives its map's files: bare names in data/ only (BareFileName), else <error> says
+// which, and nothing is opened by them
+static bool PlainNames(const std::string& bad, const char* from, std::string* error)
+{
+    if (bad.empty())
+    {
+        return true;
+    }
+    *error = std::string(from) + "'s " + bad + " name isn't a plain file name in data/: refused";
+    return false;
+}
+
 void net::CorrectionStats::Print(uint32_t frame, const char* what) const
 {
     printf("net: frame %u, %s' corrections: %u, %.2f blocks on average, up to %.2f, %u over 2 blocks (jumped)\n", frame, what, count,
@@ -74,6 +86,10 @@ bool net::Client::StartReplay(const char* path, engine::NetworkGame* pGame, std:
     if (!mReplay->Open(path, &welcome))
     {
         *error = std::string("not a recording: ") + path;
+        return false;
+    }
+    if (!PlainNames(BadMapName(welcome), "the recording", error))
+    {
         return false;
     }
     Welcomed(welcome, pGame);
@@ -193,7 +209,7 @@ bool net::Client::OnWelcome(const TransportEvent& e, engine::NetworkGame* pGame,
     {
         Reject reject;
         ReadReject(r, reject);
-        *error = reject.reason;
+        *error = Printable(reject.reason);
         return false;
     }
     Welcome welcome;
@@ -202,7 +218,7 @@ bool net::Client::OnWelcome(const TransportEvent& e, engine::NetworkGame* pGame,
         *error = "a welcome we don't understand";
         return false;
     }
-    if (!HaveMap(welcome.gmp, welcome.sty, welcome.scr, error) || !SameMap(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, error))
+    if (!PlainNames(BadMapName(welcome), "the server", error) || !HaveMap(welcome.gmp, welcome.sty, welcome.scr, error) || !SameMap(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, error))
     {
         SendLeave(*error);
         Leave();
@@ -295,6 +311,41 @@ void net::Client::ReportBadEntities(const SnapshotHeader& h, const Snapshot& bas
     }
 }
 
+// The fuzz test (GTA2_NET_FUZZ): what a hostile server could send in each field, its width's every value, the edges
+// most often
+static void Fuzz(net::Snapshot& snap)
+{
+    using namespace net;
+    static uint32_t sRng = Env().fuzz;
+    auto next = [] {
+        sRng ^= sRng << 13;
+        sRng ^= sRng >> 17;
+        sRng ^= sRng << 5;
+        return sRng;
+    };
+    for (EntityState& e : snap.entities)
+    {
+        const EntityType& t = engine::NetSchema().types[e.type];
+        for (size_t i = 0; i < t.fields.size(); i++)
+        {
+            if (next() % 1000 >= Env().fuzzRate)
+            {
+                continue;
+            }
+            const FieldDesc& d = t.fields[i];
+            const uint32_t mask = d.bits >= 32 ? 0xFFFFFFFFu : (1u << d.bits) - 1;
+            const uint32_t pick = next() % 6;
+            uint32_t v = pick == 0 ? 0 : pick == 1 ? mask : pick == 2 ? mask >> 1 : pick == 3 ? (mask >> 1) + 1 : pick == 4 ? e.f[i] + 1 : next();
+            v &= mask;
+            if (d.isSigned && d.bits < 32 && (v >> (d.bits - 1)) & 1)
+            {
+                v |= ~mask; // as the reader sign-extends
+            }
+            e.f[i] = (int32_t)v;
+        }
+    }
+}
+
 void net::Client::OnSnapshot(BitReader& r)
 {
     SnapshotHeader h;
@@ -322,6 +373,11 @@ void net::Client::OnSnapshot(BitReader& r)
     {
         ReportBadEntities(h, *base, snap, check);
     }
+    if (Env().fuzz)
+    {
+        Fuzz(snap);
+    }
+    engine::SanitizeSnapshot(snap);
     snap.tick = h.tick;
     mReceived[h.tick % kRing] = snap;
     mForwarded[h.tick % kRing] = h.forwarded;
@@ -834,21 +890,21 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
                 if (ReadText(r, text))
                 {
                     engine::ShowHudMessage(text.c_str());
-                    printf("net: frame %u, notice: %s\n", mFrame, text.c_str());
+                    printf("net: frame %u, notice: %s\n", mFrame, Printable(text).c_str());
                 }
             }
             else if (type == kMsgReject && mConnected && ReadReject(r, reject))
             {
-                printf("net: frame %u, the server put us out: %s\n", mFrame, reject.reason.c_str());
+                printf("net: frame %u, the server put us out: %s\n", mFrame, Printable(reject.reason).c_str());
                 const bool shown = reject.reason == "kicked by vote" || reject.reason == "the server closed";
                 LeaveToMenu(shown ? reject.reason.c_str() : "the server put us out");
             }
             else if (type == kMsgReject && !mConnected && ReadReject(r, reject))
             {
-                printf("net: frame %u, the server won't have us back: %s\n", mFrame, reject.reason.c_str());
+                printf("net: frame %u, the server won't have us back: %s\n", mFrame, Printable(reject.reason).c_str());
                 if (reject.reason != "the server is full")
                 {
-                    LeaveToMenu(reject.reason.c_str()); // another build, kicked: no use trying again
+                    LeaveToMenu(Printable(reject.reason).c_str()); // another build, kicked: no use trying again
                     return;
                 }
                 mTransport.reset(); // and try again: it may be full only for now
@@ -896,7 +952,7 @@ bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, con
                              int game, int pauseTicks)
 {
     std::string missing;
-    if (!HaveMap(gmp, sty, scr, &missing) || !SameMap(map, gmp, sty, scr, print, &missing))
+    if (!PlainNames(BadMapName(map, gmp, sty, scr), "the server", &missing) || !HaveMap(gmp, sty, scr, &missing) || !SameMap(map, gmp, sty, scr, print, &missing))
     {
         printf("net: frame %u, %s\n", mFrame, missing.c_str());
         SendLeave(missing);

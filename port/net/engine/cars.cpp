@@ -224,6 +224,12 @@ bool net::engine::SetCarState(Car* car, const EntityState& e, bool fresh)
         d.fireAbove += car->mDamageLevel > level;
         d.fireBelow += car->mDamageLevel < level;
     }
+    // A model whose wreck the style has (Car::TurnToWreck reads its car_info): the game's cars all do
+    const int wreck = gGtx_0x106C->get_car_info_5AA3B0(car->mCarInfoIdx)->wreck + car_model_enum::WRECK0;
+    if (there && !here && (wreck > 255 || !gGtx_0x106C->does_car_exist((u8)wreck)))
+    {
+        return false;
+    }
     if (there && !here)
     {
         if (fresh)
@@ -278,7 +284,8 @@ bool net::engine::SetCarState(Car* car, const EntityState& e, bool fresh)
     }
     // Its lights and horn: a siren switched with the horn key (Car::HandleSpecialInput counts the horn down) came
     // on again here after the server had it off
-    car->mLightFlags = (char_type)e.f[kCarLights];
+    // Emergency lights only on a car with the roof lights they flash (Car::UpdateRoofLightFlasher reads those)
+    car->mLightFlags = (char_type)(car->HasEmergencyLights() ? e.f[kCarLights] : e.f[kCarLights] & ~4);
     car->mFlashPhaseCounter = (char_type)e.f[kCarFlash];
     // A train's horn is this machine's: it honks when the local player is near (Car::TrainUpdate), the server's slot 0 there
     if (!car->IsTrainModel())
@@ -349,7 +356,10 @@ void net::engine::ApplyTrailer(Car* cab, const EntityState& e)
     {
         cab->DetachTrailer();
     }
-    if (want && !want->mpTrailer && want != cab)
+    // Only a truck cab hitches, only a trailer, with a Trailer left in the pool (Allocate takes one unchecked): the
+    // game's own rule (Car::TryHitchTrailer)
+    if (want && !want->mpTrailer && want != cab && !cab->mpTrailer && cab->IsTruckCab() && want->IsTrailerInfo() && gTrailerPool &&
+        gTrailerPool->mPool.mpHead)
     {
         cab->AttachTrailer(want);
     }

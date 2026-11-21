@@ -444,6 +444,12 @@ void SpriteGrid::AddToDrawList(s32 left, s32 right, s32 top, s32 bottom)
 MATCH_FUNC(0x4782c0)
 void SpriteGrid::DoRemove(s32 x_pos, s32 y_pos, Sprite* pSprite)
 {
+#if defined(GTA2_PORT)
+    // Port: a sprite off the map (moved there by a network game's state) is kept in its edge's cell, not in a row
+    // before or after mRows (Fix16_Rect::DoSetCurrentRect clamps the regions the same way).
+    x_pos = x_pos < 0 ? 0 : x_pos > 255 ? 255 : x_pos;
+    y_pos = y_pos < 0 ? 0 : y_pos > 255 ? 255 : y_pos;
+#endif
     GridCell* pPrevCell = NULL;
     GridSpriteLink* pPrevLink = NULL;
 
@@ -557,6 +563,11 @@ void SpriteGrid::RemoveFromRowBuckets(s32 y_pos, Sprite* pSprite)
 MATCH_FUNC(0x478440)
 void SpriteGrid::AddToSingleBucketAt(s32 x_pos, s32 y_pos, Sprite* pSprite)
 {
+#if defined(GTA2_PORT)
+    // Port: as in DoRemove.
+    x_pos = x_pos < 0 ? 0 : x_pos > 255 ? 255 : x_pos;
+    y_pos = y_pos < 0 ? 0 : y_pos > 255 ? 255 : y_pos;
+#endif
     GridSpriteLink* pNewCollide = gGridSpriteLink_Pool->Allocate();
 
     pNewCollide->mpSprite = pSprite;

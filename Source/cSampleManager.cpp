@@ -1130,12 +1130,21 @@ bool cSampleManager::LoadWavSdtData(const char_type* pRawOrSdtName)
     char_type sdtName[80];
 
     mbLoaded = false;
+#if defined(GTA2_PORT)
+    // Port: bounded, as the style's name comes from the network; one too long opens nothing.
+    if (snprintf(rawName, sizeof(rawName), "data\\audio\\%s.RAW", pRawOrSdtName) >= (s32)sizeof(rawName))
+    {
+        return false;
+    }
+    snprintf(sdtName, sizeof(sdtName), "data\\audio\\%s.SDT", pRawOrSdtName);
+#else
     strcpy(rawName, "data\\audio\\");
     strcat(rawName, pRawOrSdtName);
     strcat(rawName, ".RAW");
     strcpy(sdtName, "data\\audio\\");
     strcat(sdtName, pRawOrSdtName);
     strcat(sdtName, ".SDT");
+#endif
     FILE* hRawFile = fopen(rawName, "rb");
     if (!hRawFile)
     {
