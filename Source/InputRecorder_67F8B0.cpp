@@ -15,6 +15,9 @@
 #include <time.h>
 #include "GameSession.hpp"
 #include "input_bits.hpp"
+#if defined(GTA2_PORT)
+#include "../port/src/net_hooks.hpp" // gPortServer
+#endif
 
 #define ATTRACT_COUNT 3
 
@@ -865,6 +868,13 @@ void InputRecorder_67F8B0::LoadReplayHeader(bool bLoadDebug)
 MATCH_FUNC(0x4ce650)
 void InputRecorder_67F8B0::VerifyAttractFilesExist()
 {
+#if defined(GTA2_PORT)
+    // Port: a dedicated server never plays the attract mode, nor needs its replays
+    if (gPortServer)
+    {
+        return;
+    }
+#endif
     const AttractFile* pAttractFile = &attractFiles_62083C[0];
     for (s32 i = 0; i < ATTRACT_COUNT; i++)
     {

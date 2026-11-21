@@ -29,7 +29,7 @@ struct DataCheck
     bool mMovie = false; // data/Movie/intro.bik
     std::vector<std::pair<const char*, bool>> mLanguages; // the game's five, and whether data/<code>.gxt is there
 };
-DataCheck CheckGameData(const fs::path& root);
+DataCheck CheckGameData(const fs::path& root, bool server = false); // server: a dedicated server's files only
 
 struct Progress
 {

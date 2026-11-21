@@ -14,16 +14,19 @@ namespace setup
 {
 namespace
 {
-// Enough to reach the menus and play the three cities; the rest of data/ is copied as found.
+// Enough to reach the menus and play the three cities; the rest of data/ is copied as found. The first kServerFiles are
+// all a dedicated server reads but its maps' (port/net/maps.cpp) and a language's .gxt.
 const char* const kEssential[] = {
-    "data/fstyle.sty", "data/wil.sty", "data/ste.sty", "data/bil.sty",
+    "data/fstyle.sty", "data/nyc.gci",
+    "data/wil.sty", "data/ste.sty", "data/bil.sty",
     "data/wil.gmp", "data/ste.gmp", "data/bil.gmp",
     "data/wil.scr", "data/ste.scr", "data/bil.scr",
-    "data/nyc.gci", "data/keyboard/eng_kb.cfg",
+    "data/keyboard/eng_kb.cfg",
     "data/audio/fstyle.sdt", "data/audio/fstyle.raw", "data/audio/wil.sdt", "data/audio/wil.raw",
     "data/audio/ste.sdt", "data/audio/ste.raw", "data/audio/bil.sdt", "data/audio/bil.raw",
     "data/frontend/1.tga", "data/frontend/2.tga", "data/frontend/3.tga", "data/frontend/mask.tga",
 };
+const size_t kServerFiles = 2;
 // At least one is essential: the game starts in one that is there.
 const std::pair<char, const char*> kLanguages[] = {{'e', "English"}, {'f', "French"}, {'g', "German"}, {'i', "Italian"}, {'s', "Spanish"}};
 
@@ -542,23 +545,23 @@ bool MoveInto(const fs::path& from, const fs::path& to, std::string* pError)
     return !ec;
 }
 
-// The data check, with has(rel) telling whether data/... is there.
-template <class Has> DataCheck CheckFiles(Has has)
+// The data check, with has(rel) telling whether data/... is there; a server's: no music, no movie.
+template <class Has> DataCheck CheckFiles(Has has, bool server = false)
 {
     DataCheck check;
-    for (const char* rel : kEssential)
+    for (size_t i = 0; i < (server ? kServerFiles : sizeof(kEssential) / sizeof(kEssential[0])); i++)
     {
-        if (!has(rel))
+        if (!has(kEssential[i]))
         {
-            check.mMissing.push_back(rel);
+            check.mMissing.push_back(kEssential[i]);
         }
     }
     for (const char* name : kMusic)
     {
-        check.mMusicTotal++;
-        check.mMusicFound += has(std::string(kMusicDir) + name + ".wav");
+        check.mMusicTotal += !server;
+        check.mMusicFound += !server && has(std::string(kMusicDir) + name + ".wav");
     }
-    check.mMovie = has(kMovie);
+    check.mMovie = !server && has(kMovie);
     bool anyLanguage = false;
     for (const auto& language : kLanguages)
     {
@@ -783,9 +786,9 @@ bool FindNoCase(const fs::path& root, const std::string& rel, fs::path* pFound)
     return true;
 }
 
-DataCheck CheckGameData(const fs::path& root)
+DataCheck CheckGameData(const fs::path& root, bool server)
 {
     fs::path found;
-    return CheckFiles([&](const std::string& rel) { return FindNoCase(root, rel, &found); });
+    return CheckFiles([&](const std::string& rel) { return FindNoCase(root, rel, &found); }, server);
 }
 } // namespace setup

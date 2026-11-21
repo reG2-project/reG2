@@ -216,7 +216,7 @@ void Report(const char* summary, const CONTEXT* pContext, const EXCEPTION_RECORD
     {
         snprintf(text, sizeof(text), "reG2 crashed (%s).\n\nNo log file could be written.", summary);
     }
-    if (!getenv("GTA2_NO_MESSAGEBOX"))
+    if (!port_NoMessageBox())
     {
         wchar_t wide[2048];
         if (MultiByteToWideChar(CP_UTF8, 0, text, -1, wide, 2048))

@@ -2,6 +2,9 @@
 #include "Function.hpp"
 #include "Globals.hpp"
 #include <stdio.h>
+#if defined(GTA2_PORT)
+#include "../port/src/net_hooks.hpp" // gPortServer
+#endif
 
 DEFINE_GLOBAL(cSampleManager, gSampManager, 0x6FFF00);
 
@@ -163,6 +166,13 @@ cSampleManager::cSampleManager()
     mbMusicFound = false;
 
     u32 driveLetter = 'C';
+#if defined(GTA2_PORT)
+    // Port: no music on a dedicated server, nor a look for it
+    if (gPortServer)
+    {
+        driveLetter = 'Z' + 1;
+    }
+#endif
     while (driveLetter <= 'Z')
     {
         char_type driveStr[2];

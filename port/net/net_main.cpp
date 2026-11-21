@@ -203,6 +203,11 @@ const std::string& NetMenu_DefaultName()
     return gMenuConfig.name;
 }
 
+void NetMain_PrintUsage()
+{
+    net::PrintUsage();
+}
+
 int NetMain_Init(std::vector<std::string>& args)
 {
     gPortLeaveNetworkGame = LeaveNetworkGame;

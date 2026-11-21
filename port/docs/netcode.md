@@ -35,6 +35,7 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 | Arena | `--arena brain,...` (bots on the server itself), `--ticks N` (the result printed and the server ended at tick N), `--seed N` |
 | Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` |
 | Either end | `--lag ms`, `--jitter ms`, `--loss %`, `--lossburst N`, `--spike ms:on:every`: a link conditioner on this end's sends (losses in bursts of N on average; ms more delay for `on` s every `every` s); `--mtu N`: the link's MTU (IP packets, 1280 by default, which fits the VPNs people play over: Tailscale 1280, WireGuard 1420, Hamachi 1404; 1428 the most) |
+| Any | `--data <folder>` (the game folder, or its `data/`: else `GTA2_DIR`...), `--help` |
 
 ## Hosting a game
 
@@ -58,6 +59,45 @@ On a LAN nobody forwards anything: the others join at the host's LAN address (`i
 host's firewall still letting UDP 27920 in. A player whose name is taken, empty or longer than 15 characters plays under
 one the server gives ("PLAYER 2"). A server that ends (its window closed, Ctrl-C, a stop signal) tells its players, who
 go back to the network page with "the server closed"; one started again starts a new game, which they join again.
+
+### A dedicated server on a Linux VPS
+
+A server is a plain command-line program: no window, no dialog, no sound and no setup. Its log goes to stderr (and to
+a file with `GTA2_LOG_FILE=<path>`; a fatal error also writes `reG2-server.log` next to the program), an error ends it
+with a non-zero exit code, and SIGINT or SIGTERM end it cleanly with 0, after telling its players. `reg2 --help` lists
+the options.
+
+- **The program**: the portable `reG2-linux-x86_64.tar.gz` (extract it, run `./reg2 --server ...`; it needs glibc 2.29
+  or later and none of the desktop libraries its README lists) or the AppImage (`./reG2-x86_64.AppImage --server ...`,
+  with `--appimage-extract-and-run` before `--server` where FUSE is missing). The client and the server must be the same
+  build.
+- **The data**: a server reads only `data/fstyle.sty`, `data/nyc.gci`, a language's `.gxt` (`data/e.gxt`) and, for each
+  map it plays, `data/<map>.mmp` and the `.gmp`, `.sty` and `.scr` files it names (without a rotation the vote offers
+  the six multiplayer maps whose files are there). No audio, music, movie, frontend images, keyboard files or attract
+  mode replays. The top-level files of an installed game's `data/` are all it needs, about 35 MB:
+  `rsync -a --exclude='*/' ~/.local/share/reG2/data/ vps:/srv/reg2/data/`.
+- **Where**: `--data /srv/reg2` (the folder holding `data/`, or `data/` itself) or `GTA2_DIR=/srv/reg2`; else the
+  current folder, the program's, then `~/.local/share/reG2/`. A missing file is named with the folder it was looked
+  for in. The server writes `player/` and `test/` there.
+- **The firewall**: UDP 27920 (or `--port`) in: `ufw allow 27920/udp`, or the provider's own firewall.
+
+A systemd unit, `/etc/systemd/system/reg2.service` (`systemctl enable --now reg2`, `journalctl -u reg2` for its log):
+
+```ini
+[Unit]
+Description=reG2 dedicated server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=reg2
+ExecStart=/opt/reg2/reg2 --server --data /srv/reg2 --maps downtown-6p,mp1-6p,industrial-6p --players 6
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
 
 ## Playing
 

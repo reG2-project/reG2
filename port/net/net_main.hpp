@@ -6,6 +6,7 @@
 // Takes the netcode's options out of <args>. 0: no network game; 1: start the network game (the caller adds the
 // game's -N); -1: an error, already printed
 int NetMain_Init(std::vector<std::string>& args);
+void NetMain_PrintUsage(); // --help: the command line
 
 // The frontend's network page (port/net/menu.cpp): a join in the background. NetMenu_Poll each frame: 1 welcomed (the
 // network game is set up: the frontend boots it), 0 not yet, -1 failed (<error> says why)

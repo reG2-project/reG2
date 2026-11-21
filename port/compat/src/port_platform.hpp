@@ -40,6 +40,8 @@ const SDL_DisplayMode* port_FullscreenMode();
 // GTA2_SPEED (the game's clock that many times faster) and GTA2_HEADLESS (no window content, sound or gamepads).
 double port_ClockSpeed();
 bool port_Headless();
+// Message boxes only logged (GTA2_NO_MESSAGEBOX, and always on a dedicated server).
+bool port_NoMessageBox();
 
 // Scripted key presses and exit (GTA2_INPUT, GTA2_EXIT_AT), checked as the message loop pumps.
 void port_InitTestInput();

@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <windows.h>
 #include "enums.hpp"
+#if defined(GTA2_PORT)
+#include "../port/src/net_hooks.hpp" // gPortServer
+#endif
 
 DEFINE_GLOBAL(KeyboardLayout*, gKeybrd_0x204, 0x6F52F4);
 
@@ -101,6 +104,13 @@ void KeyboardLayout::LoadKbCfg()
             break;
     }
 
+#if defined(GTA2_PORT)
+    // Port: a dedicated server has no keyboard, nor the layout file: its key names stay empty
+    if (gPortServer)
+    {
+        return;
+    }
+#endif
     FILE* hConfigFile = fopen(FileName, "rt");
     if (!hConfigFile)
     {

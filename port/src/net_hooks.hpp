@@ -26,6 +26,9 @@ extern bool gPortNetFrameLoop;
 // No audio device for the game: sound_obj then doesn't run at all. A network server's: nobody hears it, and its
 // listener follows slot 0's camera, whose ped (once that player left) can be any ped's, in any car
 extern bool gPortNoAudio;
+// A dedicated server (--server), known before anything runs (compat/src/main.cpp): no message box, no setup, and none of
+// the files only a player uses (the keyboard layout, the attract mode replays)
+extern bool gPortServer;
 // No pad vibration from the game's events (rumble.cpp): a network server's, whose local player is slot 0's remote one,
 // and a client's resimulation, whose hits and crashes were felt when those ticks were predicted
 extern bool gPortNoRumble;

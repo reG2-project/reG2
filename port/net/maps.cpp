@@ -1,6 +1,7 @@
 // port/net (port/docs/netcode.md, "Running"): see maps.hpp.
 #include "maps.hpp"
 #include "cmdline.hpp"
+#include <SDL3/SDL.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,9 +9,17 @@
 
 namespace
 {
-// data/<name>.mmp's files into <g> ([MapFiles] GMPFile, STYFile, SCRFile); false: no such map, or one whose names a
-// client would refuse (net::BareFileName), printed
-bool ReadMmp(const std::string& name, net::engine::NetworkGame& g)
+std::string GameFolder()
+{
+    char* dir = SDL_GetCurrentDirectory();
+    const std::string s = dir ? dir : "the game folder";
+    SDL_free(dir);
+    return s;
+}
+
+// data/<name>.mmp's files into <g> ([MapFiles] GMPFile, STYFile, SCRFile); false: no such map (printed if <required>),
+// one of its files missing, or names a client would refuse (net::BareFileName), printed
+bool ReadMmp(const std::string& name, net::engine::NetworkGame& g, bool required)
 {
     if (!net::BareFileName(name, ""))
     {
@@ -20,6 +29,10 @@ bool ReadMmp(const std::string& name, net::engine::NetworkGame& g)
     FILE* f = fopen(("data/" + name + ".mmp").c_str(), "r");
     if (!f)
     {
+        if (required)
+        {
+            fprintf(stderr, "net: no map data/%s.mmp in %s\n", name.c_str(), GameFolder().c_str());
+        }
         return false;
     }
     char line[512];
@@ -45,6 +58,7 @@ bool ReadMmp(const std::string& name, net::engine::NetworkGame& g)
     fclose(f);
     if (g.gmp.empty() || g.sty.empty() || g.scr.empty())
     {
+        fprintf(stderr, "net: data/%s.mmp in %s: no GMPFile, STYFile or SCRFile\n", name.c_str(), GameFolder().c_str());
         return false;
     }
     const std::string bad = net::BadMapName(name, g.gmp, g.sty, g.scr);
@@ -54,7 +68,21 @@ bool ReadMmp(const std::string& name, net::engine::NetworkGame& g)
                 name.c_str(), bad.c_str(), (unsigned)net::kMaxFileName);
         return false;
     }
-    return true;
+    bool found = true;
+    for (const std::string* file : {&g.gmp, &g.sty, &g.scr})
+    {
+        FILE* data = fopen(("data/" + *file).c_str(), "rb"); // the port's: whatever the case, as the game opens it
+        if (data)
+        {
+            fclose(data);
+        }
+        else
+        {
+            fprintf(stderr, "net: data/%s.mmp's data/%s isn't in %s\n", name.c_str(), file->c_str(), GameFolder().c_str());
+            found = false;
+        }
+    }
+    return found;
 }
 } // namespace
 
@@ -105,9 +133,8 @@ bool net::SetUpMaps(const std::string& firstMap, const std::string& maps, Server
     for (const std::string& name : maps.empty() ? std::vector<std::string>() : SplitCommas(maps))
     {
         engine::NetworkGame files;
-        if (!ReadMmp(name, files))
+        if (!ReadMmp(name, files, true))
         {
-            fprintf(stderr, "net: --maps: no data/%s.mmp\n", name.c_str());
             return false;
         }
         sc.maps.push_back(MapFiles{name, files.gmp, files.sty, files.scr});
@@ -116,9 +143,8 @@ bool net::SetUpMaps(const std::string& firstMap, const std::string& maps, Server
     {
         map = sc.maps[0].name;
     }
-    if (!ReadMmp(map, sc.game))
+    if (!ReadMmp(map, sc.game, true))
     {
-        fprintf(stderr, "net: --map must name a data/<map>.mmp (%s)\n", map.c_str());
         return false;
     }
     // What a vote chooses from: the rotation, else the game's multiplayer maps (those there are)
@@ -130,7 +156,7 @@ bool net::SetUpMaps(const std::string& firstMap, const std::string& maps, Server
         for (const char* name : {"mp1-6p", "mp2-6p", "mp5-6p", "downtown-6p", "industrial-6p", "res-6p"})
         {
             engine::NetworkGame files;
-            if (ReadMmp(name, files))
+            if (ReadMmp(name, files, false))
             {
                 sc.voteMaps.push_back(MapFiles{name, files.gmp, files.sty, files.scr});
             }

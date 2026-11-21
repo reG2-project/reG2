@@ -512,7 +512,7 @@ INT WINAPI MessageBoxA(HWND, LPCSTR text, LPCSTR caption, UINT type)
     SDL_Log("%s: %s", caption ? caption : "", text ? text : "");
     // The game's boxes are all errors, most of them fatal.
     const std::string shown = port_WithLogPath(text ? text : "");
-    if (!getenv("GTA2_NO_MESSAGEBOX"))
+    if (!port_NoMessageBox())
     {
         SDL_ShowSimpleMessageBox(flags, caption ? caption : "GTA2", shown.c_str(), NULL);
     }

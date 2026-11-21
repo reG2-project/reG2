@@ -5,6 +5,7 @@
 #include <shellapi.h>
 #include <SDL3/SDL.h>
 #include "port_platform.hpp"
+#include "../../src/net_hooks.hpp" // gPortServer
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -40,6 +41,11 @@ bool port_Headless()
 {
     static const bool sHeadless = SDL_getenv("GTA2_HEADLESS") != NULL; // SDL's: a server sets it (port/net/net_main.cpp)
     return sHeadless;
+}
+
+bool port_NoMessageBox()
+{
+    return gPortServer || getenv("GTA2_NO_MESSAGEBOX");
 }
 
 extern "C" {

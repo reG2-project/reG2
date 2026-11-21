@@ -15,9 +15,14 @@ else
     fi
 fi
 
-# The libraries SDL loads when it starts, from the loader's cache (ldconfig -p tags each with its ABI).
+# The libraries SDL loads when it starts, from the loader's cache (ldconfig -p tags each with its ABI). A dedicated
+# server uses none of them: no window, no sound.
+SERVER=
+for arg; do
+    [ "$arg" = --server ] && SERVER=1
+done
 LDCONFIG=$(PATH=$PATH:/sbin:/usr/sbin command -v ldconfig)
-if [ -n "$LDCONFIG" ] && CACHE=$("$LDCONFIG" -p 2> /dev/null); then
+if [ -z "$SERVER" ] && [ -n "$LDCONFIG" ] && CACHE=$("$LDCONFIG" -p 2> /dev/null); then
     has() {
         for lib; do
             echo "$CACHE" | grep -q "^[[:space:]]*$lib $TAG" && return 0

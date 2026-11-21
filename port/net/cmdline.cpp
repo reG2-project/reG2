@@ -1,28 +1,56 @@
-// port/net (port/docs/netcode.md, "Running"): the netcode's command line.
-//   --server [--port N] [--map <mmp>] [--players N] [--gametype 1-3] [--fraglimit N] [--timelimit min] [--tickms N]
-//            (the limits end a round: the round flow, session/round_flow.cpp; a points game's is money, 10000)
-//            [--minplayers N] [--warmup s] [--results s] [--votes start,map,kick] [--rounds on|off]  (the round flow)
-//            [--window]  (a server is headless unless it is watched in a window)
-//            [--maps <mmp>,<mmp>,...]  (a round on each in turn, the first instead of --map)
-//            [--interest blocks]  (how far around a client its snapshots reach: 24)
-//            [--police [stars]]  (police on, as the lobby's box, off by default as there; up to 1 star, as the game, or 1-6)
-//            [--traffic N]  (the ambient traffic cars per player, 16: the original's for the whole game)
-//            [--packets N]  (a snapshot's packets at most, 1..8, 4 by default: a busy area's goes in parts)
-//            [--arena brain,brain,...]  (bots on the server itself in the first slots, e.g. nn:best.nn,simple)
-//            [--ticks N]  (prints the arena's result and ends at tick N: port/net/scripts/rl_bots.py)
-//            [--seed N]  (the game's random state at the start: another match from the same start)
-//   --connect host[:port] [--name <name>] [--bot [brain]]  (brain: simple, carhop, rammer, soldier, hunter, nn:<file>)
-//   either: [--lag ms] [--jitter ms] [--loss percent] [--lossburst N] [--spike ms:on:every]  a link conditioner on this
-//           end's sends (tests): losses in bursts of N on average; ms more delay for <on> s every <every> s
-//           [--mtu N]  (the link's MTU, IP packets: 1280 by default, one that fits the VPNs; 1428 the most)
-//   --replay <file>  a client session recorded with GTA2_NET_RECORD=<file>, played back without a server
-// The map is a multiplayer map's .mmp in data/ (default downtown-6p). The game then starts that network game.
+// port/net (port/docs/netcode.md, "Running"): the netcode's command line; kUsage lists it.
 #include "cmdline.hpp"
 #include "core/protocol.hpp"
 #include <algorithm>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+namespace
+{
+const char kUsage[] =
+    "reG2: GTA2 for today's systems. Without options it starts the game.\n"
+    "\n"
+    "  --data <folder>       the game folder (or its data folder): else $GTA2_DIR, the current folder or the\n"
+    "                        executable's when they hold data/, else the per-user folder\n"
+    "  --setup               the setup screens, to replace the game data or add the music\n"
+    "  --help                this list\n"
+    "\n"
+    "A dedicated server (headless: no window, no dialog, no sound; errors go to stderr and reG2-server.log):\n"
+    "  --server              needs data/fstyle.sty, nyc.gci, a .gxt and its maps' .mmp, .gmp, .sty, .scr\n"
+    "  --port N              UDP port, 27920\n"
+    "  --map <mmp>           a multiplayer map in data/, downtown-6p\n"
+    "  --maps <mmp>,<mmp>    a rotation: a round on each in turn, the first instead of --map\n"
+    "  --players N           1-6, 6\n"
+    "  --gametype 1-3        frags, points, tag\n"
+    "  --fraglimit N         10 (a points game's is money: 10000)\n"
+    "  --timelimit min       a round's time limit\n"
+    "  --tickms N            the simulation step, 33\n"
+    "  --police [stars]      police on (off by default), up to 1 star or 1-6\n"
+    "  --traffic N           ambient traffic cars per player, 16\n"
+    "  --packets N           a snapshot's packets at most, 1-8, 4\n"
+    "  --interest blocks     how far around a client its snapshots reach, 24\n"
+    "  --window              show the server in a window\n"
+    "  The round flow: --minplayers N (2), --warmup s (60), --results s (15), --votes start,map,kick,\n"
+    "  --rounds on|off (on, off with --arena)\n"
+    "  Bots on the server itself: --arena brain,brain,... (simple, carhop, rammer, soldier, hunter, nn:<file>),\n"
+    "  --ticks N (prints the result and ends at tick N), --seed N\n"
+    "  SIGINT or SIGTERM ends it, telling its players, with exit code 0.\n"
+    "\n"
+    "A client:\n"
+    "  --connect host[:port] [--name <name>] [--bot [brain]]\n"
+    "  --replay <file>       a session recorded with GTA2_NET_RECORD=<file>\n"
+    "\n"
+    "Either end: a link conditioner on this end's sends (tests): --lag ms, --jitter ms, --loss percent,\n"
+    "  --lossburst N, --spike ms:on:every; --mtu N (1280, 1428 the most)\n"
+    "\n"
+    "More: port/docs/netcode.md\n";
+} // namespace
+
+void net::PrintUsage()
+{
+    fputs(kUsage, stdout);
+}
 
 bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
 {

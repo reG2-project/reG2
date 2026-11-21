@@ -491,7 +491,7 @@ VID_EXPORT s32 GTA2_CC Vid_SetMode(SVideo* pVideo, HWND hWnd, s32 modeId)
         {
             SDL_Log("OpenGL ES 3.0 initialisation failed: %s", pError);
             const std::string shown = port_WithLogPath(pError);
-            if (!getenv("GTA2_NO_MESSAGEBOX"))
+            if (!port_NoMessageBox())
             {
                 SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "OpenGL ES 3.0 initialisation failed", shown.c_str(), pWindow);
             }

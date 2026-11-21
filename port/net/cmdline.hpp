@@ -28,5 +28,6 @@ struct NetOptions
 bool ParseOptions(std::vector<std::string>& args, NetOptions& o);
 // "host[:port]" into <host>, and <port> when it has one
 void ParseAddress(const std::string& address, std::string* host, uint16_t* port);
+void PrintUsage(); // --help
 std::vector<std::string> SplitCommas(const std::string& list); // "a,b,c"
 } // namespace net

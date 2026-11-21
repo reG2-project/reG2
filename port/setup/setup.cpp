@@ -348,7 +348,10 @@ void LogDataCheck(const char* what, const DataCheck& check)
     }
     const std::string state =
         check.mMissing.empty() ? "complete" : "missing " + std::to_string(check.mMissing.size()) + " files: " + missing;
-    SDL_Log("%s: %s, music %d of %d tracks", what, state.c_str(), check.mMusicFound, check.mMusicTotal);
+    const std::string music = !check.mMusicTotal ? "" // a server's check: no music
+                                                  : ", music " + std::to_string(check.mMusicFound) + " of " +
+                                                        std::to_string(check.mMusicTotal) + " tracks";
+    SDL_Log("%s: %s%s", what, state.c_str(), music.c_str());
 }
 // The questions until the game has its data: false to quit.
 bool SetupLoop(const std::string& gameDir)
@@ -445,11 +448,20 @@ bool HasGameData(const fs::path& dir)
     return FindNoCase(dir, "data/fstyle.sty", &found);
 }
 
-// $GTA2_DIR, else the current folder or the executable's when it holds the game's data, else the
+// --data, else $GTA2_DIR, else the current folder or the executable's when it holds the game's data, else the
 // per-user folder (empty if none). pWhy: which one, for the log.
-fs::path GameFolder(bool* pPerUser, const char** pWhy)
+fs::path GameFolder(const char* dataDir, bool* pPerUser, const char** pWhy)
 {
     *pPerUser = false;
+    fs::path found;
+    if (dataDir)
+    {
+        *pWhy = "--data";
+        const fs::path dir = PathFromUtf8(dataDir);
+        // The data folder itself, or the game folder holding it
+        const bool dataItself = !FindNoCase(dir, "data", &found) && FindNoCase(dir, "nyc.gci", &found);
+        return dataItself ? (dir / "..").lexically_normal() : dir;
+    }
     if (const char* dir = SDL_getenv("GTA2_DIR"))
     {
         *pWhy = "GTA2_DIR";
@@ -488,11 +500,11 @@ void port_SetWindowIcon(SDL_Window* pWindow)
 #endif
 }
 
-bool port_PrepareGameFolder(bool forceSetup)
+bool port_PrepareGameFolder(bool forceSetup, bool server, const char* dataDir)
 {
     bool perUser;
     const char* why = "";
-    const fs::path dir = GameFolder(&perUser, &why);
+    const fs::path dir = GameFolder(dataDir, &perUser, &why);
     SDL_Log("Game folder (%s): %s", why, PathToUtf8(dir).c_str());
     std::error_code ec;
     fs::current_path(dir, ec);
@@ -510,8 +522,21 @@ bool port_PrepareGameFolder(bool forceSetup)
             fs::create_directories(sub, ec);
         }
     }
-    const DataCheck check = CheckGameData(".");
+    const DataCheck check = CheckGameData(".", server);
     LogDataCheck("Game data", check);
+    if (server)
+    {
+        // No setup: it asks questions in windows, and a server has nobody to answer them
+        for (const std::string& rel : check.mMissing)
+        {
+            SDL_Log("Server: no %s in %s", rel.c_str(), PathToUtf8(fs::absolute(dir, ec)).c_str());
+        }
+        if (!check.mMissing.empty())
+        {
+            SDL_Log("Server: that is the %s; --data <folder> or GTA2_DIR=<folder> for another (the one holding data/)", why);
+        }
+        return check.mMissing.empty();
+    }
     if (!perUser || (!forceSetup && check.mMissing.empty()))
     {
         SDL_Log("Setup skipped: %s", perUser ? "the game data is there" : "not the per-user folder");
