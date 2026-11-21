@@ -8,6 +8,7 @@
 #include "saves.hpp"
 #include "settings.hpp"
 #include "sprite.hpp"
+#include "net_hooks.hpp"
 #include <math.h>
 
 #if defined(GTA2_PORT_SDL)
@@ -30,7 +31,7 @@ const Ped* LocalPed()
 {
     Player* pPlayer = gGame_0x40 && !gFrontend ? gGame_0x40->mLocalPlayer : NULL;
     if (!pPlayer || !pPlayer->IsUser() || pPlayer->mShowQuitMessage || gGame_0x40->IsPaused() || PortPauseMenu::IsOpen() ||
-        PortSaves::Replaying() || !PortSettings::Vibration())
+        PortSaves::Replaying() || !PortSettings::Vibration() || gPortNoRumble)
     {
         return NULL;
     }

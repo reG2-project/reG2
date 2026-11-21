@@ -11,9 +11,9 @@ Client/server multiplayer for the port (`../README.md`), in the style of Quake 3
 It replaces the original's DirectPlay lockstep game. The game's own code runs unchanged: the netcode sits where
 DirectPlay sat (`NetPlay`), and the few changes to `Source/` are port-only hooks ("The game's code").
 
-What works: 1-6 players on the game's multiplayer maps, frags, points and tag games, police, traffic and ambient peds,
+What works: 1-6 players on the game's multiplayer maps, frags, points and tag games, police, traffic, trains and ambient peds,
 joining and leaving mid-game, rounds with warmup, results and votes, map rotations, chat with commands, reconnecting,
-a frontend page to join, bots (scripted and trained), recordings that replay without a server. Protocol 18.
+a frontend page to join, bots (scripted and trained), recordings that replay without a server. Protocol 19.
 
 ## Running
 
@@ -36,6 +36,28 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 | Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` |
 | Either end | `--lag ms`, `--jitter ms`, `--loss %`: a link conditioner on this end's sends |
 
+## Hosting a game
+
+Hosting is running a server; the host plays as a client of it like everyone else. Both ends need the same reG2 build
+(version and commit: the 32 and 64-bit builds of one commit play together, whatever the system) and the same game data:
+a join is turned away otherwise, with what differs on the network page (and printed with `--connect`).
+
+1. **The host** starts a server: `./reg2 --server --map downtown-6p` (`--players`, `--maps` and the rest above). It has no
+   window and prints its log; on Windows, where nothing shows it, add `--window` (closing the window ends it) or end it
+   in the Task Manager. The menu can't start one yet. Then it joins it like the others, at `127.0.0.1`.
+2. **Its network**: the server listens on **UDP 27920** (`--port` for another). Over the internet the host's router
+   forwards that port to the host's machine (port forwarding, in the router's settings: UDP, 27920, to the machine's
+   LAN address), and its firewall lets it in: Windows asks the first time the server starts (allow it on private and,
+   for players from the internet, public networks), Linux firewalls need a rule (`ufw allow 27920/udp`). The address to
+   give the others is the router's public address (what a "what is my IP" page shows); no NAT traversal or UPnP yet.
+3. **The others** join with the network page (start menu, **Network game**: the address, a name, **Join game**) or
+   `./reg2 --connect <address>`, with `:<port>` after the address for another port.
+
+On a LAN nobody forwards anything: the others join at the host's LAN address (`ip addr`, `ipconfig`: 192.168.x.y), the
+host's firewall still letting UDP 27920 in. A player whose name is taken, empty or longer than 15 characters plays under
+one the server gives ("PLAYER 2"). A server that is stopped and started again starts a new game: its players go back to
+the network page and join again.
+
 ## Playing
 
 **Joining from the frontend.** The start menu has **Network game** (`port/net/menu.cpp`, frontend page 13): an address
@@ -44,8 +66,8 @@ error on the page; welcomed, the frontend boots the network game as it boots a l
 conditioner's options apply to a join from the page too.
 
 **Leaving.** Escape in a network game is the client's: "Leave the game? Y / N" over the frame. Yes leaves the server
-and goes back to the network page as a single player again. So does a client that lost the server for good, or was
-kicked, with why on the page.
+and goes back to the network page as a single player again. So does a client that lost the server for good, was
+kicked, or hasn't the next map's files, with why on the page; without the map's files a join fails the same way.
 
 **Connection.** The ping shows at the bottom right: the network's round trip alone (`kMsgPing`, answered at once,
 both polled between frames). With no snapshot for 0.7 s it shows **Connection interrupted** and plays on with the
@@ -154,16 +176,19 @@ command, applies snapshots and rolls back. Between frames both poll the network 
   | players, cars, peds, objects (movement, physics, collisions, weapons) | runs | the prediction |
   | traffic and ambient ped spawning, despawning | off | only the server creates and removes entities |
   | scripts, police, ambulance, firefighters, emergency crews, generators, garages | off | they create entities; the results arrive as state |
-  | doors, cranes, crushers, trains, traffic lights | runs | predicted, corrected by snapshots (the lights' phase is in the world entity) |
+  | doors, cranes, crushers, trains, traffic lights | runs | predicted, corrected by snapshots (the lights' phase is in the world entity, each train has one of its own) |
   | particles, tile animations, lights, HUD, sound | runs | cosmetic; a resimulated tick runs without the sound service, then takes what it left (shots, impacts, voice lines, sound events, radio reports), so a restore doesn't play them again |
 
   Player peds take no damage on a client, and everything counts as seen there, so nothing is removed off screen.
 - **Replicas** (`engine/replica.cpp`): the client adopts what the map script made on both sides, makes the rest, moves
   them every snapshot and removes what the server drops, within the area the snapshot reached (a snapshot cut for size
-  leaves what lies beyond as it is). What the client's prediction did that the game can't undo (a wreck, a corpse of
+  leaves what lies beyond as it is). A train's carriages are never made or removed: the client's own trains (both ends
+  make the same ones at the map's start) take the server's state and car ids from the train entities, before the cars;
+  a carriage is placed by its train only, never moved to a player in it. What the client's prediction did that the game can't undo (a wreck, a corpse of
   its own) is removed, and the next snapshot makes the entity again as the server has it. A car carries its driver: none, the traffic driver (all
   traffic cars share CarManager's spare, which is never sent as a ped), or a ped. A car's seated passengers come as
-  peds at their car and are seated as the game seats them.
+  peds at their car and are seated as the game seats them. Each mapping keeps its car's or ped's own id (`mCarId`,
+  `mId`), so a pool slot the client's game freed and handed out again isn't taken for the old entity.
 - **Players in cars** (`engine/car_entry.cpp`): a client gets into and out of cars by its own predicted input. When
   both sides have settled and the server has the player elsewhere, the client puts the ped into the server's car, or
   out of its own, at once, ending the way the game's own entering and leaving end. Another player's enter key reaches
@@ -171,7 +196,8 @@ command, applies snapshots and rolls back. Between frames both poll the network 
   starts it as the key does.
 - **Guards** (`engine/guards.cpp`, on the server too): what a network game breaks in the game's own logic is made
   safe: peds given on-foot orders while in a car, the HUD arrows to players who joined after the start, objects
-  attached to cars the client moved (a tank's turret).
+  attached to cars the client moved (a tank's turret), a player driving a train that reversed (`Train::ReassignTrainHead`
+  makes the other end the lead and its driver, the ped stays in its old carriage: it goes with the driver's seat).
 
 ### Entities
 
@@ -183,11 +209,12 @@ the original's.
 
 | Entity | Carries |
 |---|---|
-| World (one per snapshot, `engine/world_entity.cpp`) | the game's tick counter (timers are stamped with it), the random seed and stream, the restart zones' turn, the round's state (`core/round_state.hpp`), the game's generation (a map change), the traffic lights, the tag game's fugitive and times |
+| World (one per snapshot, `engine/world_entity.cpp`) | the game's tick counter (timers are stamped with it), the random seed and stream, the restart zones' turn, the round's state (`core/round_state.hpp`), the game's generation (a map change), the traffic lights, the tag game's fugitive and times, the map's light level (its script sets it: `MapRenderer`'s ambient, its target and step) |
 | Player (`engine/players.cpp`) | place, input, health, death count and last killer, weapons and the ammo of all 28, frags and points, the HUD's money and multiplier, power-up timers, its car, the chat line |
 | Car (`engine/cars.cpp`, `car_ai.cpp`) | place, its whole `CarPhysics` (but its two pointers), damage, lights, horn, colour, its driver, and its AI (`CarAI`: route, speed, the cars it chases) |
 | Ped (`engine/ped_state.cpp`) | place, and the plain values its AI runs on (objectives, targets, speeds, timers, occupation, flags, health, death cause), its references (targets, group) and its car and seat |
 | Pickup (`engine/pickups.cpp`) | model and place; roadblock barriers too (they are off the object pool's list) |
+| Train (`engine/trains.cpp`, every train in every snapshot) | its lead's place, speed and driver (none, the traffic driver, a ped, a player), its carriages' car ids (the client's train of the same index takes them), which end leads (`Train::ReassignTrainHead`), its state, stop phase and timers, the station it heads for and that station's state, each carriage's damage and explosion timer |
 
 Health, deaths, weapons and scores are the server's. A death the server had is carried out on the client with the
 game's own `Ped::Kill`, credited to the killer, and the deaths carried out are part of the rollback set, so a
@@ -220,12 +247,13 @@ none of this is on, and the port draws exactly as `10.5.exe`.
 ### The rollback set
 
 `engine/world.cpp` lists the world as memory blocks: every registered global and what it points to, the `Player`
-objects, the light grid, and the netcode's own (the deaths carried out, the random streams, the sound entries'
+objects, the light grid, the map blocks the doors' faces are in, and the netcode's own (the deaths carried out, the random streams, the sound entries'
 pool). `SoundPosEntry` comes from a pool in the set (`engine/sound_pool.cpp`) instead of the heap, so a restore can't
 bring back freed sound entries. Left out: the frame loop's own globals around the tick (input buffers, counters,
 pacing, the keyboard recorder), the audio driver and DirectInput devices, and `file.cpp`'s open file, which a
-resimulation doesn't run or which are freed while the game goes on. The sound's channel bookkeeping and the radio stay
-as they are over a restore: they mirror the mixer, which isn't rolled back. The set is made again for every game (a new map's pools are elsewhere), and leaves
+resimulation doesn't run or which are freed while the game goes on. The sound's channel bookkeeping and the radios (the car
+radio's station and in-car state, the police radio's calls) stay as they are over a restore: they mirror the mixer and
+the radio's stream, which aren't rolled back, and a resimulation runs no sound to bring them up to date. The set is made again for every game (a new map's pools are elsewhere), and leaves
 out what the game's scratch pointers point to (they point into a freed map after a map change). A function's static
 registers when the function first runs; one that comes after the set was taken goes at its end and the set is taken
 again, so a world saved before is the start of the new one. The whole world is about 3.2 MB; saving or restoring it
@@ -238,10 +266,11 @@ A little-endian bitstream (`core/bitstream.cpp`), never a copy of a struct: clie
 
 | Message | Channel | |
 |---|---|---|
-| `kMsgHello`, `kMsgWelcome`, `kMsgReject` | reliable | the join: the protocol version and name; the slot, the game's settings and map, the maps a vote chooses from |
+| `kMsgHello`, `kMsgWelcome`, `kMsgReject` | reliable | the join: the protocol version, the build, the name, `nyc.gci`'s CRC-32; the server's session, the slot and name, the game's settings, the map with its files' CRC-32s, the maps a vote chooses from |
+| `kMsgLeave` | reliable | why a client leaves (its copy of the map differs) |
 | `kMsgCommands` | unreliable | the last few commands (tick and input bits, each delta-coded against the one before) and the newest snapshot the client has |
 | `kMsgSnapshot`, `kMsgSnapshotPart` | unreliable | server tick, the baseline it is made against, entities with field masks and changed fields (`core/snapshot.cpp`) |
-| `kMsgMapChange` | reliable | the next map, after a round |
+| `kMsgMapChange` | reliable | the next map, after a round, with its files' CRC-32s |
 | `kMsgPing`, `kMsgPong` | unreliable | the client's clock, sent back at once |
 | `kMsgCommand`, `kMsgNotice` | reliable | a player's command; a line to show (a vote, a player ready) |
 
@@ -263,6 +292,8 @@ Bots are players whose input comes from a brain (`session/bot.hpp`), on the same
 `BotView` built from what its client knows (its own body as predicted, the snapshot's players, cars and peds, and the
 map as plain data: `engine::NavMap`, the walking height and the ways between cells) and returns the input bits a
 person would press. It uses no game logic: no route finder, no ped AI. Navigation is A* (`session/bot_nav.cpp`).
+A bot client still takes the keyboard's key events (Escape and the leave prompt, the chat), so `GTA2_INPUT` can press
+them in a test.
 
 | Brain | |
 |---|---|
@@ -271,6 +302,7 @@ person would press. It uses no game logic: no route finder, no ped AI. Navigatio
 | `rammer` | drives at players |
 | `hunter` | the rammer when a car is near and nobody is, the fighter otherwise |
 | `soldier` | a weapon, a car, then to the nearest player: runs it over when coming at it head on, or gets out and shoots |
+| `human` | for crash hunts, what people do and the others don't, in turns: cars, buses and the tank (in, about, out at speed), trains (on at a station, a ride, off), every weapon it has, pickups, into water, its own blasts (`session/bot_human.cpp`) |
 | `nn:<file>` | a trained network (`session/bot_nn.cpp`): 62 inputs (`BotFeatures`), a choice in six groups of outputs |
 
 In the round flow bots ready up, vote for map 2 in the results and yes on any vote but their own kick.
@@ -305,7 +337,7 @@ port/net/
                     netplay.cpp       the game's NetPlay/NetUi for the port: the frame hook, the network game's start
                     snapshot.cpp      a snapshot captured and applied, the game's controls, shared helpers
                     schema.cpp        every entity type's fields       world_entity.cpp  the world entity
-                    players.cpp, cars.cpp, car_ai.cpp, ped_state.cpp, pickups.cpp   the entities (members.hpp)
+                    players.cpp, cars.cpp, car_ai.cpp, ped_state.cpp, pickups.cpp, trains.cpp   the entities (members.hpp)
                     replica.cpp       a client's cars and peds          car_entry.cpp     into and out of cars
                     slots.cpp         joining and leaving               spawn.cpp         the server's spawn budget
                     client_mode.cpp   what a client doesn't run         guards.cpp        the game made safe
@@ -343,8 +375,10 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `map_0x370.cpp` | a file static in port builds | the restart zones' turn, a function's static in the original: registered from the start, so rolled back and sent |
 | `sprite.cpp` | `gPortSpriteMovedHook` | a sprite moved: the grid check (`GTA2_NET_CHECKGRID`) |
 | `port/src/game_hooks.cpp` | `gPortLeavePromptShown` | the leave prompt is up: a gamepad's A and B answer it |
+| `port/src/rumble.cpp` | `gPortNoRumble` | no vibration on a server (its local player is a remote one) or in a client's resimulation |
 | `port/compat/src` | `gPortIdleHook`, `gPortNoAudio`, `gPortCrashHook` | polling while a frame waits (`window.cpp`), no sound on a server (`miles.cpp`), the crash report (`main.cpp`) |
 | `Ped.cpp` | `gPortKeepWantedPoints` | a client keeps the server's wanted points with its police off |
+| `Car.cpp` | `Car::TryHonkHorn` | a train's lead without a driver (a player got out of a carriage that stood still) doesn't read it |
 | `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`) | the chat types the keyboard layout's characters |
 | `Hud.cpp` | `gPortServerKillNotices` | a client's kill notices are the server's deaths only |
 | `Pool.hpp`, `Car.cpp`, `Char_Pool.cpp`, `Game.cpp` | `PortRand::Scope` (`port/src/rand/owner.hpp`) | who a random draw belongs to |
@@ -353,10 +387,13 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 Other files' statics the netcode reads (winmain.cpp's inputs and its player, the restart zones' turn) it reaches through
 the registry by their 10.5.exe address (`PortStatic`, accessors in `engine/internal.hpp`).
 
-reG2's own extras that would change the game outside the input bits a server gets are off in a network game: twin
-stick, mouse aim, the turret's aim, the pad's analog driving and the aim camera (`port/src/twin_stick.cpp`, `view.cpp`),
-each player's day and night (`day_night.cpp`) and the pause menu (`pause_menu.cpp`). A network game runs the original's
-frame path in `winmain.cpp` (a step, then a frame), without reG2's frame limit and interpolation.
+reG2's own extras that would change the game outside the input bits a server gets are off in a network game: twin stick,
+mouse aim, the turret's aim, the pad's analog driving and the aim camera (`port/src/twin_stick.cpp`, `view.cpp`), each
+player's day and night (`day_night.cpp`) and the pause menu (`pause_menu.cpp`). AUTOSAVE, RETRY JOBS and FRENZY RESPAWN
+(`autosave.cpp`, `retry.cpp`) are for single player only, and INFINITE LIVES goes with the debug flags a network game
+clears (`InitializeGame`). Vibration is the local player's, from the ticks a client predicts (`gPortNoRumble`). A
+network game runs the original's frame path in `winmain.cpp` (a step, then a frame), without reG2's frame limit and
+interpolation.
 
 ## Checks
 
@@ -399,7 +436,8 @@ A field the server sent unchanged that the client has otherwise was written in t
 **The crash report** (`port/compat/src/main.cpp`, installed for network games only, then the netcode's `DebugOnCrash`): the backtrace, then the frame and tick, the
 rollback block being saved or restored if that is where it was (`gCopyingBlock`), the ped and the car whose update
 started last (`PortRand::gLastPed`, `PortRand::gLastCar`: a crash in a ped's or a car's update names
-it), and on a client its player, cameras and their cars.
+it), and on a client its player, cameras and their cars. It allocates nothing, and if it hangs anyway (a lock the crash
+left held) an alarm ends the process with its signal after 5 s.
 
 **The comparison check** (`GTA2_NET_COMPARE=1` on a client): on each snapshot, with the game restored to the
 snapshot's tick and before it is applied, every mapped entity is captured here and compared with the server's, field
@@ -427,19 +465,21 @@ off by default:
 | `GTA2_NET_CORRLOG=1` | client | corrections over half a block or 45 degrees |
 | `GTA2_NET_JERKLOG=1\|2` | both | how jerky what is shown moves (2: and each jump) |
 | `GTA2_NET_MARKER=1` | client | a square where the newest snapshot has the local player |
-| `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death, the sound's channels |
+| `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death, the sound's channels and the car radio |
 | `GTA2_NET_CARDIFF=1` | client | where the prediction of the local player's car differs from the snapshot |
 | `GTA2_NET_GANGLOG=1` | both | player 0's group every 15 ticks, by the server's ids |
 | `GTA2_NET_STACKLOG=1` | both | two cars in one place (under 0.4 blocks apart), once per pair: a car the client kept that the server dropped |
 | `GTA2_NET_PICKUPLOG=1` | client | pickups made and removed |
-| `GTA2_NET_CHECKGRID=1` | both | the collision grid checked after every move, a sprite moved off the map reported with the code that moved it, and a rollback block whose pointee moved since the set was taken (`net: CHECK` lines) |
+| `GTA2_NET_TRAINLOG=1` | both | every train's place and state at every 150th tick of the game's cycle (the same tick on both ends) |
+| `GTA2_NET_CHECKGRID=1` | both | the collision grid checked after every move, a sprite moved off the map reported with the code that moved it, a rollback block whose pointee moved since the set was taken, on a client a ped driving a car that has another driver or leaving it through another car, and on both the weapon pool's lists looping or sharing a weapon and a ped holding a weapon it would free wrongly (a freed one, a player slot's, a car's, another ped's), a tank, fire truck or gun jeep without its roof turret, and a collision grid row that isn't a sorted list of pool cells and links, after every tick, restore and apply (`net: CHECK` lines) |
 | `GTA2_NET_SNAPCHECK=1` | server | every entity's hash in the snapshots, checked by the clients (`net: CHECK` lines) |
 | `GTA2_NET_DUMPPEDS=<file>[:<from>:<to>]`, `GTA2_NET_RANDLOG=<file>:<from>:<to>` | both | the divergence check's dumps |
 | `GTA2_NET_NAVDUMP=<file.pgm>` | client bot | the bots' map as a picture |
 | `GTA2_NET_TESTKILL=<tick>:<victim>:<killer>,...` | server | a player killed by the game's own death |
 | `GTA2_NET_TESTPOWERUP=<tick>:<player>:<power-up>,...` | server | a power-up (12: an instant gang) |
 | `GTA2_NET_TESTCAR=<tick>:<player>:<model>,...` | server | a car beside the player (11: a bus) |
-| `GTA2_NET_TESTARM=<weapon>:<ammo>`, `GTA2_NET_TESTWANTED=<points>` | server | every player kept armed, or at least that wanted (600: a star) |
+| `GTA2_NET_TESTTRAIN=<tick>:<player>:<train>,...` | server | the player at the wheel of a train; train + 10: that train into reverse; train + 20: the player on the platform of the station it stops at next |
+| `GTA2_NET_TESTARM=<weapon>:<ammo>[,...]`, `GTA2_NET_TESTWANTED=<points>` | server | every player kept armed (car weapons from 15), or at least that wanted (600: a star) |
 | `GTA2_NET_SAY=<frame>:<command>;...` | client | commands sent at those frames |
 | `GTA2_SIMBENCH=...`, `GTA2_SIMBENCH_FILL=<cars>`, `GTA2_NETEVAL=...`, `GTA2_OFFLINE_MP=...` | game | the measurements below (`port/net/eval`, `engine/netplay.cpp`) |
 
@@ -487,7 +527,7 @@ own (`single`) and rollback in scenes with explosions (`explode`).
   literal 6s, a `u8` bitmask, the results screen, colours, the scripts' six `PLAYER_PED`s). A port-only cap with a
   runtime count covers most; spawn points beyond the scripts' from the restart zones.
 - **Modes** beyond the game's frags, points and tag (team deathmatch, CTF) as a mode module, reusing the game's assets.
-- **Hardening**: the data files' hashes and the protocol version checked at the join, rate limits, fuzzed input.
+- **Hardening**: rate limits, fuzzed input.
 - **Tick rates above 30 Hz** would need every per-tick constant and timer scaled (a project of its own, port-only).
 - **Whole-map simulation**: a server could keep everything everywhere, with a cleanup policy as a server setting
   (none, wrecks only, the game's own). Every cleanup and spawn decision goes through `Game::IsSpriteInPlayerBounds`
@@ -503,8 +543,7 @@ anyone's tools read.
 1. **Hosting from the menu**: a "Host game" page that starts a server in the background and joins it; the LAN and
    public address to share; UPnP / NAT-PMP to open the port, and a reachability test; an optional password;
    `server.ini` for a server's settings.
-2. **The data check**: the client's protocol version and a hash of `data/` at the join, a mismatch turned away with a
-   clear message.
+2. **The data check** (done: the build, `nyc.gci` and the map's files at the join and at a map change, "Hosting a game").
 3. **The master**: a heartbeat from `--public` servers over their game socket (so the master sees the address after
    NAT), verified before listing; the web app's list with join links (`gta2://host:port`).
 4. **In the game**: an info query every server answers outside ENet (name, map, players, version: real pings), LAN

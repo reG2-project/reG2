@@ -20,6 +20,7 @@ struct net::engine::ReplicaState
 {
     std::unordered_map<uint32_t, Car*> cars;
     std::unordered_map<uint32_t, Ped*> peds;
+    std::unordered_map<uint32_t, int32_t> carIds, pedIds;
     std::unordered_map<uint32_t, Object*> objects;
 };
 
@@ -31,6 +32,9 @@ using net::Snapshot;
 
 std::unordered_map<uint32_t, Car*> gCars; // NetId -> this game's car
 std::unordered_map<uint32_t, Ped*> gPeds;
+// The game's own id of each mapped car and ped (Car::mCarId, Ped::mId): a pool slot this game freed and handed out again
+// since is another car or ped, and its mapping goes (Prune)
+std::unordered_map<uint32_t, int32_t> gCarIds, gPedIds;
 const int32_t kAdoptRadius = 4096; // a quarter block: the same car or ped as the server's
 
 // For the log (PrintReplicaLog)
@@ -86,6 +90,9 @@ void Gather(Pass& a)
     {
         a.liveCars.insert(c);
     }
+    std::vector<Car*> carriages; // a train's wagons aren't in the pool's list
+    TrainCars(carriages);
+    a.liveCars.insert(carriages.begin(), carriages.end());
     for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
     {
         a.livePeds.insert(p);
@@ -130,7 +137,9 @@ void Prune(Pass& a)
 {
     for (auto it = gCars.begin(); it != gCars.end();)
     {
-        it = a.liveCars.count(it->second) && !it->second->IsDespawning() ? (a.mapped.insert(it->second), ++it) : gCars.erase(it);
+        auto id = gCarIds.find(it->first);
+        const bool same = id == gCarIds.end() || id->second == it->second->mCarId;
+        it = same && a.liveCars.count(it->second) && !it->second->IsDespawning() ? (a.mapped.insert(it->second), ++it) : gCars.erase(it);
     }
     for (auto it = gPeds.begin(); it != gPeds.end();)
     {
@@ -139,7 +148,17 @@ void Prune(Pass& a)
         // (a passenger isn't "active" either, as a driver isn't, but no car re-adopts it: kept while it sits in one)
         Ped* p = it->second;
         const bool riding = p->mCar && p->mEnterCarAsPassenger;
-        it = a.livePeds.count(p) && (p->IsActive() || riding) && !a.owned.count(p) ? (a.mapped.insert(p), ++it) : gPeds.erase(it);
+        auto id = gPedIds.find(it->first);
+        const bool same = id == gPedIds.end() || id->second == p->mId;
+        it = same && a.livePeds.count(p) && (p->IsActive() || riding) && !a.owned.count(p) ? (a.mapped.insert(p), ++it) : gPeds.erase(it);
+    }
+    for (auto it = gCarIds.begin(); it != gCarIds.end();)
+    {
+        it = gCars.count(it->first) ? ++it : gCarIds.erase(it);
+    }
+    for (auto it = gPedIds.begin(); it != gPedIds.end();)
+    {
+        it = gPeds.count(it->first) ? ++it : gPedIds.erase(it);
     }
 }
 
@@ -176,6 +195,10 @@ bool TargetedHere(Car* car)
 
 void RemoveCar(const Pass& a, Car* car)
 {
+    if (car->IsTrainModel())
+    {
+        return; // a train's carriage: its train points to it, and the server's train is mapped to it (ApplyTrains)
+    }
     if ((car->mDriver && !IsSpareDriver(car->mDriver)) || a.referenced.count(car) || TargetedHere(car))
     {
         gOccupiedKept++;
@@ -208,9 +231,9 @@ Car* MapCar(Pass& a, const EntityState& e)
         gCars.erase(it);
         car = NULL;
     }
-    if (car)
+    if (car || IsTrainModel(e.f[kCarModel]))
     {
-        return car;
+        return car; // a train's carriage only by its train (ApplyTrains): one made here would have no train
     }
     for (Car* c : a.liveCars)
     {
@@ -228,6 +251,7 @@ Car* MapCar(Pass& a, const EntityState& e)
     if (car)
     {
         gCars[e.id] = car;
+        gCarIds[e.id] = car->mCarId;
         a.mapped.insert(car);
     }
     return car;
@@ -241,8 +265,9 @@ void ApplyCar(Pass& a, const EntityState& e)
     {
         return; // none, or the state the client already has (a busy area's far car): predicted on here
     }
-    // The shared traffic driver, as the server has it (a car with its own driver gets it from its ped entity)
-    if (!a.owned.count(car))
+    // The shared traffic driver, as the server has it (a car with its own driver gets it from its ped entity; a train's
+    // lead from its train, ApplyTrains)
+    if (!a.owned.count(car) && !car->IsTrainModel())
     {
         const bool spare = IsSpareDriver(car->mDriver);
         if (e.f[kCarDriver] == kDriverTraffic && !car->mDriver)
@@ -254,14 +279,15 @@ void ApplyCar(Pass& a, const EntityState& e)
             car->SetDriver(NULL);
         }
     }
-    if (!a.playerIn.count(car)) // a car a player sits in follows the player (players.cpp); one being entered, the server
+    // A car a player sits in follows the player (players.cpp), a train's its train; one being entered, the server
+    if (!a.playerIn.count(car) || car->IsTrainModel())
     {
         const GridCheck check("moving a car", car);
         MoveCar(car, Raw(e.f[kCarX]), Raw(e.f[kCarY]), Raw(e.f[kCarZ]), Angle(e.f[kCarRot]));
     }
     SetCarPhysics(car, e); // a player's car too: its place came with the player
     ApplyCarAi(car, e);
-    if (!SetCarState(car, e) && !a.playerIn.count(car) && !a.referenced.count(car))
+    if (!SetCarState(car, e) && !a.playerIn.count(car) && !a.referenced.count(car) && !car->IsTrainModel())
     {
         // A wreck here that isn't one on the server can't be unexploded: it goes, and the next snapshot makes the car
         // again as the server has it
@@ -297,6 +323,7 @@ Ped* MapPed(Pass& a, const EntityState& e, Car* serverCar)
         {
             serverCar->SetDriver(NULL);
             ped = gPedManager->SpawnDriver(serverCar);
+            SetPedKind(ped, e);
         }
     }
     if (!ped && !serverCar)
@@ -319,6 +346,7 @@ Ped* MapPed(Pass& a, const EntityState& e, Car* serverCar)
     if (ped && !gPeds.count(e.id))
     {
         gPeds[e.id] = ped;
+        gPedIds[e.id] = ped->mId;
         a.mapped.insert(ped);
         ped->mRemap = (char_type)e.f[kPedRemap] ^ 1; // set below, with its char's
     }
@@ -386,6 +414,31 @@ void ApplyPed(Pass& a, const EntityState& e)
         gPeds.erase(e.id);
         a.mapped.erase(ped);
         gPedsRemade++;
+    }
+}
+
+// The snapshot's trains into this game's, and their carriages mapped to the server's car ids (a carriage is mapped only
+// here, so before the cars). A carriage mapped under another id before is that id's no longer
+void ApplyTrains(Pass& a, const Snapshot& snap)
+{
+    std::vector<std::pair<uint32_t, Car*>> carriages;
+    for (const EntityState& e : snap.entities)
+    {
+        if (e.type != kEntityTrain || !ApplyTrain(e, carriages))
+        {
+            continue;
+        }
+        for (const auto& c : carriages)
+        {
+            for (auto it = gCars.begin(); it != gCars.end();)
+            {
+                it = it->second == c.second && it->first != c.first ? gCars.erase(it) : ++it;
+            }
+            gCars[c.first] = c.second;
+            gCarIds[c.first] = c.second->mCarId;
+            a.mapped.insert(c.second);
+            a.seen.insert(c.first);
+        }
     }
 }
 
@@ -471,6 +524,7 @@ void net::engine::ApplyCarsAndPeds(const Snapshot& snap)
     Pass a;
     Gather(a);
     Prune(a);
+    ApplyTrains(a, snap);
     for (const EntityState& e : snap.entities)
     {
         if (e.type == kEntityCar)
@@ -488,6 +542,7 @@ void net::engine::ApplyCarsAndPeds(const Snapshot& snap)
 
 void net::engine::PrintReplicaLog()
 {
+    PrintTrainLog();
     if (gExplosionsCarried + gWrecksReplaced)
     {
         printf("net: %d explosions the server had carried out, %d wrecks of this game's own made again\n", gExplosionsCarried, gWrecksReplaced);
@@ -522,6 +577,8 @@ net::engine::ReplicaState* net::engine::SaveReplicas(ReplicaState* reuse)
     ReplicaState* state = reuse ? reuse : new ReplicaState();
     state->cars = gCars;
     state->peds = gPeds;
+    state->carIds = gCarIds;
+    state->pedIds = gPedIds;
     state->objects = PickupMap();
     return state;
 }
@@ -530,6 +587,8 @@ void net::engine::RestoreReplicas(const ReplicaState* state)
 {
     gCars = state->cars;
     gPeds = state->peds;
+    gCarIds = state->carIds;
+    gPedIds = state->pedIds;
     PickupMap() = state->objects;
 }
 
@@ -555,6 +614,8 @@ void net::engine::ClearReplicas()
 {
     gCars.clear();
     gPeds.clear();
+    gCarIds.clear();
+    gPedIds.clear();
 }
 
 // --- The owners of random draws (port/src/rand/owner.hpp): an entity's key is the server's net id ---
@@ -675,10 +736,11 @@ void net::engine::ReplicaPositions(std::vector<ReplicaPos>& out)
     });
 }
 
+// A train isn't blended: its wagons follow its lead only in the lead's own update
 void net::engine::ReplicaPoses(std::vector<Pose>& out)
 {
     ForLiveReplicas([&](uint32_t id, Car* car, Ped* ped) {
-        if (Sprite* s = car ? car->mCarSprite : !ped->mCar ? CharSprite(ped) : NULL)
+        if (Sprite* s = car ? (car->IsTrainModel() ? NULL : car->mCarSprite) : !ped->mCar ? CharSprite(ped) : NULL)
         {
             out.push_back(Pose{id, s->mXy.x.mValue, s->mXy.y.mValue, s->mZpos.mValue, s->mRotation.rValue});
         }

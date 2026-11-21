@@ -35,6 +35,8 @@ void net::CorrectionStats::Print(uint32_t frame, const char* what) const
 void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
 {
     mSlot = welcome.slot;
+    mSession = welcome.session;
+    mConfig.name = welcome.name; // a reconnect asks for it: the server keeps our slot under it
     mMaps = welcome.maps;
     mConnected = true;
     pGame->players = welcome.players;
@@ -97,7 +99,9 @@ int net::Client::PollConnect(engine::NetworkGame* pGame, std::string* error)
         if (e.type == TransportEvent::kConnect && !mHelloSent)
         {
             Hello hello;
+            hello.build = mConfig.build;
             hello.name = mConfig.name;
+            hello.carInfo = engine::DataFileCrc("nyc.gci");
             BitWriter w;
             WriteHello(w, hello);
             mTransport->Send(0, kChannelReliable, w.Data().data(), w.ByteCount(), true);
@@ -132,6 +136,31 @@ bool net::Client::Connect(const ClientConfig& config, engine::NetworkGame* pGame
     return result > 0;
 }
 
+// A map this machine lacks ends the game with its fatal error at the first file it opens: <error> names it instead
+static bool HaveMap(const std::string& gmp, const std::string& sty, const std::string& scr, std::string* error)
+{
+    const std::string missing = net::engine::MissingMapFile(gmp, sty, scr);
+    if (missing.empty())
+    {
+        return true;
+    }
+    const std::string name = scr.substr(0, scr.rfind('.'));
+    *error = "no map " + name + " here (data/" + missing + ")";
+    return false;
+}
+
+// The same map as the server's: its files as the server has them, else <error> says which differs
+static bool SameMap(const std::string& map, const std::string& gmp, const std::string& sty, const net::MapPrint& print, std::string* error)
+{
+    const std::string* differs = net::engine::DataFileCrc(gmp) != print.gmp ? &gmp : net::engine::DataFileCrc(sty) != print.sty ? &sty : NULL;
+    if (!differs)
+    {
+        return true;
+    }
+    *error = "your copy of " + map + " differs from the server's (data/" + *differs + ")";
+    return false;
+}
+
 bool net::Client::OnWelcome(const TransportEvent& e, engine::NetworkGame* pGame, std::string* error)
 {
     BitReader r(e.data.data(), e.data.size());
@@ -140,13 +169,19 @@ bool net::Client::OnWelcome(const TransportEvent& e, engine::NetworkGame* pGame,
     {
         Reject reject;
         ReadReject(r, reject);
-        *error = "rejected: " + reject.reason;
+        *error = reject.reason;
         return false;
     }
     Welcome welcome;
     if (type != kMsgWelcome || !ReadWelcome(r, welcome) || welcome.version != kProtocolVersion)
     {
         *error = "a welcome we don't understand";
+        return false;
+    }
+    if (!HaveMap(welcome.gmp, welcome.sty, welcome.scr, error) || !SameMap(welcome.map, welcome.gmp, welcome.sty, welcome.print, error))
+    {
+        SendLeave(*error);
+        Leave();
         return false;
     }
     Welcomed(welcome, pGame);
@@ -344,9 +379,10 @@ void net::Client::Reconcile(const Snapshot& snap)
         mProbe.CompareAlone(snap, saved, *mSaves[mTick % kSaves]);
         return;
     }
-    if (!saved || !saved->valid || saved->tick != s)
+    if (!saved || !saved->valid || saved->tick != s || !engine::Restorable(*saved))
     {
-        engine::Apply(snap); // too old (or too new) to reconcile: take it as it is
+        engine::Apply(snap); // too old (or too new, or saved with another rollback set) to reconcile: take it as it is
+        mProbe.AfterPlainApply(snap);
         engine::ApplyScores(snap);
         return;
     }
@@ -510,7 +546,8 @@ uint32_t net::Client::ChooseInput(uint32_t recordedInput)
             StartBot();
         }
         FillBotView(mBotView, mReceived[mLatestTick % kRing], mSlot, mFrame, mNavMap.get());
-        local = mBot ? mBot->Think(mBotView) : 0;
+        // The keyboard's key events go with a bot's controls: Escape and the leave prompt, the chat (GTA2_INPUT in tests)
+        local = (mBot ? mBot->Think(mBotView) : 0) | (local & kKeyEventBits);
     }
     local &= 0x3FFFFF;
     // F12, or the key under Esc (` or §: keyboards without F12), keys the game doesn't use (here as their DirectInput
@@ -645,13 +682,20 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
             else if (type == kMsgReject && !mConnected && ReadReject(r, reject))
             {
                 printf("net: frame %u, the server won't have us back: %s\n", mFrame, reject.reason.c_str());
+                if (reject.reason != "the server is full")
+                {
+                    LeaveToMenu(reject.reason.c_str()); // another build, kicked: no use trying again
+                    return;
+                }
                 mTransport.reset(); // and try again: it may be full only for now
             }
         }
         else if (e.type == TransportEvent::kConnect && !mConnected && mTransport)
         {
             Hello hello;
+            hello.build = mConfig.build;
             hello.name = mConfig.name; // the server gives us our slot back by it
+            hello.carInfo = engine::DataFileCrc("nyc.gci");
             BitWriter w;
             WriteHello(w, hello);
             mTransport->Send(0, kChannelReliable, w.Data().data(), w.ByteCount(), true);
@@ -677,6 +721,14 @@ void net::Client::OnMapChange(BitReader& r)
     MapChange m;
     if (ReadMapChange(r, m))
     {
+        std::string missing;
+        if (!HaveMap(m.gmp, m.sty, m.scr, &missing) || !SameMap(m.map, m.gmp, m.sty, m.print, &missing))
+        {
+            printf("net: frame %u, %s\n", mFrame, missing.c_str());
+            SendLeave(missing);
+            LeaveToMenu(missing.c_str());
+            return;
+        }
         printf("net: frame %u, the next map: %s\n", mFrame, m.scr.c_str());
         engine::ChangeMap(m.gmp, m.sty, m.scr, 90);
         mScr = m.scr;
@@ -887,10 +939,16 @@ void net::Client::Reconnect()
     }
 }
 
-// Back in: the same game goes on from the server's next snapshot, if the server has us as the same player on the same
-// map (a server restarted on it too: its ticks start over)
+// Back in: the same game goes on from the server's next snapshot, if it is the same server's run (a restarted one has
+// another game, whatever its map) and it has us as the same player on the same map
 void net::Client::Rejoined(const Welcome& welcome)
 {
+    if (welcome.session != mSession)
+    {
+        printf("net: frame %u, the server was restarted: its game isn't this one\n", mFrame);
+        LeaveToMenu("the server was restarted");
+        return;
+    }
     if (welcome.version != kProtocolVersion || welcome.slot != mSlot || welcome.scr != mScr)
     {
         printf("net: frame %u, the server has us back as player %d on %s, not %d on %s: start the game again to play on\n", mFrame,
@@ -903,7 +961,7 @@ void net::Client::Rejoined(const Welcome& welcome)
     mSynced = false;
     mNewSnapshot = false;
     mLatestTick = 0;
-    mServerGame = -1; // a restarted server counts its games from the start again
+    mServerGame = -1; // the server's newest, which may have started while we were away (a round's fresh game)
     mLastSnapshotMs = NowMs();
     for (Snapshot& s : mReceived)
     {
@@ -941,6 +999,25 @@ void net::Client::ShowStatus()
         centre = "Connection interrupted";
     }
     engine::SetNetStatus(mConnected && mPingShown ? "ping " + std::to_string(mPingShown) : "", centre);
+}
+
+void net::Client::SendLeave(const std::string& why)
+{
+    if (mTransport)
+    {
+        BitWriter w;
+        WriteText(w, kMsgLeave, why);
+        mTransport->Send(0, kChannelReliable, w.Data().data(), w.ByteCount(), true);
+        mTransport->Flush();
+        // A disconnect after it, not at once: the server drops what came with an abrupt one (enet_peer_reset_queues)
+        mTransport->Disconnect(0);
+        TransportEvent e;
+        for (const long long until = NowMs() + 500; NowMs() < until && !(mTransport->Poll(e) && e.type == TransportEvent::kDisconnect);)
+        {
+            mTransport->Flush();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
 }
 
 void net::Client::Leave()

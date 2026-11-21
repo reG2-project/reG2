@@ -1,6 +1,7 @@
 // port/net core tests (ctest): no game, no network; a failed CHECK prints and exits 1.
 #include "check.hpp"
 #include "../core/bitstream.hpp"
+#include "../core/crc32.hpp"
 #include "../core/protocol.hpp"
 #include "../core/snapshot.hpp"
 #include <stdio.h>
@@ -247,6 +248,11 @@ void TestMessages()
     w.gmp = "wil-multi.gmp";
     w.sty = "wil.sty";
     w.scr = "downtown-6P.scr";
+    w.session = 0xDEADBEEF;
+    w.name = "PLAYER 2";
+    w.map = "downtown-6p";
+    w.print.gmp = 0x80000001;
+    w.print.sty = 7;
     w.serverTick = 123456;
     w.maps = {"mp1-6p", "mp2-6p", "downtown-6p"};
     net::BitWriter bw;
@@ -256,7 +262,19 @@ void TestMessages()
     net::Welcome got;
     CHECK(net::ReadWelcome(br, got));
     CHECK(got.slot == 2 && got.players == 6 && got.gameType == 3 && got.fragLimit == 25 && got.gmp == w.gmp &&
-          got.scr == w.scr && got.serverTick == 123456 && got.maps == w.maps);
+          got.scr == w.scr && got.serverTick == 123456 && got.maps == w.maps && got.session == w.session && got.name == w.name &&
+          got.map == w.map && got.print.gmp == w.print.gmp && got.print.sty == 7);
+
+    net::Hello hello;
+    hello.build = "0.1.0-dev 1a2b3c4d5e";
+    hello.name = "me";
+    hello.carInfo = 0xFFFFFFFF;
+    net::BitWriter hw2;
+    net::WriteHello(hw2, hello);
+    net::BitReader hr2(hw2.Data().data(), hw2.ByteCount());
+    net::Hello hgot;
+    CHECK(hr2.Bits(8) == net::kMsgHello && net::ReadHello(hr2, hgot) && hgot.version == net::kProtocolVersion && hgot.build == hello.build &&
+          hgot.name == "me" && hgot.carInfo == 0xFFFFFFFF);
 
     // A command and a notice: a line of text each, cut at 120 characters
     for (net::MsgType type : {net::kMsgCommand, net::kMsgNotice})
@@ -277,13 +295,16 @@ void TestMessages()
     mc.gmp = "MP1-comp.gmp";
     mc.sty = "wil.sty";
     mc.scr = "MP1-6P.scr";
+    mc.map = "mp1-6p";
+    mc.print.sty = 12345;
     mc.game = 513;
     net::BitWriter mw;
     net::WriteMapChange(mw, mc);
     net::BitReader mr(mw.Data().data(), mw.ByteCount());
     CHECK(mr.Bits(8) == net::kMsgMapChange);
     net::MapChange mgot;
-    CHECK(net::ReadMapChange(mr, mgot) && mgot.gmp == mc.gmp && mgot.sty == mc.sty && mgot.scr == mc.scr && mgot.game == 513);
+    CHECK(net::ReadMapChange(mr, mgot) && mgot.gmp == mc.gmp && mgot.sty == mc.sty && mgot.scr == mc.scr && mgot.game == 513 && mgot.map == mc.map &&
+          mgot.print.sty == 12345 && mgot.print.gmp == 0);
 
     net::InputCmd cmds[5] = {{100, 1}, {101, 1}, {102, 0x10}, {103, 0x3FFFFF}, {104, 0x3FFFFF}};
     net::BitWriter cw;
@@ -306,6 +327,29 @@ void TestMessages()
     net::BitReader hr(hw.Data().data(), hw.ByteCount());
     CHECK(hr.Bits(8) == net::kMsgSnapshot);
     CHECK(net::ReadSnapshotHeader(hr, hb) && hb.tick == 5000 && hb.baseTick == 4990 && hb.lastCmdTick == 4998);
+}
+
+// zlib's CRC-32, in one go or in pieces
+void TestCrc()
+{
+    CHECK(net::Crc32("123456789", 9) == 0xCBF43926u);
+    CHECK(net::Crc32("56789", 5, net::Crc32("1234", 4)) == 0xCBF43926u);
+    CHECK(net::Crc32("", 0) == 0);
+}
+
+// Players' names: printable, 15 characters at most, never the same as another's but for case
+void TestNames()
+{
+    const std::vector<std::string> none;
+    CHECK(net::PlayerName("bob", none) == "bob");
+    CHECK(net::PlayerName("", none) == "PLAYER");
+    CHECK(net::PlayerName("  \t\x01 ", none) == "PLAYER");
+    CHECK(net::PlayerName("  a\x7f b  ", none) == "a b");
+    CHECK(net::PlayerName("ABCDEFGHIJKLMNOPQRST", none) == "ABCDEFGHIJKLMNO");
+    CHECK(net::PlayerName("PLAYER", {"player"}) == "PLAYER 2");
+    CHECK(net::PlayerName("", {"PLAYER", "PLAYER 2"}) == "PLAYER 3");
+    CHECK(net::PlayerName("ABCDEFGHIJKLMNO", {"abcdefghijklmno"}) == "ABCDEFGHIJKLM 2");
+    CHECK(net::PlayerName("bob", {"alice"}) == "bob");
 }
 } // namespace
 
@@ -387,6 +431,8 @@ int main()
     printf("snapshot parts ok\n");
     fflush(stdout);
     TestMessages();
+    TestCrc();
+    TestNames();
     printf("messages ok\n");
     printf("net core tests passed\n");
     return 0;

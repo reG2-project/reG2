@@ -195,6 +195,14 @@ void CollisionSoundQueue::Reset()
 MATCH_FUNC(0x40bba0)
 void CollisionSoundQueue::AddCollision(Sprite* pSprite, Fix16 impact_strength)
 {
+#if defined(GTA2_PORT)
+    // Port: at most k_max_events a tick, the rest unheard; past it the original wrote over the heap after the queue
+    // (a pile of cars touching: a crash much later, freeing something else)
+    if (mCount >= k_max_events)
+    {
+        return;
+    }
+#endif
     if (!bSkip_audio)
     {
         CollisionEvent* pEvent = &mEvents[mCount];
@@ -225,6 +233,13 @@ void CollisionSoundQueue::AddCollision(Sprite* pSprite, Fix16 impact_strength)
 MATCH_FUNC(0x40bc40)
 void CollisionSoundQueue::AddFloorCollision(Sprite* pSprite)
 {
+#if defined(GTA2_PORT)
+    // Port: at most k_max_events a tick (AddCollision)
+    if (mCount >= k_max_events)
+    {
+        return;
+    }
+#endif
     if (!bSkip_audio)
     {
         CollisionEvent* pEvent = &mEvents[mCount];
@@ -257,6 +272,13 @@ void CollisionSoundQueue::AddFloorCollision(Sprite* pSprite)
 MATCH_FUNC(0x40bd10)
 void CollisionSoundQueue::AddBlockCollision(Sprite* pSprite)
 {
+#if defined(GTA2_PORT)
+    // Port: at most k_max_events a tick (AddCollision)
+    if (mCount >= k_max_events)
+    {
+        return;
+    }
+#endif
     if (!bSkip_audio)
     {
         CollisionEvent* pEvent = &this->mEvents[this->mCount];

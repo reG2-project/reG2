@@ -804,7 +804,12 @@ bool sound_obj::SelectCarObjectCollisionSound(CollisionEvent* pEvent)
         return SelectObjectImpactSound(pEvent, 3);
     }
     PlayPickupVoice(pEvent->mObjectModel);
+#if defined(GTA2_PORT)
+    // Port: only the voice; true would queue the scratch sample as it stands (rate 0 before any sound: SIGFPE on x86)
+    return false;
+#else
     return true;
+#endif
 }
 
 MATCH_FUNC(0x413040)
@@ -865,7 +870,12 @@ bool sound_obj::SelectPedObjectCollisionSound(CollisionEvent* pEvent)
         return SelectObjectImpactSound(pEvent, 7);
     }
     PlayPickupVoice(pEvent->mObjectModel);
+#if defined(GTA2_PORT)
+    // Port: only the voice; true would queue the scratch sample as it stands (rate 0 before any sound: SIGFPE on x86)
+    return false;
+#else
     return true;
+#endif
 }
 
 MATCH_FUNC(0x413120)
@@ -1602,6 +1612,14 @@ void sound_obj::HandleTrainCabRollingFrictionSound(Sound_Params* pParams)
 MATCH_FUNC(0x4145E0)
 bool sound_obj::GetCar(s32 idx, Car** ppOut) const
 {
+#if defined(GTA2_PORT)
+    // Port: a queued car sample can outlive its entity (a network client's rollback restores the entities, not the
+    // queues): the slot may hold another kind of object now, whose mpAny isn't a sprite
+    if (mAudioEntities[idx].mbUsed && mAudioEntities[idx].mpObj->mObjectType != SoundObjectTypeEnum::Sprite_1)
+    {
+        return false;
+    }
+#endif
     if (mAudioEntities[idx].mbUsed)
     {
         Sprite* pSprite = mAudioEntities[idx].mpObj->mpAny.pSprite;
@@ -4269,8 +4287,13 @@ void sound_obj::ProcessActiveQueues()
                         active.mEntityIndex = 0;
                         continue;
                     }
+#if defined(GTA2_PORT)
+                    // Port: a rate of 0 gives 0, as in UpdateFramesToPlay.
+                    active.mFramesToPlay = sample.mRate ? mFramesPerSecond * gSampManager.GetSampleLength(active.mSampIdx) / sample.mRate : 0;
+#else
                     active.mFramesToPlay = mFramesPerSecond *
                         gSampManager.GetSampleLength(active.mSampIdx) / sample.mRate;
+#endif
                 }
                 else
                 {
@@ -4498,6 +4521,14 @@ void sound_obj::UpdateFramesToPlay(sound_0x68* pObj)
 {
     if (pObj->mReleasingSoundFlag)
     {
+#if defined(GTA2_PORT)
+        // Port: a network client's queued sample can carry a rate of 0 (Industrial-6P), SIGFPE on x86; 0 as on arm64.
+        if (pObj->mLoopCount && pObj->mRate == 0)
+        {
+            pObj->mFramesToPlay = 0;
+            return;
+        }
+#endif
         if (pObj->mLoopCount)
         {
             pObj->mFramesToPlay = (static_cast<u32>(mFramesPerSecond) * gSampManager.GetSampleLength(pObj->mSampIdx)) /
@@ -6719,6 +6750,21 @@ void sound_obj::ProcessType7_Weapon(s32 idx)
     }
 }
 
+#if defined(GTA2_PORT)
+// A car of the car pool's list: the radio's last car may have gone since (or be the last game's)
+static bool IsLiveCar(const Car* pCar)
+{
+    for (const Car* c = gCar_BC_Pool ? gCar_BC_Pool->mPool.mpPrev : NULL; c; c = c->mpNext)
+    {
+        if (c == pCar)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
 MATCH_FUNC(0x57DD50)
 void sound_obj::ProcessType3_CopRadioAndMusic()
 {
@@ -6798,7 +6844,13 @@ void sound_obj::ProcessType3_CopRadioAndMusic()
     mbInRadioCar = 0;
     if (mbWasInRadioCar == 1)
     {
+#if defined(GTA2_PORT)
+        // Port: 101 and 102 (the police scanner, none) aren't emitters: the original read past mRadioEmitters. And
+        // the car must still be one: a network client's last car can be the last game's, its memory since reused
+        if (sLastPlayerCar && mActiveEmitterIdx[0] < GTA2_COUNTOF(mRadioEmitters) && IsLiveCar(sLastPlayerCar))
+#else
         if (sLastPlayerCar)
+#endif
         {
             sLastPlayerCar->mEmitterStatus = mRadioEmitters[mActiveEmitterIdx[0]].mStationIdx;
         }
@@ -6845,6 +6897,14 @@ void sound_obj::HandleVocalStreamSwitching(char_type bFastForward)
             gSampManager.CloseVocalStream(0);
             return;
         }
+#if defined(GTA2_PORT)
+        // Port: the police scanner (101) has no emitter to resume from (mRadioEmitters has 5)
+        if (mActiveEmitterIdx[0] >= GTA2_COUNTOF(mRadioEmitters))
+        {
+            pos = 0;
+        }
+        else
+#endif
         pos = static_cast<u32>(mRadioEmitters[mActiveEmitterIdx[0]].mElapsedFrames) * 1000 / mFramesPerSecond + mRadioEmitters[mActiveEmitterIdx[0]].mPosMs;
         if (pos > length)
         {
@@ -6930,6 +6990,14 @@ void sound_obj::HandleVocalStreamSwitching(char_type bFastForward)
     length = gSampManager.GetVocalLengthMs(0);
     if (length > 0)
     {
+#if defined(GTA2_PORT)
+        // Port: the police scanner (101) has no emitter to resume from (mRadioEmitters has 5)
+        if (mActiveEmitterIdx[0] >= GTA2_COUNTOF(mRadioEmitters))
+        {
+            pos = 0;
+        }
+        else
+#endif
         pos = static_cast<u32>(mRadioEmitters[mActiveEmitterIdx[0]].mElapsedFrames) * 1000 / mFramesPerSecond + mRadioEmitters[mActiveEmitterIdx[0]].mPosMs;
         if (pos > length)
         {
@@ -7049,6 +7117,10 @@ void sound_obj::UpdateCarRadioAudio()
             if (mMainVariant == 0)
             {
                 u32 tune_rate = gSampManager.GetPlayBackRate(138);
+#if defined(GTA2_PORT)
+                // Port: no emitter while the police scanner or none plays (mRadioEmitters has 5)
+                if (mActiveEmitterIdx[0] < GTA2_COUNTOF(mRadioEmitters))
+#endif
                 tune_rate += (tune_rate >> 6) * mRadioEmitters[mActiveEmitterIdx[0]].mStationIdx;
                 if (tune_rate > static_cast<u32>(gCarRadioTuneRate + 90))
                 {

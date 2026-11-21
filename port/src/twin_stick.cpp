@@ -877,9 +877,9 @@ void AimCamera(Camera* pCamera, Ped* pPed, Fix16& x, Fix16& y)
     {
         return;
     }
-    if (PortSaves::Replaying())
+    if (PortSaves::Replaying() || bStartNetworkGame)
     {
-        // A lead left from the last game would move the demo's view, and with it where traffic appears.
+        // A lead left from the last game would move the demo's or a network game's view, and with it where traffic appears.
         sLookX = sLookY = 0.0f;
     }
     f32 wantX = 0.0f;

@@ -6,7 +6,7 @@ name: Port
 # A tag v<x.y.z> (pushed, or run on by release.yml) builds that version and drafts its release.
 on:
   push:
-    branches: ['main', 'port/**']
+    branches: ['main', 'net', 'port/**']
     tags: ['v*']
   workflow_dispatch:
 

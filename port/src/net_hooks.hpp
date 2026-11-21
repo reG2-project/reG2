@@ -21,6 +21,9 @@ extern void (*gPortIdleHook)();
 // No audio device for the game: sound_obj then doesn't run at all. A network server's: nobody hears it, and its
 // listener follows slot 0's camera, whose ped (once that player left) can be any ped's, in any car
 extern bool gPortNoAudio;
+// No pad vibration from the game's events (rumble.cpp): a network server's, whose local player is slot 0's remote one,
+// and a client's resimulation, whose hits and crashes were felt when those ticks were predicted
+extern bool gPortNoRumble;
 extern s32 gPortTrafficCap; // the ambient traffic cars per player: 16, or a network server's --traffic
 // The players the ambient traffic and peds are for (Car.cpp, Char_Pool.cpp: the game's limits are for the whole game, and
 // the first players' cameras took them all); 1 but on a network server

@@ -1,9 +1,12 @@
 // port/net (port/docs/netcode.md, "Code layout"): the rollback set, see world.hpp.
 #include "world.hpp"
 #include "internal.hpp"
+#include "Source/Door.hpp"
+#include "Source/DoorPool.hpp"
 #include "Source/Game.hpp"
 #include "Source/Light.hpp"
 #include "Source/Player.hpp"
+#include "Source/map_0x370.hpp"
 #include "port/src/port_globals.hpp"
 #include "port/src/rand/state.hpp" // PortRand::ParticleMemory
 #include <string.h>
@@ -128,6 +131,20 @@ std::vector<net::engine::Block> net::engine::WorldBlocks()
     {
         Block b = {(unsigned char*)gLightGrid, 0x1000 * sizeof(Light*), "gLightGrid[]"};
         blocks.push_back(b);
+    }
+    // The map block each door's faces are in: the map's blocks are on the heap, the doors' state in the set. A door
+    // gets a block of its own when it is made (Map_0x370::ChangeBlock clones the map's), so it stays where it is
+    for (int i = 0; gDoor_4D4 && gMap_0x370 && i < gDoor_4D4->mCount; i++)
+    {
+        DoorData* const halves[2] = {gDoor_4D4->mDoors[i].mPrimaryDoorData, gDoor_4D4->mDoors[i].mSecondaryDoorData};
+        for (DoorData* d : halves)
+        {
+            if (gmp_block_info* b = d ? gMap_0x370->GetBlock(d->mX, d->mY, d->mZ) : NULL)
+            {
+                Block door = {(unsigned char*)b, sizeof(*b), "door block"};
+                blocks.push_back(door);
+            }
+        }
     }
     Block deaths = {0, 0, "net deaths"};
     NetDeaths_Memory(&deaths.addr, &deaths.size);

@@ -7,6 +7,7 @@
 // address and the name are kept in gta2_registry.ini, beside the game's own network settings.
 #include "net_main.hpp"
 #include "port/src/net_hooks.hpp"
+#include "Source/Draw.hpp"
 #include "Source/Frontend.hpp"
 #include "Source/SoundObject.hpp"
 #include "Source/winmain.hpp"
@@ -14,6 +15,7 @@
 #include <dinput.h>
 #include <string>
 #include <string.h>
+#include <vector>
 
 EXTERN_GLOBAL(HINSTANCE, gHInstance);
 EXTERN_GLOBAL(SoundObject, snd1); // the frontend's sound: 1 up, 2 down, 5 enter, 6 back, 7 a key, 8 a deletion
@@ -22,6 +24,8 @@ namespace
 {
 const u16 kPage = MENUPAGE_13; // 12 is the options's (port/src/options_menu.cpp)
 const u16 kNoTarget = 268; // an ENTERABLE option's target the game does nothing for (UpdatePageFromUserInput)
+const int kStatusLines = 6; // the status's lines, under the options down to the bottom (a refusal names two builds)
+const s16 kStatusY = 350;
 enum
 {
     kAddress,
@@ -79,6 +83,39 @@ void SetText(wchar_t* out, const std::string& text)
         out[n] = (wchar_t)(unsigned char)toupper((unsigned char)text[n]);
     }
     out[n] = 0;
+}
+
+// The status in lines that fit right of the picture, and left of the Rockstar logo near the bottom; what doesn't fit
+// is left out
+std::vector<std::string> StatusLines(const std::string& text, u16 font)
+{
+    std::vector<std::string> lines(1);
+    const s32 height = GetLineSpacingFromFontType(font);
+    size_t at = 0;
+    while (at < text.size())
+    {
+        const size_t space = text.find(' ', at);
+        const std::string word = text.substr(at, space == std::string::npos ? std::string::npos : space - at);
+        at = space == std::string::npos ? text.size() : space + 1;
+        const std::string longer = lines.back().empty() ? word : lines.back() + " " + word;
+        wchar_t wide[50];
+        SetText(wide, longer);
+        const s32 y = kStatusY + (s32)(lines.size() - 1) * height;
+        const s32 room = y + height > 400 ? 250 : 330; // the logo: x 560 and on, from y 400
+        if (lines.back().empty() || Frontend::GetMaxTextWidth(wide, font) <= room)
+        {
+            lines.back() = longer;
+        }
+        else if ((int)lines.size() < kStatusLines)
+        {
+            lines.push_back(word);
+        }
+        else
+        {
+            break;
+        }
+    }
+    return lines;
 }
 
 // The characters a key types: an address's and a name's (the game's own keyboard table has no shift, and the name
@@ -184,7 +221,11 @@ void Refresh(Frontend* pFrontend)
     SetText(page.mOptionsArray[kAddress].mOptionNameStr, "Address   " + gAddress + (gEditing == kAddress && cursor ? "_" : ""));
     SetText(page.mOptionsArray[kName].mOptionNameStr, "Name   " + gName + (gEditing == kName && cursor ? "_" : ""));
     SetText(page.mOptionsArray[kJoin].mOptionNameStr, gJoining ? "Connecting..." : "Join game");
-    SetText(page.mElementsArray[0].mElementNameStr, gStatus);
+    const std::vector<std::string> lines = StatusLines(gStatus, page.mElementsArray[0].mFontType);
+    for (int i = 0; i < kStatusLines; i++)
+    {
+        SetText(page.mElementsArray[i].mElementNameStr, i < (int)lines.size() ? lines[i] : "");
+    }
 }
 
 // The server welcomed us: the game's network start (as -N does before the frontend), then the frontend boots it
@@ -227,20 +268,23 @@ void Setup(Frontend* pFrontend)
     }
     page.mCurrentOptionIdx = kJoin;
     page.mDefaultOptionIdx = kJoin;
-    page.mNumberOfElements = 1;
-    MenuElement& status = page.mElementsArray[0];
-    status.mElementType = STRING_TEXT_1;
-    status.mXpos = 300;
-    status.mYpos = 350;
-    status.mFontType = pFrontend->mNormalFont;
-    status.mFontPalette = 0xFFFF;
+    page.mNumberOfElements = kStatusLines;
+    for (int i = 0; i < kStatusLines; i++)
+    {
+        MenuElement& status = page.mElementsArray[i];
+        status.mElementType = STRING_TEXT_1;
+        status.mXpos = 300;
+        status.mYpos = (s16)(kStatusY + i * GetLineSpacingFromFontType(pFrontend->mNormalFont));
+        status.mFontType = pFrontend->mNormalFont;
+        status.mFontPalette = 0xFFFF;
+    }
     static bool loaded;
     if (!loaded)
     {
         loaded = true;
         const std::string address = Load("ServerAddress");
         gAddress = address.empty() ? gAddress : address;
-        gName = NetMenu_DefaultName().empty() ? Load("PlayerName") : NetMenu_DefaultName();
+        gName = NetMenu_DefaultName().empty() ? Load("PlayerName") : NetMenu_DefaultName(); // --name, else the saved one
     }
     gName = gName.empty() ? "PLAYER" : gName;
     for (char& c : gName)

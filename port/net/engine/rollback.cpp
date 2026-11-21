@@ -14,6 +14,7 @@
 #include "Source/sound_obj.hpp"
 #include "Source/Ped.hpp"
 #include "Source/SoundObject.hpp"
+#include "port/src/net_hooks.hpp"
 #include <algorithm>
 #include <stddef.h>
 #include <string.h>
@@ -25,28 +26,58 @@ struct net::engine::SavedWorld::Impl
 {
     std::vector<unsigned char> bytes;
     ReplicaState* replicas = NULL;
+    unsigned set = 0; // the rollback set it was saved with (gSet)
 };
 
 namespace
 {
-// The rollback set, asked once per game (its pointees are fixed once a map is loaded)
+unsigned gSet; // which rollback set: taken again, its blocks lie elsewhere in a saved world (Restorable)
+
+// The first block that differs between two sets (none: -1)
+long FirstDifference(const std::vector<net::engine::Block>& a, const std::vector<net::engine::Block>& b)
+{
+    for (size_t i = 0; i < a.size() || i < b.size(); i++)
+    {
+        if (i >= a.size() || i >= b.size() || a[i].addr != b[i].addr || a[i].size != b[i].size)
+        {
+            return (long)i;
+        }
+    }
+    return -1;
+}
+
+// The rollback set, taken again whenever it would be another: a new game (a map change's new Game can come at the old
+// one's address, with its pools elsewhere: the old blocks wrote over freed memory), a function's static registered, a
+// pointee a global gained (NULL when the set was taken) or that moved. A world saved with an older set isn't restored
+// (Restorable)
 const std::vector<net::engine::Block>& RollbackSet()
 {
-    // Again for every game: a map change's new Game can come at the old one's address, with its pools elsewhere (the
-    // old blocks then wrote over freed memory: crashes all over after the second map change)
     static std::vector<net::engine::Block> sBlocks;
-    static Game* sFor;
-    static int sGeneration = -1;
-    static size_t sGlobals;
-    if (sFor != gGame_0x40 || sGeneration != net::engine::GameGeneration() || sBlocks.empty() ||
-        sGlobals != net::engine::RegisteredGlobals()) // a function's static came: at the end (WorldBlocks)
+    std::vector<net::engine::Block> now = net::engine::WorldBlocks();
+    const long diff = FirstDifference(sBlocks, now);
+    if (diff >= 0)
     {
-        sBlocks = net::engine::WorldBlocks();
-        sFor = gGame_0x40;
+        sBlocks.swap(now);
+        gSet++;
+        // A block that keeps changing (a scratch pointer with a pointee, for kNoPointee in world.cpp) would leave no save
+        // to restore: each retake throws the saves away
+        static int sGeneration = -1, sTakes;
+        sTakes = sGeneration == net::engine::GameGeneration() ? sTakes + 1 : 0;
         sGeneration = net::engine::GameGeneration();
-        sGlobals = net::engine::RegisteredGlobals();
+        if (sTakes == 50)
+        {
+            printf("net: CHECK the rollback set taken 50 times in this game, the last time from block %ld (%s)\n", diff,
+                   (size_t)diff < sBlocks.size() ? sBlocks[diff].name : "-");
+        }
         if (net::engine::Debug().checkGrid)
         {
+            size_t bytes = 0;
+            for (const net::engine::Block& b : sBlocks)
+            {
+                bytes += b.size;
+            }
+            printf("net: the rollback set taken (set %u): %zu blocks, %zu bytes, from block %ld (%s)\n", gSet, sBlocks.size(), bytes, diff,
+                   (size_t)diff < sBlocks.size() ? sBlocks[diff].name : "-");
             // GTA2_NET_CHECKGRID: a block that runs past the start of the next into memory beyond it (one inside another,
             // a camera inside its player, is fine). A pointee bigger than what its pointer points to is restored over
             // whatever lies after it
@@ -62,26 +93,6 @@ const std::vector<net::engine::Block>& RollbackSet()
                            by[i - 1].size, by[i].name, (void*)by[i].addr, by[i].size);
                 }
             }
-        }
-    }
-    else if (net::engine::Debug().checkGrid)
-    {
-        // GTA2_NET_CHECKGRID: the set as it would be now. A pointee that moved since is copied from (and restored into)
-        // memory it no longer owns: a scratch pointer for kNoPointee (world.cpp), or one to take again
-        static int sSaid;
-        const std::vector<net::engine::Block> now = net::engine::WorldBlocks();
-        for (size_t i = 0; i < now.size() && i < sBlocks.size() && sSaid < 10; i++)
-        {
-            if (now[i].addr != sBlocks[i].addr || now[i].size != sBlocks[i].size)
-            {
-                sSaid++;
-                printf("net: CHECK the rollback block %s moved since the set was taken: %p (%zu bytes), now %p (%zu)\n", sBlocks[i].name,
-                       (void*)sBlocks[i].addr, sBlocks[i].size, (void*)now[i].addr, now[i].size);
-            }
-        }
-        if (now.size() != sBlocks.size() && sSaid++ < 10)
-        {
-            printf("net: CHECK the rollback set has %zu blocks now, %zu when taken\n", now.size(), sBlocks.size());
         }
     }
     return sBlocks;
@@ -101,9 +112,18 @@ net::engine::SavedWorld::~SavedWorld()
 void net::engine::SaveGame(SavedWorld& out, uint32_t tick)
 {
     SaveWorld(RollbackSet(), out.mImpl->bytes);
+    out.mImpl->set = gSet;
     out.mImpl->replicas = SaveReplicas(out.mImpl->replicas);
     out.tick = tick;
     out.valid = true;
+}
+
+// A world saved with another set (taken again since: a function's static registered, or a pool a global points to
+// allocated, puts a block in the middle) would be copied into the wrong blocks: a pool's list from another's bytes
+bool net::engine::Restorable(const SavedWorld& in)
+{
+    RollbackSet();
+    return in.mImpl->set == gSet;
 }
 
 void net::engine::RestoreGame(const SavedWorld& in)
@@ -116,10 +136,11 @@ void net::engine::RestoreGame(const SavedWorld& in)
     unsigned char* channels = (unsigned char*)&gSound_obj + from;
     memcpy(sLive, channels, to - from);
     const u8 active = gSound_obj.mnActiveSamples;
-    // So does the police radio and the car radio (from field_5504 on): restored, the stars it last called out went
-    // back too, and every correction started its call again over the one it was saying
-    const size_t radio = offsetof(sound_obj, mRadioStationChangeMode);
-    static unsigned char sRadio[sizeof(sound_obj) - offsetof(sound_obj, mRadioStationChangeMode)];
+    // So do the radios, from the car radio's stations (mRadioEmitters) on: a resimulation runs no sound, so the saves
+    // would hold the radio's state from before the player got in, and the car radio would start again on another station
+    // every tick; and every correction would start the police radio's call again over itself
+    const size_t radio = offsetof(sound_obj, mRadioEmitters);
+    static unsigned char sRadio[sizeof(sound_obj) - offsetof(sound_obj, mRadioEmitters)];
     memcpy(sRadio, (unsigned char*)&gSound_obj + radio, sizeof(sRadio));
     // The window's size is this machine's, not the world's: a resize since the save (its cameras' screen size, set only
     // on a change) would otherwise go back to the old one for good
@@ -151,11 +172,14 @@ void net::engine::ResimTick(const uint32_t* buttons, int count)
     GuardPeds();
     KeepPlayerArrows();
     SeenByAll();
+    const bool noRumble = gPortNoRumble;
+    gPortNoRumble = true; // felt when the tick was predicted, as its sounds were heard
     g->UpdateAllPlayersControls();
     if (g->mGameState == GameState::Running_1)
     {
         g->UpdateGame(); // the tick without the sound service (Game::ExecuteGame without sound)
     }
+    gPortNoRumble = noRumble;
     GuardPeds(); // after it too: the live tick follows the last one without a frame in between
     // What the sound service takes from the sim each tick, taken here as it doesn't run: a resimulated sound was heard
     // when it was predicted. Left there, it went into the saves and every restore played it again (a gun that went on

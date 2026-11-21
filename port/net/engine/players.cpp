@@ -276,7 +276,12 @@ bool MovePlayer(int i, Ped* ped, const net::EntityState& e)
     const bool jump = i == LocalPlayer() && was && (abs(was->mXy.x.mValue - x.mValue) > (8 << 14) || abs(was->mXy.y.mValue - y.mValue) > (8 << 14));
     if (ped->mCar)
     {
-        MoveCar(ped->mCar, x, y, z, rot);
+        // A train's carriage is where its train puts it (trains.cpp): moved to a player the server has elsewhere, its
+        // lead would leave the rails
+        if (!ped->mCar->IsTrainModel())
+        {
+            MoveCar(ped->mCar, x, y, z, rot);
+        }
     }
     else
     {

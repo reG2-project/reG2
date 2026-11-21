@@ -247,6 +247,10 @@ game ([docs/netcode.md](docs/netcode.md)). NETWORK GAME in the start menu joins 
 ./reg2 --connect 127.0.0.1 --name bot1 --bot hunter    # a bot
 ```
 
+To play over the internet the host runs the server, forwards UDP 27920 to its machine in its router, lets it through its
+firewall and gives the others its public address ([docs/netcode.md](docs/netcode.md#hosting-a-game), "Hosting a game"; on a
+LAN, its LAN address). Everyone needs the same reG2 build and game data.
+
 `ctest --test-dir <build folder> -L net` runs the netcode's unit tests (`-DGTA2_GAME=OFF` configures only those, without
 SDL3), and `BUILD=<build folder> GAME=<game folder> net/scripts/net_check.sh` servers and bot clients on this machine
 (about 6 minutes).

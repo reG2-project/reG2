@@ -122,9 +122,9 @@ template <class Fn> void ForEachPair(const Snapshot& snap, Fn fn)
             local = p ? kPedIdBase + p->mId : 0;
             cop = p && IsCop(p);
         }
-        else if (s.type == kEntityObject)
+        else if (s.type == kEntityObject || s.type == kEntityTrain)
         {
-            continue; // Pickups are matched by place (pickups.cpp), not compared here
+            continue; // Pickups are matched by place (pickups.cpp), not compared here; nor trains (their carriages go by each end's own car ids)
         }
         if (EntityAge(s))
         {

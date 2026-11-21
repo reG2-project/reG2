@@ -27,6 +27,7 @@ class ClientProbe
     void AfterRestore(const Snapshot& snap);
     bool AfterApply(const Snapshot& snap, uint32_t ourTick);
     void AfterResim();
+    void AfterPlainApply(const Snapshot& snap); // a snapshot too old or too new to reconcile, applied as it is
     // The divergence check, once on our own: each snapshot against our game at its tick (<saved>), then back to <now>;
     // the program ends after its ticks
     bool Alone() const
@@ -44,5 +45,6 @@ class ClientProbe
     JerkMeter mJerk;
     uint32_t mAloneFrom = 0; // the server tick from which this game runs on its own (0: not yet)
     uint32_t mLastInput = ~0u;
+    uint32_t mLastSnap = 0; // the tick of the last snapshot applied
 };
 } // namespace net

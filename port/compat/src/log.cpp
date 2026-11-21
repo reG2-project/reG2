@@ -2,7 +2,7 @@
 // next to the executable when that folder is writable, else in the per-user folder.
 // $GTA2_LOG_FILE: every line written to that file as it comes.
 #include "port_platform.hpp"
-#include "reg2_version.h"
+#include "../../src/build_id.hpp"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -242,7 +242,7 @@ void port_StartLog(int argc, char** argv)
         cmdLine += (i ? " " : "") + std::string(argv[i]);
     }
 #endif
-    SDL_Log("reG2 %s (%s), %s, exe %s, command line: %s", GTA2_VERSION, Arch(), OsVersion().c_str(), exePath.c_str(), cmdLine.c_str());
+    SDL_Log("reG2 %s (%s), %s, exe %s, command line: %s", port_BuildId(), Arch(), OsVersion().c_str(), exePath.c_str(), cmdLine.c_str());
     char date[32] = "";
     const time_t now = time(NULL);
     strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", localtime(&now));

@@ -13,6 +13,7 @@
 #include "Source/Char_Pool.hpp"
 #include "Source/Game.hpp"
 #include "Source/ObjectDefinitions.hpp"
+#include "Source/Object_3C.hpp"
 #include "Source/Object_5C.hpp"
 #include "Source/ObjectPool.hpp"
 #include "Source/Ped.hpp"
@@ -20,6 +21,7 @@
 #include "Source/SoundObject.hpp"
 #include "Source/SpriteGrid.hpp"
 #include "Source/Weapon.hpp"
+#include "Source/WeaponManager.hpp"
 #include "Source/char.hpp"
 #include "Source/collide.hpp"
 #include "Source/gbh_graphics.hpp"
@@ -35,10 +37,12 @@
 #include "port/src/rand/state.hpp"
 #include "Source/rng.hpp"
 #include "Source/PedGroup.hpp"
+#include "Source/PublicTransport.hpp"
 #include <stdio.h>
 #include <stdlib.h>
 #include <algorithm>
 #include <set>
+#include <unordered_map>
 #include <string.h>
 #include <string>
 #include <unordered_map>
@@ -255,8 +259,10 @@ bool net::engine::DebugCheckPlayerCars(const char* where)
             }
             return false;
         }
-        // Driving a car that doesn't have it as its driver (Car::ClearDriver reads the driver when it gets out)
-        if (car && ped->mPedState2 == ped_state_2::ped2_driving_10 && !ped->mEnterCarAsPassenger && car->mDriver != ped)
+        // Driving a car that doesn't have it as its driver (Car::ClearDriver reads the driver when it gets out). Not a
+        // train's: reversing one hands its driver to the new lead and leaves the ped in its carriage (Train::ReassignTrainHead)
+        if (car && ped->mPedState2 == ped_state_2::ped2_driving_10 && !ped->mEnterCarAsPassenger && car->mDriver != ped &&
+            !car->IsTrainModel())
         {
             static int sDriver;
             if (sDriver++ < 10)
@@ -272,70 +278,352 @@ bool net::engine::DebugCheckPlayerCars(const char* where)
     return true;
 }
 
+namespace
+{
+uint32_t PedNetId(const Ped* p)
+{
+    for (auto& q : ReplicaPeds())
+    {
+        if (q.second == p)
+        {
+            return q.first;
+        }
+    }
+    return 0;
+}
+
+// What is wrong between a ped and the car it drives (NULL: nothing). Ped::ExitCarStateMachine clears the driver of
+// mTargetToEnter, not of mCar, and Car::ClearDriver reads that driver
+const char* DriverWrong(const Ped* p)
+{
+    const Car* car = p->mCar;
+    if (!car || p->mEnterCarAsPassenger || p->mPedState2 != ped_state_2::ped2_driving_10 || car->IsTrainModel() || IsSpareDriver(p))
+    {
+        return NULL;
+    }
+    if (car->mDriver != p)
+    {
+        return "drives a car whose driver is another";
+    }
+    if (p->mInternalObjective == objectives_enum::leave_car_36 && p->mTargetToEnter != car)
+    {
+        return "leaves its car through another car";
+    }
+    return NULL;
+}
+} // namespace
+
+void net::engine::DebugCheckDrivers(const char* where, uint32_t snapTick)
+{
+    static std::set<const Ped*> sWrong; // as the last check found them: each is reported when it goes wrong
+    static int sReported;
+    if (!Debug().checkGrid || !gPedPool)
+    {
+        return;
+    }
+    std::set<const Ped*> now;
+    for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
+    {
+        const char* wrong = DriverWrong(p);
+        if (!wrong)
+        {
+            continue;
+        }
+        now.insert(p);
+        if (sWrong.count(p) || sReported >= 30)
+        {
+            continue;
+        }
+        sReported++;
+        const Car* car = p->mCar;
+        const Car* target = p->mTargetToEnter;
+        const Ped* d = car->mDriver;
+        printf("net: CHECK frame %u tick %u %s (snapshot %u): ped %u (id %d, player %d, type %d/%d) %s: states %d/%d objective %d/%d, "
+               "car %u (id %d) driver %p (ped %u, spare %d), target to enter %u (id %d) driver %p\n",
+               gDebugFrame, (uint32_t)gpRng->get_cur_rng(), where, snapTick, PedNetId(p), (int)p->mId,
+               p->mPlayer ? (int)p->mPlayer->mPlayerIdx : -1, (int)p->mPedType, (int)p->mOccupation, wrong, (int)p->mPedState1,
+               (int)p->mPedState2, (int)p->mObjective, (int)p->mInternalObjective, MappedId(car), (int)car->mCarId, (const void*)d,
+               d ? PedNetId(d) : 0u, (int)IsSpareDriver(d), target ? MappedId(target) : 0u, target ? (int)target->mCarId : -1,
+               target ? (const void*)target->mDriver : NULL);
+        if (d && !IsSpareDriver(d))
+        {
+            printf("net: CHECK   its driver: ped %u (id %d, player %d, type %d/%d) states %d/%d objective %d/%d, in it %d, char %p\n",
+                   PedNetId(d), (int)d->mId, d->mPlayer ? (int)d->mPlayer->mPlayerIdx : -1, (int)d->mPedType, (int)d->mOccupation,
+                   (int)d->mPedState1, (int)d->mPedState2, (int)d->mObjective, (int)d->mInternalObjective, (int)(d->mCar == car),
+                   (const void*)d->mGameObject);
+        }
+    }
+    sWrong.swap(now);
+}
+
+void net::engine::DebugCheckWeapons(const char* where, uint32_t snapTick)
+{
+    static std::set<std::pair<const void*, std::string>> sWrong; // each wrong holder or list reported once
+    static int sReported;
+    Game* g = gGame_0x40;
+    if (!Debug().checkGrid || !gWeapon_30_Pool || !gPedPool || !g || sReported >= 40)
+    {
+        return;
+    }
+    auto report = [&](const void* key, const std::string& what, const Weapon* w, const Ped* p)
+    {
+        if (!sWrong.insert(std::make_pair(key, what)).second || sReported++ >= 40)
+        {
+            return;
+        }
+        printf("net: CHECK frame %u tick %u %s (snapshot %u): weapon %p (type %d, car %p, ped %p, ammo %d) %s", gDebugFrame,
+               (uint32_t)gpRng->get_cur_rng(), where, snapTick, (const void*)w, w ? w->mWeaponType : -1,
+               w ? (const void*)w->mCar : NULL, w ? (const void*)w->mpPed : NULL, w ? (int)w->mAmmo : -1, what.c_str());
+        if (p)
+        {
+            printf(": ped %u (id %d, player %d, type %d, states %d/%d)", PedNetId(p), (int)p->mId,
+                   p->mPlayer ? (int)p->mPlayer->mPlayerIdx : -1, (int)p->mPedType, (int)p->mPedState1, (int)p->mPedState2);
+        }
+        printf("\n");
+    };
+    // The pool's two lists, walked at most once round (a list that loops is what this looks for)
+    const Pool<Weapon, 255>& pool = gWeapon_30_Pool->mPool;
+    std::unordered_map<const Weapon*, int> on; // 1: the used list, 2: the free list
+    for (Weapon* w = pool.mpPrev; w; w = w->mpNext)
+    {
+        if (on.count(w))
+        {
+            report(&pool, "is on the list of used weapons twice: it loops", w, NULL);
+            break;
+        }
+        on[w] = 1;
+    }
+    for (Weapon* w = pool.mpStart; w; w = w->mpNext)
+    {
+        const int was = on.count(w) ? on[w] : 0;
+        if (was)
+        {
+            report(&pool, was == 1 ? "is on both lists, used and free" : "is on the free list twice: it loops", w, NULL);
+            break;
+        }
+        on[w] = 2;
+    }
+    // A player's weapons are its slot's (its ped and corpse clone may hold them); any other ped frees what it holds
+    std::unordered_map<const Weapon*, const Player*> slotOf;
+    for (int i = 0; i < (int)g->mNumPlayers; i++)
+    {
+        const Player* pl = g->mPlayers[i];
+        for (int w = 0; pl && w < kPlayerWeapons; w++)
+        {
+            if (const Weapon* x = pl->mWeapons[w])
+            {
+                if (on.count(x) && on[x] == 2)
+                {
+                    report(x, "of a player's slot is on the free list", x, pl->mPlayerPed);
+                }
+                slotOf[x] = pl;
+            }
+        }
+    }
+    std::unordered_map<const Weapon*, const Ped*> heldBy;
+    for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
+    {
+        for (const Weapon* w : {p->mSelectedWeapon, p->mpWeapon})
+        {
+            if (!w)
+            {
+                continue;
+            }
+            if (on.count(w) && on[w] == 2)
+            {
+                report(p, "held by a ped is on the free list", w, p);
+                continue;
+            }
+            const Player* slot = slotOf.count(w) ? slotOf[w] : NULL;
+            const bool players = p->mPlayer && (slot == p->mPlayer || (w->mCar && on.count(w)));
+            if (!players && (slot || w->mCar || w->mpPed != p))
+            {
+                report(p, slot ? "of a player's slot held by another ped" : w->mCar ? "of a car held by a ped" : "of another ped held by a ped", w, p);
+            }
+            if (!players && heldBy.count(w) && heldBy[w] != p)
+            {
+                report(p, "held by two peds (the other below)", w, p);
+                report(heldBy[w], "held by two peds (the first)", w, heldBy[w]);
+            }
+            heldBy[w] = p;
+        }
+    }
+}
+
+EXTERN_GLOBAL(GridCell_Pool*, gGridCell_Pool); // defined in collide.cpp, declared in SpriteGrid.cpp only
+EXTERN_GLOBAL(GridSpriteLink_Pool*, gGridSpriteLink_Pool);
+
+void net::engine::DebugCheckGridLists(const char* where, uint32_t snapTick)
+{
+    static int sSaid;
+    if (!Debug().checkGrid || !gGridCell_Pool || !gGridSpriteLink_Pool || sSaid >= 5)
+    {
+        return;
+    }
+    const GridCell* cells = gGridCell_Pool->mPool;
+    const GridSpriteLink* links = gGridSpriteLink_Pool->mPool;
+    auto cellOk = [&](const GridCell* c)
+    {
+        const size_t off = (size_t)((const char*)c - (const char*)cells);
+        return (const char*)c >= (const char*)cells && off < sizeof(gGridCell_Pool->mPool) && off % sizeof(GridCell) == 0;
+    };
+    auto linkOk = [&](const GridSpriteLink* l)
+    {
+        const size_t off = (size_t)((const char*)l - (const char*)links);
+        return (const char*)l >= (const char*)links && off < sizeof(gGridSpriteLink_Pool->mPool) && off % sizeof(GridSpriteLink) == 0;
+    };
+    const SpriteGrid* grids[] = {gSpriteGrid_1, gSpriteGrid_2, gSpriteGrid_3};
+    for (int gi = 0; gi < 3; gi++)
+    {
+        // Its rows, the grid's only member (private, at offset 0)
+        const GridCell* const* rows = reinterpret_cast<const GridCell* const*>(grids[gi]);
+        for (int y = 0; rows && y < 256; y++)
+        {
+            int n = 0, lastX = -1;
+            for (const GridCell* c = rows[y]; c; c = c->mpNext)
+            {
+                const char* wrong = !cellOk(c) ? "a cell outside the cell pool" : (int)c->mX <= lastX ? "cells out of order" : ++n > 256 ? "a row that loops" : NULL;
+                for (const GridSpriteLink* l = wrong ? NULL : c->mpSpriteLinks; l && !wrong; l = l->mpNext)
+                {
+                    wrong = !linkOk(l) ? "a link outside the link pool" : !l->mpSprite ? "a link without a sprite" : NULL;
+                }
+                if (wrong)
+                {
+                    sSaid++;
+                    printf("net: CHECK frame %u tick %u %s (snapshot %u): grid %d row %d: %s (%p)\n", gDebugFrame,
+                           (uint32_t)gpRng->get_cur_rng(), where, snapTick, gi + 1, y, wrong, (const void*)c);
+                    return;
+                }
+                lastX = c->mX;
+            }
+        }
+    }
+}
+
+void net::engine::DebugCheckTurrets(const char* where, uint32_t snapTick)
+{
+    static std::set<const Car*> sSaid; // each car once (a pool slot reused for another car is said again only once)
+    if (!Debug().checkGrid || !gCar_BC_Pool || sSaid.size() >= 20)
+    {
+        return;
+    }
+    for (Car* c = gCar_BC_Pool->mPool.mpPrev; c; c = c->mpNext)
+    {
+        const int model = c->IsFireTruck() ? objects::water_cannon_114 : c->IsTank() ? objects::tank_cannon_148 : c->IsGunJeep() ? 248 : -1;
+        // A wreck has none (Car::HandleCarExplosion), unless a player drives it: it turns the turret
+        if (model < 0 || !c->mCarSprite || c->mAttachments.GetSpriteForModel(model) || sSaid.count(c) ||
+            (IsWrecked(c) && !(c->mDriver && c->mDriver->mPlayer)))
+        {
+            continue;
+        }
+        sSaid.insert(c);
+        const Ped* d = c->mDriver;
+        printf("net: CHECK frame %u tick %u %s (snapshot %u): car %u (id %d, model %d) has no roof turret: damage %d, wreck countdown %d, "
+               "engine %d, wrecked %d, driver %p (player %d)\n",
+               gDebugFrame, (uint32_t)gpRng->get_cur_rng(), where, snapTick, MappedId(c), (int)c->mCarId, (int)c->mCarInfoIdx,
+               (int)c->mDamage, (int)c->mWreckCountdown, (int)c->mEngineStatus, (int)IsWrecked(c), (const void*)d,
+               d && d->mPlayer ? (int)d->mPlayer->mPlayerIdx : -1);
+    }
+}
+
+// Whether a car or ped is on its pool's list, allocating nothing (malloc can hang after a heap corruption); a bounded
+// walk, as the list may be what broke
+static bool LiveCar(const Car* car)
+{
+    int n = 0;
+    for (const Car* c = gCar_BC_Pool ? gCar_BC_Pool->mPool.mpPrev : NULL; car && c && n < 4096; c = c->mpNext, n++)
+    {
+        if (c == car)
+        {
+            return true;
+        }
+    }
+    // A train's wagons aren't on the list (TrainCars)
+    for (int i = 0; car && gPublicTransport_181C && i < 10; i++)
+    {
+        const Train& t = gPublicTransport_181C->mTrainArray[i];
+        for (int k = 0; t.mAllocState == 2 && k <= t.mWagonCount && k < kTrainCarriages; k++)
+        {
+            if (t.mCarriages[k] == car)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static bool LivePed(const Ped* ped)
+{
+    int n = 0;
+    for (const Ped* p = gPedPool ? gPedPool->mPool.mpPrev : NULL; ped && p && n < 4096; p = p->mpNext, n++)
+    {
+        if (p == ped)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 // The crash report's line for a ped and for a car: what they are, and whether what they point to is live
-static void CrashPed(const char* what, const Ped* q, const std::set<Car*>& liveCars, const std::set<Ped*>& livePeds)
+static void CrashPed(const char* what, const Ped* q)
 {
     if (!q)
     {
         return;
     }
-    const bool live = livePeds.count(const_cast<Ped*>(q)) != 0;
+    const bool live = LivePed(q);
     const Char* c = live ? q->mGameObject : NULL;
     const Sprite* sp = c ? c->mSpritePtr : NULL;
     fprintf(stderr, "net: crash state: %s ped %p live %d id %d states %d/%d objective %d player %p car %p (live %d) objective car %p (live %d) to enter %p (live %d) char %p state %d velocity %.3f at (%.2f, %.2f, %.2f)\n",
             what, (const void*)q, live, live ? (int)q->mId : -1, live ? (int)q->mPedState1 : -1, live ? (int)q->mPedState2 : -1,
             live ? (int)q->mObjective : -1, live ? (void*)q->mPlayer : NULL, live ? (void*)q->mCar : NULL,
-            live ? (int)liveCars.count(q->mCar) : -1, live ? (void*)q->mTargetObjectiveCar : NULL,
-            live ? (int)liveCars.count(q->mTargetObjectiveCar) : -1, live ? (void*)q->mTargetToEnter : NULL,
-            live ? (int)liveCars.count(q->mTargetToEnter) : -1, (const void*)c, c ? (int)c->mCharState : -1,
+            live ? (int)LiveCar(q->mCar) : -1, live ? (void*)q->mTargetObjectiveCar : NULL,
+            live ? (int)LiveCar(q->mTargetObjectiveCar) : -1, live ? (void*)q->mTargetToEnter : NULL,
+            live ? (int)LiveCar(q->mTargetToEnter) : -1, (const void*)c, c ? (int)c->mCharState : -1,
             c ? c->mVelocity.ToFloat() : 0.f, sp ? sp->mXy.x.ToFloat() : 0.f, sp ? sp->mXy.y.ToFloat() : 0.f,
             sp ? sp->mZpos.ToFloat() : 0.f);
 }
 
-static void CrashCar(const char* what, const Car* car, const std::set<Car*>& liveCars, const std::set<Ped*>& livePeds)
+static void CrashCar(const char* what, const Car* car)
 {
     if (!car)
     {
         return;
     }
-    const bool live = liveCars.count(const_cast<Car*>(car)) != 0;
+    const bool live = LiveCar(car);
     const Sprite* sp = live ? car->mCarSprite : NULL;
     fprintf(stderr, "net: crash state: %s car %p live %d id %d model %d despawn status %d driver %p (live %d) at (%.2f, %.2f, %.2f)\n", what,
             (const void*)car, live, live ? (int)car->mCarId : -1, live ? (int)car->mCarInfoIdx : -1,
             live ? (int)car->mDespawnStatus : -1, live ? (void*)car->mDriver : NULL,
-            live ? (int)livePeds.count(car->mDriver) : -1, sp ? sp->mXy.x.ToFloat() : 0.f, sp ? sp->mXy.y.ToFloat() : 0.f,
+            live ? (int)LivePed(car->mDriver) : -1, sp ? sp->mXy.x.ToFloat() : 0.f, sp ? sp->mXy.y.ToFloat() : 0.f,
             sp ? sp->mZpos.ToFloat() : 0.f);
 }
 
 void net::engine::DebugOnCrash()
 {
     Game* g = gGame_0x40;
-    std::set<Car*> liveCars;
-    std::set<Ped*> livePeds;
-    if (gPedPool && gCar_BC_Pool)
-    {
-        LiveEntities(liveCars, livePeds);
-    }
     fprintf(stderr, "net: crash state: frame %u, tick %u\n", gDebugFrame, gpRng ? (uint32_t)gpRng->get_cur_rng() : 0u);
     if (gCopyingBlock)
     {
         fprintf(stderr, "net: crash state: saving or restoring the block %s at %p, %zu bytes\n", gCopyingBlock->name, (void*)gCopyingBlock->addr,
                 gCopyingBlock->size);
     }
-    CrashPed("the last updated", PortRand::gLastPed, liveCars, livePeds);
-    CrashCar("the last updated", PortRand::gLastCar, liveCars, livePeds);
+    CrashPed("the last updated", PortRand::gLastPed);
+    CrashCar("the last updated", PortRand::gLastCar);
     if (!g || !g->mLocalPlayer)
     {
         return;
     }
     Player* p = g->mLocalPlayer;
     Ped* ped = p->mPlayerPed;
-    CrashPed("the local player's", ped, liveCars, livePeds);
+    CrashPed("the local player's", ped);
     Ped* camPed = p->mGameCamera.mTargetPed;
     Car* camCar = p->mGameCamera.mTargetCar;
     fprintf(stderr, "net: crash state: local player %d in use %d, ped %p (live %d) car %p, camera ped %p (live %d, the player's %d) car %p (live %d)\n",
-            (int)p->mPlayerIdx, (int)p->mInUse, (void*)ped, (int)livePeds.count(ped), ped ? (void*)ped->mCar : NULL,
-            (void*)camPed, (int)livePeds.count(camPed), camPed == ped, (void*)camCar, (int)liveCars.count(camCar));
+            (int)p->mPlayerIdx, (int)p->mInUse, (void*)ped, (int)LivePed(ped), ped ? (void*)ped->mCar : NULL,
+            (void*)camPed, (int)LivePed(camPed), camPed == ped, (void*)camCar, (int)LiveCar(camCar));
     // The sound listener's camera (sound_obj::InterrogateAudioEntities reads its followed ped's car)
     Camera* listener = NULL;
     if (gSound_obj.mType5Idx)
@@ -348,14 +636,14 @@ void net::engine::DebugOnCrash()
     {
         Ped* cp = cams[k]->mTargetPed;
         fprintf(stderr, "net: crash state: camera %d%s follows ped %p (live %d, in car %p live %d)\n", k, cams[k] == listener ? " (the listener)" : "",
-                (void*)cp, (int)livePeds.count(cp), cp && livePeds.count(cp) ? (void*)cp->mCar : NULL,
-                cp && livePeds.count(cp) ? (int)liveCars.count(cp->mCar) : -1);
+                (void*)cp, (int)LivePed(cp), cp && LivePed(cp) ? (void*)cp->mCar : NULL,
+                cp && LivePed(cp) ? (int)LiveCar(cp->mCar) : -1);
     }
     if (listener && listener != cams[0] && listener != cams[1] && listener != cams[2])
     {
         Ped* cp = listener->mTargetPed;
         fprintf(stderr, "net: crash state: the listener is another camera %p, follows ped %p (live %d, aux of the player %d)\n", (void*)listener,
-                (void*)cp, (int)livePeds.count(cp), cp == p->mAuxPed);
+                (void*)cp, (int)LivePed(cp), cp == p->mAuxPed);
     }
     Car* cars[2] = {ped ? ped->mCar : NULL, camPed ? camPed->mCar : NULL};
     for (int k = 0; k < 2; k++)
@@ -363,7 +651,7 @@ void net::engine::DebugOnCrash()
         if (cars[k])
         {
             fprintf(stderr, "net: crash state: car %p live %d sprite %p despawn status %d driver %p mapped %d\n", (void*)cars[k],
-                    (int)liveCars.count(cars[k]), (void*)cars[k]->mCarSprite, (int)cars[k]->mDespawnStatus,
+                    (int)LiveCar(cars[k]), (void*)cars[k]->mCarSprite, (int)cars[k]->mDespawnStatus,
                     (void*)cars[k]->mDriver, (int)(MappedId(cars[k]) != 0));
         }
     }
@@ -497,6 +785,23 @@ void net::engine::DebugSoundChannels(uint32_t frame)
             }
         }
     }
+    // The car radio: the local player's car, the station and its variant, and how many other players are in cars
+    static std::string sRadioLast;
+    const u8 e = gSound_obj.mActiveEmitterIdx[0];
+    Car* car = gGame_0x40 && gGame_0x40->mLocalPlayer ? gGame_0x40->mLocalPlayer->GetPlayerCar() : NULL;
+    int others = 0;
+    for (int i = 0; gGame_0x40 && i < gGame_0x40->mNumPlayers; i++)
+    {
+        Player* p = gGame_0x40->mPlayers[i];
+        others += p && p != gGame_0x40->mLocalPlayer && p->GetPlayerCar();
+    }
+    snprintf(buf, sizeof(buf), "car %d, in %d, station %d%s, others in cars %d", car ? car->mCarId : -1, gSound_obj.mbInRadioCar,
+             e < 5 ? gSound_obj.mRadioEmitters[e].mStationIdx : -1, gSound_obj.mMainVariant ? "" : "A", others);
+    if (sRadioLast != buf)
+    {
+        printf("net: frame %u, radio: %s\n", frame, buf);
+        sRadioLast = buf;
+    }
     if (line != sLast)
     {
         printf("net: frame %u, sound channels:%s (init %d)\n", frame, line.c_str(), gSound_obj.mbSoundInitialized);
@@ -604,6 +909,34 @@ void net::engine::StackLog(bool server)
                    server ? 0u : MappedId(b), (int)b->mCarInfoIdx, sb->mXy.x.ToFloat(), sb->mXy.y.ToFloat(),
                    sb->mZpos.ToFloat(), (int)b->mDespawnStatus, b->mPhysics != NULL, Who(a), Who(b));
         }
+    }
+}
+
+void net::engine::TrainLog(bool server)
+{
+    static const bool on = getenv("GTA2_NET_TRAINLOG") != NULL;
+    static uint32_t sLast;
+    const uint32_t tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+    if (!on || !gPublicTransport_181C || tick % 150 || tick == sLast)
+    {
+        return;
+    }
+    sLast = tick;
+    for (int i = 0; i < 10; i++)
+    {
+        const Train& t = gPublicTransport_181C->mTrainArray[i];
+        Car* lead = t.mCarriages[0];
+        const Car* last = t.mWagonCount < 11 ? t.mCarriages[t.mWagonCount] : NULL;
+        if (t.mAllocState != 2 || !lead || !lead->mCarSprite || !last || !last->mCarSprite)
+        {
+            continue;
+        }
+        const Sprite* s = lead->mCarSprite;
+        // Raw Fix16 values: the same text on both ends when the state is (a 32-bit x87 build rounds floats otherwise)
+        printf("net: TRAIN %s tick %u: train %d lead model %d (%d, %d, %d) rot %d, last wagon (%d, %d), state %d phase %d wait %d, %s\n",
+               server ? "server" : "client", tick, i, (int)lead->mCarInfoIdx, (int)s->mXy.x.mValue, (int)s->mXy.y.mValue,
+               (int)s->mZpos.mValue, (int)s->mRotation.rValue, (int)last->mCarSprite->mXy.x.mValue, (int)last->mCarSprite->mXy.y.mValue,
+               t.mState, t.mStopPhase, (int)t.mWaitTimer, Who(lead));
     }
 }
 

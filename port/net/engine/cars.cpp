@@ -11,6 +11,11 @@
 #include "Source/sprite.hpp"
 #include <stdio.h>
 
+int net::engine::CarModel(const EntityState& e)
+{
+    return e.type == kEntityCar ? e.f[kCarModel] : -1;
+}
+
 namespace
 {
 using net::engine::Member;

@@ -9864,7 +9864,12 @@ void Ped::ExitCarStateMachine()
 
         if (!this->mEnterCarAsPassenger)
         {
+#if defined(GTA2_PORT)
+            // Port: a network client's car can have no driver left while its ped still drives it (ClearDriver reads it)
+            if (this->mObjective != objectives_enum::leave_car_and_stop_33 && mTargetToEnter->mDriver)
+#else
             if (this->mObjective != objectives_enum::leave_car_and_stop_33)
+#endif
             {
                 mTargetToEnter->ClearDriver();
             }

@@ -1,6 +1,6 @@
 // port/net (port/docs/netcode.md, "Entities"): the world entity, one per snapshot: the game's random cycle and seed, the
-// restart zones' turn, the round's state (round_state.hpp), the game's generation, the traffic lights and the tag
-// game's fugitive.
+// restart zones' turn, the round's state (round_state.hpp), the game's generation, the traffic lights, the tag game's
+// fugitive and the map's light level.
 #include "internal.hpp"
 #include "port/src/rand/owner.hpp"
 #include "port/src/net_hooks.hpp"
@@ -17,6 +17,7 @@
 #include "Source/rng.hpp"
 #include "Source/sprite.hpp"
 #include "Source/GameSession.hpp"
+#include "Source/MapRenderer.hpp"
 #include <math.h>
 #include <string.h>
 #include <unordered_map>
@@ -50,6 +51,12 @@ void net::engine::CaptureWorld(Snapshot& out)
     {
         w.f[kWorldLights] = gTrafficLights_194->mPhase | gTrafficLights_194->mTimer << 4 |
                             (gCarManager_6C->mLightStateA & 0xF) << 12;
+    }
+    if (gpMapRenderer)
+    {
+        w.f[kWorldAmbient] = gpMapRenderer->mAmbient.mValue;
+        w.f[kWorldTargetAmbient] = gpMapRenderer->mTargetAmbient.mValue;
+        w.f[kWorldAmbientStep] = gpMapRenderer->mAmbientStep.mValue;
     }
     w.f[kWorldIt] = gTagGame.mFugitive ? gTagGame.mFugitive->mPlayerIdx + 1 : 0;
     for (int i = 0; i < MAX_PLAYERS; i++)
@@ -91,6 +98,12 @@ void net::engine::ApplyWorld(const EntityState& w)
     for (int i = 0; i < MAX_PLAYERS; i++)
     {
         gTagGame.mItTimeSecs[i] = w.f[kWorldItTime + i];
+    }
+    if (gpMapRenderer)
+    {
+        gpMapRenderer->mAmbient.mValue = w.f[kWorldAmbient];
+        gpMapRenderer->mTargetAmbient.mValue = w.f[kWorldTargetAmbient];
+        gpMapRenderer->mAmbientStep.mValue = w.f[kWorldAmbientStep];
     }
     PortRand::SetState((unsigned int)w.f[kWorldRand]);
     PortRand::SetSeed((unsigned int)w.f[kWorldSeed]);

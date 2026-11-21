@@ -8,7 +8,7 @@
 
 namespace net
 {
-const uint32_t kProtocolVersion = 18;
+const uint32_t kProtocolVersion = 19;
 const uint16_t kDefaultPort = 27920;
 const size_t kMaxPayload = 1372; // the largest unreliable ENet packet that isn't fragmented at mtu 1400 (port/docs/netcode.md, "Wire format")
 const uint8_t kChannelUnreliable = 0; // snapshots, commands
@@ -32,12 +32,22 @@ enum MsgType : uint8_t
     kMsgPong = 9, // server -> client, unreliable: the same clock back (the ping: the network's round trip alone)
     kMsgCommand = 10, // client -> server, reliable: a player's command ("/ready", "/yes", "/map 2"...: session/round_flow.cpp)
     kMsgNotice = 11, // server -> client, reliable: a line to show (a vote started or decided, a player ready...)
+    kMsgLeave = 12, // client -> server, reliable, then disconnect: why it leaves (its copy of the map differs...)
 };
 
+// CRC-32s of a map's files (core/crc32.hpp): a client with other files would play another game
+struct MapPrint
+{
+    uint32_t gmp = 0, sty = 0;
+};
+
+// The build first after the version, so that a server of any version can say what it runs and what the client does
 struct Hello
 {
     uint32_t version = kProtocolVersion;
-    std::string name;
+    std::string build; // port_BuildId (port/src/build_id.hpp): a server takes only its own
+    std::string name; // empty, too long or taken: the server gives one
+    uint32_t carInfo = 0; // data/nyc.gci's CRC-32 (the cars' physics, every map's)
 };
 
 // What a client needs to start the same network game as the server
@@ -51,7 +61,11 @@ struct Welcome
     uint16_t timeLimitMin = 10;
     uint16_t tickMs = 33;
     uint8_t police = 0;
+    uint32_t session = 0; // the server's run, drawn at its start: a client back after a drop finds another one if it restarted
+    std::string name; // the player's name, as the server has it (another than the hello's if that was taken)
+    std::string map; // the map's name (data/<map>.mmp)
     std::string gmp, sty, scr; // file names in data/
+    MapPrint print; // the server's copy of gmp and sty
     uint32_t serverTick = 0;
     std::vector<std::string> maps; // the maps a vote can choose, by number (the round's state in the world entity counts them)
 };
@@ -63,7 +77,9 @@ struct Reject
 
 struct MapChange
 {
+    std::string map; // the map's name (data/<map>.mmp)
     std::string gmp, sty, scr; // file names in data/
+    MapPrint print; // the server's copy of gmp and sty
     uint16_t game = 0; // the server's game on it (its snapshots' world.game)
 };
 
@@ -72,6 +88,11 @@ struct InputCmd
     uint32_t tick; // the server tick it is for
     uint32_t buttons; // the game's input bits (Source/input_bits.hpp), 22 bits
 };
+
+const size_t kMaxName = 15; // the game's player names (Player::mPlayerName)
+// <asked> as a player's name: printable ASCII, at most kMaxName, "PLAYER" if that leaves nothing, and with a number
+// ("PLAYER 2") if a name in <taken> is the same but for case
+std::string PlayerName(const std::string& asked, const std::vector<std::string>& taken);
 
 void WriteHello(BitWriter& w, const Hello& m);
 bool ReadHello(BitReader& r, Hello& m);

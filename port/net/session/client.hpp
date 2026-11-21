@@ -17,9 +17,10 @@ namespace net
 {
 struct ClientConfig
 {
+    std::string build; // port_BuildId: the server takes only its own
     std::string host = "127.0.0.1";
     uint16_t port = kDefaultPort;
-    std::string name = "player";
+    std::string name; // empty: the server gives one (PlayerName)
     std::string bot; // a bot brain plays instead of the controls ("simple"); empty: a person
     int lagMs = 0, jitterMs = 0, lossPercent = 0; // the link conditioner (tests)
 };
@@ -109,6 +110,7 @@ class Client
     void Reconnect(); // the connection dropped: a new one, now and then, until the server has us back
     void Rejoined(const Welcome& welcome);
     void LeaveToMenu(const char* why); // off the server, and the game back to the frontend's network page
+    void SendLeave(const std::string& why); // tells the server why we go (before Leave)
     void ShowStatus(); // the ping, and an outage, over the frame
     // The round flow (session/round_flow.cpp), a client's part: its commands to the server, its keys, the panel
     void SendCommand(const std::string& text);
@@ -157,6 +159,7 @@ class Client
     bool mHelloSent = false; // joining: connected, waiting for the welcome
     long long mJoinWaitMs = 0; // joining: since when we wait (6 s each for the connection and the welcome)
     std::string mScr; // the map's script (a rejoin must find the same)
+    uint32_t mSession = 0; // the server's run (a rejoin must find the same: a restarted server has another game)
     std::unique_ptr<engine::NavMap> mNavMap; // built once the game has its map
     BotView mBotView;
     int mMarks = 0; // mark key presses (F12 or the key under Esc) (ChooseInput)

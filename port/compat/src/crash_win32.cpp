@@ -12,6 +12,28 @@
 namespace
 {
 LONG sCrashing;
+DWORD sCrashCode;
+HANDLE sReportStarted, sReportWritten;
+
+// The report can hang (a lock the crash left held, a fault inside it waiting for the first): ended after 5 s
+DWORD WINAPI ReportWatchdog(void*)
+{
+    WaitForSingleObject(sReportStarted, INFINITE);
+    if (WaitForSingleObject(sReportWritten, 5000) == WAIT_TIMEOUT)
+    {
+        TerminateProcess(GetCurrentProcess(), sCrashCode);
+    }
+    return 0;
+}
+
+void StartReport(DWORD code)
+{
+    sCrashCode = code;
+    if (sReportStarted)
+    {
+        SetEvent(sReportStarted);
+    }
+}
 
 // No allocation and no CRT stream: the heap or a FILE lock may be what broke.
 void Out(const char* format, ...)
@@ -180,6 +202,10 @@ void Report(const char* summary, const CONTEXT* pContext, const EXCEPTION_RECORD
     }
     LogModules();
     Out("End of the crash report");
+    if (sReportWritten)
+    {
+        SetEvent(sReportWritten);
+    }
 
     char text[2048];
     if (*path)
@@ -208,6 +234,7 @@ LONG WINAPI OnUnhandledException(EXCEPTION_POINTERS* pInfo)
         SleepEx(INFINITE, FALSE);
     }
     const EXCEPTION_RECORD* pRecord = pInfo->ExceptionRecord;
+    StartReport(pRecord->ExceptionCode);
     char where[MAX_PATH * 3 + 32];
     Where(reinterpret_cast<DWORD64>(pRecord->ExceptionAddress), where, sizeof(where));
     char summary[MAX_PATH * 3 + 96];
@@ -222,6 +249,7 @@ void OnAbort(int)
     {
         return;
     }
+    StartReport(3);
     CONTEXT context = {};
     RtlCaptureContext(&context);
     Report("abort() called", &context, NULL);
@@ -233,6 +261,12 @@ void port_InstallCrashHandler()
     // Room for the report after a stack overflow.
     ULONG guarantee = 64 * 1024;
     SetThreadStackGuarantee(&guarantee);
+    sReportStarted = CreateEventW(NULL, TRUE, FALSE, NULL);
+    sReportWritten = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (HANDLE watchdog = sReportStarted && sReportWritten ? CreateThread(NULL, 64 * 1024, ReportWatchdog, NULL, 0, NULL) : NULL)
+    {
+        CloseHandle(watchdog);
+    }
     SetUnhandledExceptionFilter(OnUnhandledException);
     signal(SIGABRT, OnAbort);
 }

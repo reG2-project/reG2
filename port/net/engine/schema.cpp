@@ -75,13 +75,25 @@ net::Schema BuildSchema()
     world.fields.push_back(FieldDesc{"vote_no", 8, false});
     world.fields.push_back(FieldDesc{"vote_left", 7, false});
     AppendNumbered(world.fields, "map_choice", net::kRoundSlots, 4);
+    world.fields.push_back(FieldDesc{"ambient", 32, true}); // kWorldAmbient
+    world.fields.push_back(FieldDesc{"target_ambient", 32, true});
+    world.fields.push_back(FieldDesc{"ambient_step", 32, true});
     net::EntityType object = {"object", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"model", 9, false}, {"idx", 8, false},
                                          {"age", 6, false}}};
+    net::EntityType train = {"train", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"wagons", 4, false},
+                                       {"reversed", 1, false}, {"state", 3, false}, {"stop_phase", 4, false}, {"wait", 16, true},
+                                       {"hijacked", 1, false}, {"fleeing", 1, false}, {"passenger_timer", 8, true},
+                                       {"passengers", 8, true}, {"speed", 32, true}, {"driver", 4, false}, {"station", 7, false}, {"platform", 3, false},
+                                       {"stopped", 4, false}}};
+    AppendNumbered(train.fields, "carriage", kTrainCarriages, 25);
+    AppendNumbered(train.fields, "damage", kTrainCarriages, 16);
+    AppendNumbered(train.fields, "explosion", kTrainCarriages, 8);
     s.types.push_back(player); // kEntityPlayer
     s.types.push_back(car); // kEntityCar
     s.types.push_back(ped); // kEntityPed
     s.types.push_back(world); // kEntityWorld
     s.types.push_back(object); // kEntityObject
+    s.types.push_back(train); // kEntityTrain
     return s;
 }
 } // namespace

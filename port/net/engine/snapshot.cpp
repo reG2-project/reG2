@@ -72,7 +72,8 @@ net::EntityState net::engine::Entity(uint32_t id, uint8_t type)
 }
 
 static_assert(net::engine::kPlayerX == 0 && net::engine::kCarX == 0 && net::engine::kPedX == 0 && net::engine::kObjX == 0 && net::engine::kPlayerRot == 3 &&
-                  net::engine::kCarRot == 3 && net::engine::kPedRot == 3 && net::engine::kObjRot == 3,
+                  net::engine::kCarRot == 3 && net::engine::kPedRot == 3 && net::engine::kObjRot == 3 && net::engine::kTrainX == 0 &&
+                  net::engine::kTrainRot == 3,
               "every entity with a place has x, y, z, rot first");
 
 void net::engine::PutPosition(EntityState& e, const Sprite* s)
@@ -269,6 +270,7 @@ void net::engine::Capture(Snapshot& out)
         CapturePed(p, d != driving.end() ? d->second : NULL, d == driving.end() && r != riding.end() ? r->second : NULL, out);
     }
     CapturePickups(out);
+    CaptureTrains(out);
     SortById(out);
 }
 

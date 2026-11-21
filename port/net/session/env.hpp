@@ -23,6 +23,7 @@ struct SessionEnv
     const char* testWanted; // <points>: every player kept at least that wanted on the server
     const char* testPowerUp; // <tick>:<player>:<power-up>[,...]: server test power-ups
     const char* testCar; // <tick>:<player>:<model>[,...]: server test cars beside players (11: a bus)
+    const char* testTrain; // <tick>:<player>:<train>[,...]: server players put at the wheel of a train (train + 10: it reverses)
     const char* say; // <frame>:<command>[;...]: a client's test commands to the server ("/kick r_b")
 };
 const SessionEnv& Env();

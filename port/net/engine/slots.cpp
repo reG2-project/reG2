@@ -48,6 +48,29 @@ void net::engine::TakeOutOfGame(int slot)
             ForceOutBesideCar(ped, ped->mCar);
         }
     }
+    // The pedestrian it leaves keeps only weapons of its own, as its Deallocate frees them into the pool: not the slot's
+    // (the slot keeps them, as Player.cpp clears a corpse clone's), nor a car's (a player ped's current weapon while it
+    // drives a car that has one: still on the pool's list of used weapons, which loops once it is allocated again), nor
+    // one freed already (its car's, emptied as it got out)
+    for (Ped* ped : {p->mPlayerPed, p->mAuxPed})
+    {
+        for (Weapon** held : {ped ? &ped->mSelectedWeapon : NULL, ped ? &ped->mpWeapon : NULL})
+        {
+            if (!held || !*held)
+            {
+                continue;
+            }
+            bool own = (*held)->mpPed == ped && !(*held)->mCar;
+            for (int w = 0; own && w < kPlayerWeapons; w++)
+            {
+                own = p->mWeapons[w] != *held;
+            }
+            if (!own)
+            {
+                *held = NULL;
+            }
+        }
+    }
     p->Disconnect(); // keeps its ped pointer, as the game does: the HUD and camera of a local slot use it
 }
 
@@ -123,6 +146,11 @@ void net::engine::PutInGame(int slot, bool freshScore)
     p->set_in_use(1);
     ped->RespawnPed(zone); // a free spot in the zone, health, a moment of invulnerability
     SnapCamera(p);
+    // As Player::InitializePlayerState: else the aux camera of a death the slot left in stays on, following the old ped
+    // (a pedestrian, or another ped once freed), and the traffic spawner reads that ped's car
+    p->mAuxGameCamera.UpdateFollowPedCamera(ped);
+    p->mAuxGameCamera.CommitPendingTarget();
+    p->mAuxCamActive = false;
 }
 
 // For a slot that joins and every slot of a new game, not only at a round's start: else the server's players have

@@ -22,6 +22,7 @@ struct MapFiles // a multiplayer map, from its data/<name>.mmp
 
 struct ServerConfig
 {
+    std::string build; // port_BuildId: a client of another build is turned away
     uint16_t port = kDefaultPort;
     engine::NetworkGame game; // game.players: the player slots
     float interestRadius = 24.0f; // blocks around a client's player that its snapshots cover (players: always)
@@ -76,6 +77,8 @@ class Server
     };
     void OnReceive(const TransportEvent& e);
     void OnHello(uint32_t peer, BitReader& r);
+    std::string Refusal(const Hello& hello, bool read) const; // why a hello's client can't play here ("": it can)
+    int FreeSlot(const std::string& name) const; // the slot a joining <name> gets (mSlots.size(): none)
     void OnCommands(int slot, BitReader& r);
     void StartGameOnce();
     void PollTransport();
@@ -111,6 +114,9 @@ class Server
     std::vector<RoundPlayer> mRoundPlayers; // as of the last frame, for commands between frames
     std::map<std::string, uint32_t> mBanned; // kicked names, until this tick
     size_t mMap = 0; // in mConfig.voteMaps
+    uint32_t mSession = 0; // this run's (the welcome's)
+    uint32_t mCarInfo = 0; // data/nyc.gci's CRC-32
+    MapPrint mPrint; // the map being played's files
     int mGeneration = 0; // engine::GameGeneration's, of the game running
 };
 } // namespace net

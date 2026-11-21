@@ -60,12 +60,14 @@ enum EntityKind : uint8_t
     kEntityPed = 2,
     kEntityWorld = 3, // one, kWorldId: game-wide state (no position), in every client's snapshot
     kEntityObject = 4, // a pickup (pickups.cpp)
+    kEntityTrain = 5, // a train (trains.cpp): in every client's snapshot
 };
 const uint32_t kWorldId = 0;
 // NetIds: a player's is its slot + 1; cars, peds and pickups have theirs from these on
 const uint32_t kCarIdBase = 0x01000000; // + Car::mCarId
 const uint32_t kPedIdBase = 0x02000000; // + Ped::mId
 const uint32_t kObjIdBase = 0x03000000; // + Object::mId
+const uint32_t kTrainIdBase = 0x04000000; // + its index in PublicTransport::mTrainArray
 inline bool IsPlayerId(uint32_t id)
 {
     return id < kCarIdBase;
@@ -79,7 +81,7 @@ inline float Blocks(int32_t raw)
 {
     return raw / 16384.0f;
 }
-// Every player, car, ped and pickup
+// Every player, car, ped, pickup and train
 void Capture(Snapshot& out);
 // Puts a snapshot's players, cars, peds and pickups into this game
 void Apply(const Snapshot& snap);
@@ -106,6 +108,7 @@ int PlayerWeapon(const EntityState& e); // its weapon in hand (Player::mCurrWeap
 int PlayerAmmo(const EntityState& e, int weapon); // 0..14 on foot, 15..27 a car's
 // A pickup entity's Object::mModel (objects:: in Source/enums.hpp: 200..227 weapons, 228.. power-ups)
 int PickupModel(const EntityState& e);
+int CarModel(const EntityState& e); // a car entity's Car::mCarInfoIdx (car_model_enum in Source/enums.hpp), -1 for others
 // The position of a player's ped or car, in blocks; false without a ped
 bool PlayerPosition(int player, float* pX, float* pY);
 bool PlayerPose(int player, float* pX, float* pY, float* pZ, int* pRot); // and its height and heading (0..1439)
@@ -149,6 +152,10 @@ void SetNetBanner(const std::string& text);
 // (winmain.cpp, gPortNextNetworkGame); KeepMapChange every frame until then. GameGeneration counts the games, for
 // the session to start over when it changes
 void ChangeMap(const std::string& gmp, const std::string& sty, const std::string& scr, int pauseTicks);
+// The first of a map's files that isn't in data/ (the game's fatal error if it opened it); empty: all are
+std::string MissingMapFile(const std::string& gmp, const std::string& sty, const std::string& scr);
+// data/<name>'s CRC-32, read as the game opens it (0: it can't be read)
+uint32_t DataFileCrc(const std::string& name);
 // This network game ends at once for the frontend (LeftForMenu() says so to winmain.cpp's gPortLeaveNetworkGame), and
 // StopNetworkGame puts back what a single-player game expects
 void LeaveForMenu();
@@ -183,6 +190,7 @@ class SavedWorld
 };
 void SaveGame(SavedWorld& out, uint32_t tick);
 void RestoreGame(const SavedWorld& in);
+bool Restorable(const SavedWorld& in); // saved with the rollback set as it is now
 // One tick without drawing or sound, with every player's buttons (count: players)
 void ResimTick(const uint32_t* buttons, int count);
 
@@ -224,6 +232,7 @@ struct NavMap
     };
     uint8_t height[kSize * kSize]; // 255: nobody stands here
     uint8_t ways[kSize * kSize];
+    bool water[kSize * kSize]; // its top block is water: a walker drowns there
 };
 void BuildNavMap(NavMap& out);
 void DumpNavMap(const NavMap& map, const char* path); // as a picture (PGM): grey by height, black blocked

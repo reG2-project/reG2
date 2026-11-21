@@ -3,6 +3,7 @@
 #include "net_main.hpp"
 #include "cmdline.hpp"
 #include "maps.hpp"
+#include "port/src/build_id.hpp"
 #include "port/src/net_hooks.hpp"
 #include "engine/dev/dev.hpp"
 #include "session/client.hpp"
@@ -13,6 +14,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if !defined(_WIN32)
+    #include <unistd.h>
+#endif
 
 
 namespace
@@ -22,8 +26,11 @@ net::Client* gClient;
 int gTickMs = 33;
 bool gTickSet;
 
+void StopIfRequested();
+
 void OnFrame(void*)
 {
+    StopIfRequested();
     if (!gTickSet && net::engine::GameRunning())
     {
         net::engine::SetTickMs(gTickMs);
@@ -49,10 +56,34 @@ void LeaveServer()
     }
 }
 
+volatile sig_atomic_t gStopRequested;
+
+// A stop signal's work, from the frame or idle hook: the handler can't leave the server itself, as ENet allocates and
+// frees, and the signal may come in the middle of a malloc (it would wait on that lock for ever)
+void StopIfRequested()
+{
+    if (gStopRequested)
+    {
+        LeaveServer();
+        _Exit(0);
+    }
+}
+
 void OnStopSignal(int)
 {
-    LeaveServer();
+    if (gStopRequested)
+    {
+        _Exit(0); // a second one: at once
+    }
+    gStopRequested = 1;
+    // Neither hook may run soon (a map loading, the frontend): out without leaving after a second
+#if defined(_WIN32)
+    SDL_Delay(1000); // the handler has a thread of its own
     _Exit(0);
+#else
+    signal(SIGALRM, [](int) { _Exit(0); });
+    alarm(1);
+#endif
 }
 
 // Before any network game's start: what each end draws its random numbers from, and the log
@@ -68,14 +99,18 @@ void NetworkSetup(bool server)
     {
         gPortDrawOverlay = net::engine::DrawOverlay; // the ping, an outage, and (GTA2_NET_MARKER) where the newest snapshot has us
     }
+#if defined(_WIN32)
+    setvbuf(stdout, NULL, _IONBF, 0); // the CRT has no line buffering (_IOLBF is full buffering, and a size of 0 is refused)
+#else
     setvbuf(stdout, NULL, _IOLBF, 0); // the net: lines as they happen, also when the process is killed
+#endif
 }
 
 // A client the server welcomed: its game is the one the game starts next
 void StartClientGame(const net::engine::NetworkGame& game)
 {
     atexit(LeaveServer);
-    gPortIdleHook = [] { gClient->Idle(); net::engine::IdleWait(); }; // pongs timed as they come
+    gPortIdleHook = [] { StopIfRequested(); gClient->Idle(); net::engine::IdleWait(); }; // pongs timed as they come
     signal(SIGTERM, OnStopSignal);
     signal(SIGINT, OnStopSignal);
 #if !defined(_WIN32)
@@ -171,6 +206,7 @@ int NetMain_Init(std::vector<std::string>& args)
     }
     net::ServerConfig& sc = o.sc;
     net::ClientConfig& cc = o.cc;
+    sc.build = cc.build = port_BuildId();
     if (!o.server && o.connect.empty() && o.replay.empty())
     {
         gMenuConfig = cc; // the frontend's network page may join a server later (port/net/menu.cpp)
@@ -180,6 +216,7 @@ int NetMain_Init(std::vector<std::string>& args)
     NetworkSetup(o.server);
     gPortTrafficCap = o.traffic;
     gPortNoAudio = o.server; // nobody hears a server (port/src/net_hooks.hpp)
+    gPortNoRumble = o.server;
     std::string error;
     if (o.server)
     {

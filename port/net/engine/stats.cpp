@@ -105,6 +105,9 @@ void net::engine::LiveEntities(std::set<Car*>& cars, std::set<Ped*>& peds)
     {
         cars.insert(c);
     }
+    std::vector<Car*> carriages; // a train's wagons aren't in the pool's list
+    TrainCars(carriages);
+    cars.insert(carriages.begin(), carriages.end());
     for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
     {
         peds.insert(p);

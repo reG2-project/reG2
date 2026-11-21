@@ -7,6 +7,7 @@ void (*gPortSpriteMovedHook)(Sprite*);
 void (*gPortIdleHook)();
 
 bool gPortNoAudio;
+bool gPortNoRumble;
 s32 gPortTrafficCap = 16;
 s32 gPortSpawnPlayers = 1;
 void (*gPortAfterPlayersHook)();

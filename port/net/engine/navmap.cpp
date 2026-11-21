@@ -5,6 +5,7 @@
 #include "internal.hpp"
 #include <stdio.h>
 #include "Source/block_face.hpp"
+#include "Source/gtx_0x106C.hpp"
 #include "Source/map_0x370.hpp"
 #include <string.h>
 
@@ -41,6 +42,7 @@ void net::engine::BuildNavMap(NavMap& out)
             gmp_block_info* top = gMap_0x370 ? gMap_0x370->FindHighestBlockForCoord(x, y, &z) : NULL;
             const bool ground = top && !IS_AIR_TYPE(top->mSlopeType) && z >= 0 && z < 255;
             out.height[y * N + x] = ground ? (uint8_t)z : 255;
+            out.water[y * N + x] = ground && gGtx_0x106C && gGtx_0x106C->IsRemappedWaterTile(top->mLid & block_face::tile_idx_mask); // Sprite::IsOnWater
             sSlope[y * N + x] = ground && IS_GRADIENT_SLOPE(top->mSlopeType);
         }
     }

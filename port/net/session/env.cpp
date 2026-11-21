@@ -25,6 +25,7 @@ const net::SessionEnv& net::Env()
         }
         e.testPowerUp = getenv("GTA2_NET_TESTPOWERUP");
         e.testCar = getenv("GTA2_NET_TESTCAR");
+        e.testTrain = getenv("GTA2_NET_TESTTRAIN");
         e.snapCheck = getenv("GTA2_NET_SNAPCHECK") != NULL;
         e.replayOn = getenv("GTA2_NET_REPLAYON") ? atoi(getenv("GTA2_NET_REPLAYON")) : 0;
         e.say = getenv("GTA2_NET_SAY");

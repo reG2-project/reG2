@@ -3,12 +3,15 @@
 // dedicated server can't come back from; so the game gets neither (StartNetworkGame) and the server ends a round
 // itself (session/server.cpp), here: scores, weapons and power-ups gone, everyone at a restart zone.
 #include "internal.hpp"
+#include "../core/crc32.hpp"
 #include "Source/Game.hpp"
 #include "Source/GameSession.hpp"
 #include "Source/Hud.hpp"
 #include "Source/Player.hpp"
 #include "Source/hud_message_priority.hpp"
+#include <stdio.h>
 #include <string.h>
+#include <vector>
 
 net::engine::Round& net::engine::CurrentRound()
 {
@@ -40,6 +43,38 @@ namespace
 {
 int gExitTicks; // the pause left before a map change ends the game
 } // namespace
+
+std::string net::engine::MissingMapFile(const std::string& gmp, const std::string& sty, const std::string& scr)
+{
+    for (const std::string* name : {&gmp, &sty, &scr})
+    {
+        FILE* f = fopen(("data\\" + *name).c_str(), "rb"); // as the game opens it
+        if (!f)
+        {
+            return *name;
+        }
+        fclose(f);
+    }
+    return "";
+}
+
+uint32_t net::engine::DataFileCrc(const std::string& name)
+{
+    FILE* f = fopen(("data\\" + name).c_str(), "rb");
+    if (!f)
+    {
+        return 0;
+    }
+    uint32_t crc = 0;
+    std::vector<char> buffer(1 << 16);
+    size_t n;
+    while ((n = fread(buffer.data(), 1, buffer.size(), f)) > 0)
+    {
+        crc = Crc32(buffer.data(), n, crc);
+    }
+    fclose(f);
+    return crc;
+}
 
 void net::engine::ChangeMap(const std::string& gmp, const std::string& sty, const std::string& scr, int pauseTicks)
 {

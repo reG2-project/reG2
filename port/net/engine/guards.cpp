@@ -53,6 +53,7 @@ void net::engine::GuardPeds()
     {
         gPolice_7B8->mMaxWantedStars = MaxWantedStars();
     }
+    GuardTrains(); // before the next: a player driving a reversed train sits in its old carriage, not the lead's driver
     // Two players getting into one empty car by the same door at once: the second one's entry ends with it as the
     // driver, without pulling the first out, which sits on in it as no driver or passenger. The
     // car doesn't know it: blown up, it doesn't kill it, and it drives the wreck without physics (a crash). Out at
@@ -64,6 +65,17 @@ void net::engine::GuardPeds()
         if (car && ped->mPedState1 == ped_state_1::in_car_10 && car->mDriver != ped && !InPassengerList(car, ped))
         {
             ForceOutBesideCar(ped, car);
+        }
+    }
+    // Any other ped driving a car with another driver or none (Ped::HandleShootingAtCar seats a scared one over a dummy_3
+    // driver; two entries predicted into one tick): getting out, it clears that seat or reads no driver (Car::ClearDriver)
+    for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
+    {
+        Car* car = p->mCar;
+        if (car && !p->mPlayer && !p->mEnterCarAsPassenger && p->mPedState2 == ped_state_2::ped2_driving_10 && car->mDriver != p &&
+            !car->IsTrainModel() && !IsSpareDriver(p) && !InPassengerList(car, p))
+        {
+            ForceOutBesideCar(p, car);
         }
     }
     // A ped knocked flying (its body an object, Ped::mpObj2C) whose object is gone (the snapshot's removal, or
@@ -101,6 +113,9 @@ void net::engine::GuardPeds()
     {
         cars.insert(c);
     }
+    std::vector<Car*> wagons; // a train's carriages aren't on the pool's list
+    TrainCars(wagons);
+    const std::set<Car*> carriages(wagons.begin(), wagons.end());
     for (CarChaseTask& t : gCarChaseTaskTable->mEntries)
     {
         Ped* d = t.mpDriver;
@@ -137,6 +152,13 @@ void net::engine::GuardPeds()
             {
                 p->mPedState1 = ped_state_1::walking_0;
             }
+        }
+        // In any other state, a target car that is gone (the snapshot's removal; the game never clears it): a ped leaving
+        // a car on foot looks for its door through it (Ped::FindUsableCarDoor), and read the freed car
+        else if (body && body->mTargetCar && !cars.count(body->mTargetCar) && !carriages.count(body->mTargetCar) &&
+                 s1 != ped_state_1::entering_train_5 && s1 != ped_state_1::immobilized_8)
+        {
+            body->mTargetCar = NULL;
         }
         if (p->mCar && !p->mGameObject &&
             (OnFootOnly(p->mObjective) || OnFootOnly(p->mInternalObjective)))

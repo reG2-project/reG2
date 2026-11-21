@@ -4474,6 +4474,13 @@ bool Car::HandleRoofTurretRotation(char_type left_on)
     if (IsFireTruck())
     {
         AttachedSprite* pSprite = mAttachments.GetSpriteForModel(objects::water_cannon_114);
+#if defined(GTA2_PORT)
+        // Port: a network client's car of this model can be without it (GTA2_NET_CHECKGRID reports one): nothing to turn
+        if (!pSprite)
+        {
+            return false;
+        }
+#endif
         if (left_on)
         {
             compound_add(pSprite->mOffsetRot, kFireTruckCannonRotSpeed);
@@ -4490,6 +4497,13 @@ bool Car::HandleRoofTurretRotation(char_type left_on)
     if (IsTank())
     {
         AttachedSprite* pSprite = mAttachments.GetSpriteForModel(objects::tank_cannon_148);
+#if defined(GTA2_PORT)
+        // Port: a network client's car of this model can be without it (GTA2_NET_CHECKGRID reports one): nothing to turn
+        if (!pSprite)
+        {
+            return false;
+        }
+#endif
         if (left_on)
         {
             compound_add(pSprite->mOffsetRot, kTankTurretRotSpeed);
@@ -4506,6 +4520,13 @@ bool Car::HandleRoofTurretRotation(char_type left_on)
     if (IsGunJeep())
     {
         AttachedSprite* pSprite = mAttachments.GetSpriteForModel(248);
+#if defined(GTA2_PORT)
+        // Port: a network client's car of this model can be without it (GTA2_NET_CHECKGRID reports one): nothing to turn
+        if (!pSprite)
+        {
+            return false;
+        }
+#endif
         if (left_on)
         {
             compound_add(pSprite->mOffsetRot, kGunJeepTurretRotSpeed);
@@ -4883,7 +4904,12 @@ void Car::TryHonkHorn(s32 horn_mode)
 
     if (!this->mHorn && !IsMaxDamage())
     {
+#if defined(GTA2_PORT)
+        // Port: a train's lead goes on moving without a driver once a player gets out of a carriage that stood still
+        if (this->mDriver && this->mDriver->mPlayer)
+#else
         if (this->mDriver->mPlayer)
+#endif
         {
             this->mHorn = 45;
         }

@@ -52,6 +52,8 @@ const size_t kValueCount = sizeof(kValues) / sizeof(kValues[0]);
 const int kObjective = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, mObjective));
 const int kPassenger = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, mEnterCarAsPassenger));
 const int kDoor = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, mTargetCarDoor));
+const int kType = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, mPedType));
+const int kOccupation = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, mOccupation));
 
 // The flags that are the ped's own behaviour; the others say where it is in this game's structures (active, scheduled for
 // removal, in the pathfinder's list, on fire with a flame object of this game's)
@@ -558,6 +560,12 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
     p->mpGang = GangAt(e.f[kGangs]);
     p->mDummyGang = GangAt(e.f[kGangs + 1]);
     return true;
+}
+
+void net::engine::SetPedKind(Ped* p, const EntityState& e)
+{
+    p->SetPedType(e.f[kFirst + kType]);
+    p->set_occupation(e.f[kFirst + kOccupation]);
 }
 
 bool net::engine::PassengerThere(const EntityState& e)

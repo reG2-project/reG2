@@ -23,6 +23,7 @@ enum BotButton : uint32_t
     kBtnJump = 0x40, // handbrake in a car
     kBtnPrevWeapon = 0x80,
     kBtnNextWeapon = 0x100,
+    kBtnSpecial = 0x200, // the horn in a car
 };
 
 struct BotView
@@ -44,6 +45,7 @@ struct BotView
             kCar,
             kPed,
             kPickup, // a weapon, power-up or token
+            kTrain, // a train, where its lead carriage is (its carriages near are kCar)
         } kind;
         uint32_t id;
         int player; // for kPlayer
@@ -52,6 +54,7 @@ struct BotView
         int health; // for kPlayer
         bool weapon; // for kPickup: a weapon (else a power-up)
         bool inCar; // for kPlayer: it drives
+        int model; // for kCar: its model (car_model_enum: 11 a bus, 54 the tank, 59..61 and 6 a train's)
     };
     std::vector<Seen> seen; // what the client's snapshot has, others only
     const engine::NavMap* map = nullptr;
@@ -75,9 +78,13 @@ class BotBrain
 // "rammer": gets into the nearest car and drives at the nearest player to hit it
 // "hunter": the rammer when a car is near and nobody is close (and once in a car), the simple one otherwise
 // "soldier": a weapon, then a car, then to the nearest player: runs it over or gets out and shoots, whichever suits
+// "human": what people do and the other bots don't, in turns: cars and buses (in, about, out at speed), trains (on at a
+// station, a ride, off), every weapon it has, pickups, walking into water and blowing itself up (bot_human.cpp);
+// "human:<act>" does that one only
 // "nn:<file>": a neural network's (bot_nn.cpp), its weights from the file (port/net/scripts/rl_bots.py)
 std::unique_ptr<BotBrain> CreateBotBrain(const std::string& kind);
 std::unique_ptr<BotBrain> CreateNeuralBrain(const std::string& path); // NULL if the file is no network of this shape
+std::unique_ptr<BotBrain> CreateHumanBrain(const std::string& only); // "human:<act>": that act only (drive, train, fight...)
 
 // A way to a goal (bot_nav.cpp), replanned every second or when the goal moves to another cell
 struct BotRoute

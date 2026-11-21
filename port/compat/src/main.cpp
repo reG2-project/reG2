@@ -12,6 +12,7 @@
 #include "../../src/net_hooks.hpp" // gPortCrashHook
 #if !defined(_WIN32)
     #include <execinfo.h>
+    #include <pthread.h>
     #include <signal.h>
     #include <unistd.h>
 #endif
@@ -60,10 +61,33 @@ __attribute__((constructor(101))) static void EnterGameFolderAtStart(int argc, c
 #endif
 
 #if !defined(_WIN32)
+static volatile sig_atomic_t sCrashSignal;
+
+// The report isn't all signal-safe (a lock the crash left held, malloc after a heap corruption): if it hangs, the
+// process still dies of its signal
+static void OnCrashReportHung(int)
+{
+    static const char kLine[] = "reg2: the crash report hung, ending the process\n";
+    write(2, kLine, sizeof(kLine) - 1);
+    const int sig = sCrashSignal;
+    signal(sig, SIG_DFL);
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, sig);
+    pthread_sigmask(SIG_UNBLOCK, &set, NULL);
+    raise(sig);
+    _exit(128 + sig);
+}
+
 // A crash prints the faulting address and its backtrace to stderr (macOS throttles its crash reports), and the network
 // game's view of the game, then dies as it would have
 static void OnCrash(int sig, siginfo_t* info, void*)
 {
+    sCrashSignal = sig;
+    struct sigaction hung = {};
+    hung.sa_handler = OnCrashReportHung;
+    sigaction(SIGALRM, &hung, NULL);
+    alarm(5);
     char line[160];
     const int n0 =
         snprintf(line, sizeof(line), "\nreg2: crashed (signal %d) at address %p; backtrace:\n", sig, info ? info->si_addr : NULL);
@@ -71,7 +95,7 @@ static void OnCrash(int sig, siginfo_t* info, void*)
     void* frames[64];
     backtrace_symbols_fd(frames, backtrace(frames, 64), 2);
     static bool sOnce;
-    if (!sOnce && gPortCrashHook) // not signal-safe, but worth it once
+    if (!sOnce && gPortCrashHook) // not signal-safe, but worth it once (the alarm ends a hang)
     {
         sOnce = true;
         gPortCrashHook();
