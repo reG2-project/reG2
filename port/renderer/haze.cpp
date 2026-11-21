@@ -461,3 +461,186 @@ bool GLRenderer::HazeProgram()
     }
     return true;
 }
+
+// RAIN PoC: the bright things of the scene drawn so far glow softly on the wet ground round them. At half size, a
+// wet pixel gathers its surroundings with jittered samples; blurred, then added where the scene shader left the
+// ground wet (the bloom target's alpha, 1 - wet).
+namespace
+{
+const char* kRainFS =
+    "uniform sampler2D uTex;\n"
+    "uniform sampler2D uMask;\n"
+    "uniform vec4 uRain;\n" // centre in target pixels, seconds, target pixels per logical pixel
+    "layout(location = 0) out vec4 oColor;\n"
+    "void main()\n"
+    "{\n"
+    "    vec2 size = vec2(textureSize(uTex, 0));\n"
+    "    vec2 p = gl_FragCoord.xy * 2.0;\n"
+    "    if (texture(uMask, p / size).a > 0.97) { oColor = vec4(0.0); return; }\n"
+    "    vec2 d = p - uRain.xy;\n"
+    // A soft round gather, a little taller than wide: bright things glow on the wet ground round them, with no
+    // direction of their own (the headlights' streaks along their beams are the scene shader's).
+    "    float rad = 26.0 * uRain.w;\n"
+    // Interleaved gradient noise: every pixel samples between the others' samples, the blur evens it out.
+    "    float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n"
+    "    vec3 acc = vec3(0.0);\n"
+    "    float wsum = 0.0;\n"
+    "    for (int i = 0; i < 24; i++)\n"
+    "    {\n"
+    "        float s = sqrt((float(i) + ign) / 24.0);\n"
+    "        float a = (float(i) + ign) * 2.39996;\n"
+    "        vec2 q = (p + vec2(cos(a), sin(a) * 1.3) * rad * s) / size;\n"
+    "        vec4 m = texture(uMask, q);\n"
+    "        vec3 c = texture(uTex, q).rgb;\n"
+    "        float l = max(c.r, max(c.g, c.b));\n"
+    "        float solid = smoothstep(0.9, 0.99, m.a);\n"
+    // What stands out of the water (lamps, lit walls, the cars' lights), and faintly the brightest lit ground.
+    "        vec3 src = c * mix(0.15 * smoothstep(0.6, 1.0, l), 0.1 + 2.5 * smoothstep(0.6, 1.0, l), solid) + m.rgb;\n"
+    "        float wgt = 1.0 - s;\n"
+    "        acc += src * wgt;\n"
+    "        wsum += wgt;\n"
+    "    }\n"
+"    oColor = vec4(min(acc / wsum, vec3(0.5)), 1.0);\n"
+    "}\n";
+
+const char* kRainBlurFS =
+    "uniform sampler2D uTex;\n"
+    "layout(location = 0) out vec4 oColor;\n"
+    "void main()\n"
+    "{\n"
+    "    vec2 t = 1.0 / vec2(textureSize(uTex, 0));\n"
+    "    vec2 uv = gl_FragCoord.xy * t;\n"
+    "    vec4 c = texture(uTex, uv) * 0.2;\n"
+    "    c += (texture(uTex, uv + t * vec2(1.5, 0.5)) + texture(uTex, uv + t * vec2(-0.5, 1.5)) + texture(uTex, uv + t * vec2(-1.5, -0.5)) + texture(uTex, uv + t * vec2(0.5, -1.5))) * 0.2;\n"
+    "    oColor = c;\n"
+    "}\n";
+
+const char* kRainComposeFS =
+    "uniform sampler2D uTex;\n"
+    "uniform sampler2D uMask;\n"
+    "uniform float uGain;\n"
+    "layout(location = 0) out vec4 oColor;\n"
+    "void main()\n"
+    "{\n"
+    "    vec2 size = vec2(textureSize(uMask, 0));\n"
+    "    float wet = 1.0 - texture(uMask, gl_FragCoord.xy / size).a;\n"
+    "    if (wet < 0.03) discard;\n"
+    "    oColor = vec4(texture(uTex, gl_FragCoord.xy / size).rgb * wet * uGain, 1.0);\n"
+    "}\n";
+
+GLuint sRainProgram, sRainBlur, sRainCompose, sRainFbo, sRainTex[2], sHalfFbo[2], sHalfTex[2];
+GLint sUniRain = -1, sUniGain = -1;
+s32 sRainW, sRainH;
+GLenum sRainFormat;
+} // namespace
+
+void GLRenderer::DrawRainReflect(f32 time)
+{
+    if (!mReady || !mTargetsBloom)
+    {
+        return;
+    }
+    Flush();
+    if (!sRainProgram)
+    {
+        const char* pError = NULL;
+        sRainProgram = CompileProgram(kHazeVS, kRainFS, &pError);
+        sRainBlur = CompileProgram(kHazeVS, kRainBlurFS, &pError);
+        sRainCompose = CompileProgram(kHazeVS, kRainComposeFS, &pError);
+        if (!sRainProgram || !sRainBlur || !sRainCompose)
+        {
+            return;
+        }
+        sUniRain = gl.glGetUniformLocation(sRainProgram, "uRain");
+        gl.glUseProgram(sRainProgram);
+        gl.glUniform1i(gl.glGetUniformLocation(sRainProgram, "uTex"), 0);
+        gl.glUniform1i(gl.glGetUniformLocation(sRainProgram, "uMask"), 1);
+        gl.glUseProgram(sRainBlur);
+        gl.glUniform1i(gl.glGetUniformLocation(sRainBlur, "uTex"), 0);
+        gl.glUseProgram(sRainCompose);
+        gl.glUniform1i(gl.glGetUniformLocation(sRainCompose, "uTex"), 0);
+        gl.glUniform1i(gl.glGetUniformLocation(sRainCompose, "uMask"), 1);
+        sUniGain = gl.glGetUniformLocation(sRainCompose, "uGain");
+        gl.glGenFramebuffers(1, &sRainFbo);
+        gl.glGenTextures(2, sRainTex);
+        gl.glGenFramebuffers(2, sHalfFbo);
+        gl.glGenTextures(2, sHalfTex);
+    }
+    const s32 halfW = (mTargetW + 1) / 2, halfH = (mTargetH + 1) / 2;
+    if (sRainW != mTargetW || sRainH != mTargetH || sRainFormat != mColourFormat)
+    {
+        const bool rgb565 = mColourFormat == GL_RGB565;
+        gl.glBindTexture(GL_TEXTURE_2D, sRainTex[0]);
+        gl.glTexImage2D(GL_TEXTURE_2D, 0, mColourFormat, mTargetW, mTargetH, 0, rgb565 ? GL_RGB : GL_RGBA,
+                        rgb565 ? GL_UNSIGNED_SHORT_5_6_5 : GL_UNSIGNED_BYTE, NULL);
+        gl.glBindTexture(GL_TEXTURE_2D, sRainTex[1]);
+        gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, mTargetW, mTargetH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        gl.glBindFramebuffer(GL_FRAMEBUFFER, sRainFbo);
+        gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sRainTex[0], 0);
+        gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, sRainTex[1], 0);
+        for (int i = 0; i < 2; i++)
+        {
+            gl.glBindTexture(GL_TEXTURE_2D, sHalfTex[i]);
+            gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, halfW, halfH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+            gl.glBindFramebuffer(GL_FRAMEBUFFER, sHalfFbo[i]);
+            gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sHalfTex[i], 0);
+        }
+        sRainW = mTargetW;
+        sRainH = mTargetH;
+        sRainFormat = mColourFormat;
+    }
+    gl.glDisable(GL_SCISSOR_TEST);
+    gl.glDisable(GL_BLEND);
+    gl.glBindFramebuffer(GL_READ_FRAMEBUFFER, mTargetsSamples ? mMsFbo : mFbo);
+    gl.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, sRainFbo);
+    for (int i = 0; i < 2; i++)
+    {
+        const GLenum bufs[2] = {i == 0 ? (GLenum)GL_COLOR_ATTACHMENT0 : (GLenum)GL_NONE, i == 1 ? (GLenum)GL_COLOR_ATTACHMENT1 : (GLenum)GL_NONE};
+        gl.glReadBuffer(GL_COLOR_ATTACHMENT0 + i);
+        gl.glDrawBuffers(2, bufs);
+        gl.glBlitFramebuffer(0, 0, mTargetW, mTargetH, 0, 0, mTargetW, mTargetH, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    }
+    gl.glReadBuffer(GL_COLOR_ATTACHMENT0);
+    const GLenum one[1] = {GL_COLOR_ATTACHMENT0};
+
+    // The gather, at half size.
+    gl.glBindFramebuffer(GL_FRAMEBUFFER, sHalfFbo[0]);
+    gl.glDrawBuffers(1, one);
+    gl.glViewport(0, 0, halfW, halfH);
+    gl.glUseProgram(sRainProgram);
+    gl.glUniform4f(sUniRain, 0.5f * mTargetW, 0.5f * mTargetH, time, (f32)mTargetW / mLogicalW);
+    gl.glActiveTexture(GL_TEXTURE1);
+    gl.glBindTexture(GL_TEXTURE_2D, sRainTex[1]);
+    gl.glBindSampler(1, mSamplerLinear);
+    gl.glActiveTexture(GL_TEXTURE0);
+    gl.glBindTexture(GL_TEXTURE_2D, sRainTex[0]);
+    gl.glBindSampler(0, mSamplerLinear);
+    DrawFullscreen();
+
+    // Two blurs.
+    gl.glUseProgram(sRainBlur);
+    for (int i = 0; i < 2; i++)
+    {
+        gl.glBindFramebuffer(GL_FRAMEBUFFER, sHalfFbo[1 - i]);
+        gl.glDrawBuffers(1, one);
+        gl.glBindTexture(GL_TEXTURE_2D, sHalfTex[i]);
+        DrawFullscreen();
+    }
+
+    // Added over the wet ground.
+    BindTarget();
+    gl.glViewport(0, 0, mTargetW, mTargetH);
+    const GLenum colour[3] = {GL_COLOR_ATTACHMENT0, GL_NONE, GL_NONE};
+    gl.glDrawBuffers(3, colour);
+    gl.glEnable(GL_BLEND);
+    gl.glBlendEquation(GL_FUNC_ADD);
+    gl.glBlendFunc(GL_ONE, GL_ONE);
+    gl.glUseProgram(sRainCompose);
+    gl.glUniform1f(sUniGain, 0.8f * mRainParams[1]);
+    gl.glBindTexture(GL_TEXTURE_2D, sHalfTex[0]);
+    DrawFullscreen();
+    gl.glBindSampler(1, 0);
+    gl.glDisable(GL_BLEND);
+    SetDrawBuffers();
+    mStateValid = false;
+}

@@ -110,6 +110,9 @@ class IRenderer
     // Triangles just drawn that are hot (flames), level 0..1: their texture's bright, opaque texels go into the heat
     // mask DrawHaze distorts over.
     virtual void AddHeat(const RVertex*, s32, RTexture*, f32) {}
+    // RAIN PoC: bit 2 wet ground (tiles drawn with lit 1.25), bit 4 lights reflected on it; the camera's eye.
+    virtual void SetRain(u32, f32, f32, f32, f32, f32, f32, f32) {}
+    virtual void DrawRainReflect(f32) {}
 };
 
 // Lets the render DLL find the backend from the SVideo pointer the game hands to gbh_InitDLL.

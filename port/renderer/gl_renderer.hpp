@@ -84,6 +84,8 @@ class GLRenderer : public IRenderer
     void SetOcclusion(const u8* pCells, s32 width, s32 height, s32 depth, f32 strength);
     void DrawHaze(const RHazeParams& params);
     void AddHeat(const RVertex* pVerts, s32 count, RTexture* pTex, f32 level);
+    void SetRain(u32 bits, f32 eyeX, f32 eyeY, f32 eyeZ, f32 time, f32 ground, f32 glow, f32 puddles);
+    void DrawRainReflect(f32 time);
 
   private:
     void FreeHaze();
@@ -190,6 +192,11 @@ class GLRenderer : public IRenderer
     GLint mUniAoGrid;
     GLint mUniAo;
     GLint mUniAoDebug;
+    GLint mUniRain = -1, mUniRainCam = -1;
+    u32 mRainBits = 0;
+    f32 mRainCam[4] = {0, 0, 0, 0};
+    f32 mRainParams[4] = {0, 1, 0, 0}; // ground z under the eye, glow, puddle cover
+    GLint mUniRainParams = -1;
     f32 mGamma[3];
     u32 mDrawCalls;
     u32 mUploads;

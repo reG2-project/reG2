@@ -73,6 +73,8 @@
 #include "../port/src/rumble.hpp"
 // Port: HEAT HAZE over fires (Draw).
 #include "../port/src/heat_haze.hpp"
+// Port: RAIN proof of concept (GTA2_RAIN).
+#include "../port/src/rain.hpp"
 #endif
 
 DEFINE_GLOBAL_INIT(Fix16, kFpFive_67DECC, Fix16(5), 0x67DECC);
@@ -408,11 +410,16 @@ void Game::Draw()
 
     pgbh_BeginScene();
 
+#if defined(GTA2_PORT)
+    PortRain::BeginDraw();
+#endif
+
     gpMapRenderer->Draw(); // Note: Also seems to draw sprites
 
 #if defined(GTA2_PORT)
     // Port: HEAT HAZE over fires and blasts, on the world but not on the HUD.
     PortHeatHaze::Draw();
+    PortRain::Draw();
 #endif
 
     if (!bExplodingScoresOff)
