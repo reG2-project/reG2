@@ -484,6 +484,33 @@ void Game::UpdatePaused()
     }
 }
 
+#if defined(GTA2_PORT)
+Ped* Game::PortNearestPlayerPed(Fix16 x, Fix16 y, bool bWantedFirst) const
+{
+    Ped* pBest = NULL;
+    Fix16 best_dist;
+    bool bBestWanted = false;
+    for (u32 i = 0; i < mNumPlayers; i++)
+    {
+        const Player* pPlayer = mPlayers[i];
+        Ped* pPed = pPlayer && pPlayer->mInUse ? pPlayer->mPlayerPed : NULL;
+        if (!pPed)
+        {
+            continue;
+        }
+        const bool bWanted = bWantedFirst && pPed->mWantedPoints > 0;
+        const Fix16 dist = Fix16::MaxAbsDistance(pPed->get_cam_x(), pPed->get_cam_y(), x, y);
+        if (!pBest || (bWanted && !bBestWanted) || (bWanted == bBestWanted && dist < best_dist))
+        {
+            pBest = pPed;
+            best_dist = dist;
+            bBestWanted = bWanted;
+        }
+    }
+    return pBest ? pBest : mLocalPlayer->mPlayerPed;
+}
+#endif
+
 MATCH_FUNC(0x4B9410)
 void Game::UpdateGame()
 {

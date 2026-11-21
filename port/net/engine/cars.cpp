@@ -5,6 +5,7 @@
 #include "members.hpp"
 #include "Source/Car.hpp"
 #include "Source/CarPhysics.hpp"
+#include "Source/Object_3C.hpp"
 #include "Source/SpriteGrid.hpp"
 #include "Source/explosion_type.hpp"
 #include "Source/gtx_0x106C.hpp"
@@ -54,12 +55,51 @@ bool net::engine::CarHasPhysics(const EntityState& e)
     return e.f[kCarPhysics + kCp1X] != 0;
 }
 
-int net::engine::gExplosionsCarried, net::engine::gWrecksReplaced;
+int net::engine::gExplosionsCarried, net::engine::gWrecksReplaced, net::engine::gWrecksMade;
+net::engine::CarStateDiffs net::engine::gCarStateDiffs;
+
+namespace
+{
+bool gServerExplosion; // SetCarState blowing a car up as the server's did
+} // namespace
+
+// gPortCarMayExplode on a client: a car the server sends only when the server's blew up (SetCarState), its own others
+bool net::engine::ClientCarMayExplode(Car* car)
+{
+    if (gServerExplosion)
+    {
+        return true;
+    }
+    for (const auto& r : ReplicaCars())
+    {
+        if (r.second == car)
+        {
+            return false;
+        }
+    }
+    return true;
+}
 
 void net::engine::CarPhysicsFields(std::vector<FieldDesc>& out)
 {
     AppendFields(kPhysics, kPhysicsCount, out);
 }
+
+namespace
+{
+// What the level start's script commands and the game's own set on a car that is its behaviour (not where it is in this
+// game's structures: a detached trailer, a car on a train, being crushed)
+const u16 kCarFlagsSent = car_flag::NoPassengers | car_flag::NoCollisionDamage | car_flag::CarAlarm | car_flag::Bulletproof |
+                          car_flag::Rocketproof | car_flag::Flameproof | car_flag::ResistsPushWhenStopped |
+                          car_flag::JammedAccelerator;
+
+// The roof turret (Car::RotateRoofObjectTowardTarget's): its angle is the attachment's on top of the car's
+AttachedSprite* RoofTurret(Car* c)
+{
+    const s32 model = c->IsTank() ? objects::tank_cannon_148 : c->IsGunJeep() ? 248 : c->IsFireTruck() ? objects::water_cannon_114 : 0;
+    return model ? c->mAttachments.GetSpriteForModel(model) : NULL;
+}
+} // namespace
 
 void net::engine::CaptureCar(Car* c, Snapshot& out)
 {
@@ -77,6 +117,10 @@ void net::engine::CaptureCar(Car* c, Snapshot& out)
     // Its colour: a remap, or the model's own palette (-1: Car::AssignRandomRemap picks it as one choice, and it
     // leaves the remap as it was, so the remap alone said nothing then)
     e.f[kCarRemap] = c->mCarSprite->mPaletteType == palette_types_enum::car_remaps_3 ? c->mCarSprite->get_remap() : -1;
+    const AttachedSprite* turret = RoofTurret(c);
+    e.f[kCarTurret] = turret ? turret->mOffsetRot.rValue : 0;
+    e.f[kCarTrailer] = CarRef(TowedTrailer(c));
+    e.f[kCarFlags] = c->mFlags & kCarFlagsSent;
     CaptureCarAi(c, e);
     if (const CarPhysics* m = c->mPhysics)
     {
@@ -135,16 +179,61 @@ void net::engine::SetCarPhysics(Car* car, const EntityState& e)
 
 bool net::engine::IsWrecked(const Car* car)
 {
-    return car->mWreckCountdown || car->mDamage >= 32000 || car->mEngineStatus == car_engine_status::destroyed_6;
+    // 32000 alone isn't one: a client's car whose explosion waits for the server's (Car::HandleCarExplosion sets 32001)
+    return car->mWreckCountdown || car->mDamage > 32000 || car->mEngineStatus == car_engine_status::destroyed_6;
 }
 
-bool net::engine::SetCarState(Car* car, const EntityState& e)
+// The fire a car's damage makes (Car::AccumulateDamage: its flames as the damage crosses 16000, then 25000)
+int net::engine::FireLevel(int32_t damage)
+{
+    return damage >= 25000 ? 4 : damage >= 16000 ? 3 : 0;
+}
+
+// A car the server blew up blows up here, as from its damage (Car::AddDamage)
+void net::engine::ExplodeAsServer(Car* car)
+{
+    gServerExplosion = true;
+    car->HandleCarExplosion(explosion_type::item_19);
+    gServerExplosion = false;
+    gExplosionsCarried++;
+}
+
+// A car made here for a wreck of the server's: the end of Car::HandleCarExplosion and its wreck countdown, without the
+// explosion, the kills and the score (it blew up before this client saw it)
+static void MakeWreck(Car* car)
+{
+    car->mAttachments.ExpireAttachedFlames();
+    car->mAttachments.DestroyAllAttached();
+    car->mDamage = 32001;
+    car->SetEngineDamaged();
+    car->TurnToWreck();
+    net::engine::gWrecksMade++;
+}
+
+bool net::engine::SetCarState(Car* car, const EntityState& e, bool fresh)
 {
     const bool there = e.f[kCarWrecked] != 0, here = IsWrecked(car);
+    CarStateDiffs& d = gCarStateDiffs;
+    d.cars++;
+    d.wreckHereOnly += here && !there;
+    d.wreckThereOnly += there && !here;
+    if (!here && !there)
+    {
+        d.damage += car->mDamage != e.f[kCarDamage];
+        const int level = FireLevel(e.f[kCarDamage]);
+        d.fireAbove += car->mDamageLevel > level;
+        d.fireBelow += car->mDamageLevel < level;
+    }
     if (there && !here)
     {
-        car->HandleCarExplosion(explosion_type::item_19); // as a car blows up from its damage (Car::AddDamage)
-        gExplosionsCarried++;
+        if (fresh)
+        {
+            MakeWreck(car);
+        }
+        else
+        {
+            ExplodeAsServer(car);
+        }
         return true;
     }
     if (!there && here)
@@ -155,13 +244,37 @@ bool net::engine::SetCarState(Car* car, const EntityState& e)
     {
         car->mDamage = (s16)e.f[kCarDamage];
         car->mDamagedAreas.m_var = (u32)e.f[kCarAreas];
+        // And its fire, which only crossing a threshold here starts: a car the server set on fire burnt only where its
+        // damage was predicted, and one that burnt here alone burnt on to a wreck the server didn't have
+        const int level = FireLevel(car->mDamage);
+        if (car->mDamageLevel != level)
+        {
+            car->mAttachments.ExpireAttachedFlames();
+            if (level)
+            {
+                const Fix16_Point atDefault(0, 0); // where the game puts its flames when no hit position is given
+                car->SpawnDamageFireEffect(level == 4 ? 2 : 1, &atDefault);
+            }
+            car->mDamageLevel = (u8)level;
+        }
+    }
+    // Its proofs, alarm and the like: a client runs no script, and the level start sets them
+    car->mFlags = (u16)((car->mFlags & ~kCarFlagsSent) | (e.f[kCarFlags] & kCarFlagsSent));
+    // Its turret's aim: a remote driver's turn was predicted only once the snapshots had it, and a car made here starts at 0
+    if (AttachedSprite* turret = RoofTurret(car))
+    {
+        turret->mOffsetRot.rValue = (s16)e.f[kCarTurret];
     }
     // Its lights and horn: a siren switched with the horn key (Car::HandleSpecialInput counts the horn down) came
     // on again here after the server had it off
     car->mLightFlags = (char_type)e.f[kCarLights];
     car->mFlashPhaseCounter = (char_type)e.f[kCarFlash];
-    car->mHorn = (u8)e.f[kCarHorn];
-    car->mHornCooldown = (u8)e.f[kCarHornCooldown];
+    // A train's horn is this machine's: it honks when the local player is near (Car::TrainUpdate), the server's slot 0 there
+    if (!car->IsTrainModel())
+    {
+        car->mHorn = (u8)e.f[kCarHorn];
+        car->mHornCooldown = (u8)e.f[kCarHornCooldown];
+    }
     if (e.f[kCarRemap] >= 0 && e.f[kCarRemap] < 256)
     {
         if (car->mCarSprite->mPaletteType != palette_types_enum::car_remaps_3 &&
@@ -203,5 +316,30 @@ void net::engine::DebugCarDiff(Car* car, const EntityState& e, uint32_t tick)
     if (n)
     {
         printf("net: tick %u, our car predicted (here/server):%s\n", tick, line);
+    }
+}
+
+Car* net::engine::TowedTrailer(const Car* cab)
+{
+    return cab->mpTrailer && cab->mpTrailer->mTruckCab == cab ? cab->mpTrailer->mTrailerCar : NULL;
+}
+
+// Hitched or not as the server has it: a cab hitches a trailer it backs onto (Car::TryHitchTrailer), on each side by its
+// own prediction
+void net::engine::ApplyTrailer(Car* cab, const EntityState& e)
+{
+    Car* want = RefCar(e.f[kCarTrailer]);
+    Car* have = TowedTrailer(cab);
+    if (want == have)
+    {
+        return;
+    }
+    if (have)
+    {
+        cab->DetachTrailer();
+    }
+    if (want && !want->mpTrailer && want != cab)
+    {
+        cab->AttachTrailer(want);
     }
 }

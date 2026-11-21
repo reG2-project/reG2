@@ -46,6 +46,7 @@ void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
     pGame->timeLimitMin = welcome.timeLimitMin;
     pGame->tickMs = welcome.tickMs;
     mTickMs = welcome.tickMs ? welcome.tickMs : 33;
+    mGameType = welcome.gameType;
     pGame->police = welcome.police;
     pGame->gmp = welcome.gmp;
     pGame->sty = welcome.sty;
@@ -392,6 +393,7 @@ void net::Client::Reconcile(const Snapshot& snap)
     engine::RestoreGame(*saved);
     mProbe.AfterRestore(snap);
     engine::Apply(snap);
+    engine::ApplyScores(snap); // the resimulated ticks and their saves carry the server's scores
     mProbe.AfterApply(snap, mTick);
     std::vector<uint32_t> buttons(mRemote);
     for (uint32_t t = s + 1; t <= mTick; t++)
@@ -1223,7 +1225,7 @@ void net::Client::ShowRound()
         uint32_t b = 0;
         if (engine::PlayerOf(e, &p, &b))
         {
-            rows.push_back(ScoreRow{p, engine::PlayerFrags(e), engine::PlayerDeaths(e)});
+            rows.push_back(ScoreRow{p, engine::PlayerFrags(e), engine::PlayerDeaths(e), engine::TagSeconds(p)});
         }
     }
     // The results show the scores the round ended with: the game goes on meanwhile, and so do the frags
@@ -1279,12 +1281,14 @@ void net::Client::ShowRound()
     {
         lines.push_back("Round " + std::to_string(r.number - 1) + ": " + (r.winner ? engine::PlayerName(r.winner - 1) + " wins" : std::string("a draw")));
         std::vector<ScoreRow> board = mResultsRows;
-        std::sort(board.begin(), board.end(), [](const ScoreRow& a, const ScoreRow& b) { return a.frags > b.frags; });
+        const bool tag = mGameType == 3; // the longest "it" wins
+        std::sort(board.begin(), board.end(), [tag](const ScoreRow& a, const ScoreRow& b) { return tag ? a.tag > b.tag : a.frags > b.frags; });
         lines.push_back("");
-        lines.push_back("Player\tFrags\tDeaths"); // tables: the overlay lines up rows with tabs
+        lines.push_back(tag ? "Player\tIt (s)\tFrags\tDeaths" : "Player\tFrags\tDeaths"); // tables: the overlay lines up rows with tabs
         for (const ScoreRow& row : board)
         {
-            lines.push_back(engine::PlayerName(row.slot) + "\t" + std::to_string(row.frags) + "\t" + std::to_string(row.deaths));
+            lines.push_back(engine::PlayerName(row.slot) + "\t" + (tag ? std::to_string(row.tag) + "\t" : "") + std::to_string(row.frags) + "\t" +
+                            std::to_string(row.deaths));
         }
         lines.push_back("");
         lines.push_back("The next round in " + std::to_string(r.phaseLeft) + " s");

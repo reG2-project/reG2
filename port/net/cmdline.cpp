@@ -1,6 +1,6 @@
 // port/net (port/docs/netcode.md, "Running"): the netcode's command line.
 //   --server [--port N] [--map <mmp>] [--players N] [--gametype 1-3] [--fraglimit N] [--timelimit min] [--tickms N]
-//            (the limits end a round: the round flow, session/round_flow.cpp)
+//            (the limits end a round: the round flow, session/round_flow.cpp; a points game's is money, 10000)
 //            [--minplayers N] [--warmup s] [--results s] [--votes start,map,kick] [--rounds on|off]  (the round flow)
 //            [--window]  (a server is headless unless it is watched in a window)
 //            [--maps <mmp>,<mmp>,...]  (a round on each in turn, the first instead of --map)
@@ -33,6 +33,7 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
                                               "--tickms", "--interest", "--traffic", "--police", "--packets", "--arena", "--seed",
                                               "--ticks"};
     std::string serverOption;
+    bool fragLimitGiven = false;
     for (size_t i = 0; i < args.size(); i++)
     {
         const std::string& a = args[i];
@@ -98,6 +99,7 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
         else if (a == "--fraglimit" && more)
         {
             sc.game.fragLimit = atoi(args[++i].c_str());
+            fragLimitGiven = true;
         }
         else if (a == "--timelimit" && more)
         {
@@ -177,6 +179,10 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
     {
         fprintf(stderr, "net: %s is a server's option (--server)\n", serverOption.c_str());
         return false;
+    }
+    if (sc.game.gameType == 2 && !fragLimitGiven)
+    {
+        sc.game.fragLimit = 10000; // a points game's limit is money: the original lobby's default (NetUi, "s_limit")
     }
     args = rest;
     return true;

@@ -362,6 +362,32 @@ void Police::RegisterCriminal(Ped* pPed)
 MATCH_FUNC(0x56fa40)
 void Police::UpdateFirstPursuitTimer()
 {
+#if defined(GTA2_PORT)
+    // Port: every pursuit's timer, not the first's alone: another criminal's pursuit never went to searching, so its
+    // star never timed out (a network game's players)
+    for (u8 i = 0; i < MAX_PURSUIT_TARGETS; i++)
+    {
+        PolicePursuitTarget& target = mPursuitTargets[i];
+        if (!target.mCriminalPed)
+        {
+            continue;
+        }
+        if (!target.mCriminalPed->IsActive() || target.mCriminalPed->isDead())
+        {
+            target.mState = pursuit_state::ended_4;
+            continue;
+        }
+        if (target.mTimer > 0)
+        {
+            target.mTimer--;
+        }
+        if (target.mState == pursuit_state::active_3 && target.mTimer == 0)
+        {
+            target.mState = pursuit_state::searching_5;
+        }
+    }
+    return;
+#endif
     if (mPursuitTargets[0].mCriminalPed)
     {
         if (!mPursuitTargets[0].mCriminalPed->IsActive() 
@@ -435,8 +461,20 @@ void Police::UpdatePursuitTargets()
     u8 crewIdx;
     u8 targetIdx = 0;
     PolicePursuitTarget* pPursuitTarget = &mPursuitTargets[0];
+#if defined(GTA2_PORT)
+    // Port: every pursuit, past the empty slots: the loop stopped at the first, and a pursuit after it was no longer
+    // updated once the first one ended (a network game's players)
+    while (targetIdx < MAX_PURSUIT_TARGETS)
+    {
+        if (!pPursuitTarget->mCriminalPed)
+        {
+            pPursuitTarget = &mPursuitTargets[++targetIdx < MAX_PURSUIT_TARGETS ? targetIdx : 0];
+            continue;
+        }
+#else
     while (pPursuitTarget->mCriminalPed && targetIdx < MAX_PURSUIT_TARGETS)
     {
+#endif
         pPursuitTarget->mIsActivelyChased = false;
         Ped* pCriminal = pPursuitTarget->mCriminalPed;
         if (pCriminal->GetPedType() == ped_type::player_2 && pCriminal->mBf21C.bBusted == 1)
@@ -546,7 +584,13 @@ void Police::UpdatePursuitTargets()
                     pPursuitTarget->mCriminalPed->ClearWantedPoints();
                     pPursuitTarget->mCriminalPed->mWantedPoints = cop_level_ped_enum::cop_0_stars;
                     pPursuitTarget->mWantedTimer = 0;
+#if defined(GTA2_PORT)
+                    // Port: the pursuits after this one are updated this tick too
+                    pPursuitTarget = &mPursuitTargets[++targetIdx < MAX_PURSUIT_TARGETS ? targetIdx : 0];
+                    continue;
+#else
                     return;
+#endif
                 }
                 pPursuitTarget->mWantedTimer++;
             }
@@ -771,6 +815,15 @@ void Police::Service()
     mCrewPedOnscreen = false;
     mMaxWantedLevel = cop_level_enum::none_0;
 
+#if defined(GTA2_PORT)
+    // Port: any pursuit, not the flag the end of one pursuit clears while others go on (until the next crime)
+    bool bHaveCriminals = false;
+    for (u8 i = 0; i < MAX_PURSUIT_TARGETS; i++)
+    {
+        bHaveCriminals |= mPursuitTargets[i].mCriminalPed != NULL;
+    }
+    sbHaveCriminals = bHaveCriminals;
+#endif
     if (sbHaveCriminals == 1)
     {
         Police::UpdatePursuitTargets();

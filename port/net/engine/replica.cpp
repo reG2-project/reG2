@@ -93,6 +93,13 @@ void Gather(Pass& a)
     std::vector<Car*> carriages; // a train's wagons aren't in the pool's list
     TrainCars(carriages);
     a.liveCars.insert(carriages.begin(), carriages.end());
+    for (Car* c = gCar_BC_Pool->mPool.mpPrev; c; c = c->mpNext)
+    {
+        if (Car* trailer = TowedTrailer(c)) // nor a towed trailer (Car::AttachTrailer)
+        {
+            a.liveCars.insert(trailer);
+        }
+    }
     for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
     {
         a.livePeds.insert(p);
@@ -260,6 +267,7 @@ Car* MapCar(Pass& a, const EntityState& e)
 void ApplyCar(Pass& a, const EntityState& e)
 {
     a.seen.insert(e.id);
+    const bool fresh = !gCars.count(e.id); // made or adopted below: never seen alive under this id
     Car* car = MapCar(a, e);
     if (!car || EntityAge(e))
     {
@@ -287,7 +295,21 @@ void ApplyCar(Pass& a, const EntityState& e)
     }
     SetCarPhysics(car, e); // a player's car too: its place came with the player
     ApplyCarAi(car, e);
-    if (!SetCarState(car, e) && !a.playerIn.count(car) && !a.referenced.count(car) && !car->IsTrainModel())
+    const bool wreckHereOnly = !SetCarState(car, e, fresh);
+    if (wreckHereOnly && a.playerIn.count(car) && !a.referenced.count(car) && !car->IsTrainModel())
+    {
+        // A player in it gets out first: driven on, the wreck has lost its roof turret (Car::HandleRoofTurretRotation
+        // finds none). The car goes below, the next snapshot makes it again and puts the player back in (players.cpp)
+        for (int i = 0; i < PlayerCount(); i++)
+        {
+            Ped* ped = InGamePed(i);
+            if (ped && ped->mCar == car && !ped->isDead() && !InCarTransition(ped))
+            {
+                ForceOutBesideCar(ped, car);
+            }
+        }
+    }
+    if (wreckHereOnly && (!a.playerIn.count(car) || !car->mDriver) && !a.referenced.count(car) && !car->IsTrainModel())
     {
         // A wreck here that isn't one on the server can't be unexploded: it goes, and the next snapshot makes the car
         // again as the server has it
@@ -499,9 +521,11 @@ void RemoveUnsent(const Pass& a, const Snapshot& snap)
         }
         it = gPeds.erase(it);
     }
+    // This game's own cars and peds the server doesn't have here, inside the area only: beyond it the snapshot says
+    // nothing, and one there (a map script's parked car) is adopted when the server's comes in reach (MapCar)
     for (Car* c : a.liveCars)
     {
-        if (!a.owned.count(c) && !a.mapped.count(c) && !c->IsDespawning())
+        if (!a.owned.count(c) && !a.mapped.count(c) && !c->IsDespawning() && !area.Beyond(c->mCarSprite))
         {
             RemoveCar(a, c);
         }
@@ -511,7 +535,7 @@ void RemoveUnsent(const Pass& a, const Snapshot& snap)
         // Drivers are sent too; passengers (not yet) stay with their car
         const bool passenger = p->mCar && p->mCar->mDriver != p;
         if (!a.owned.count(p) && !a.mapped.count(p) && !passenger && !IsSpareDriver(p) && (p->mGameObject || p->mCar) &&
-            p->IsActive())
+            p->IsActive() && !area.Beyond(PedSprite(p)))
         {
             p->Deallocate();
         }
@@ -537,17 +561,33 @@ void net::engine::ApplyCarsAndPeds(const Snapshot& snap)
         }
     }
     ApplyGroups(snap);
+    for (const EntityState& e : snap.entities) // once both cars are here
+    {
+        Car* cab = e.type == kEntityCar && !EntityAge(e) ? ReplicaCar(e.id) : NULL;
+        if (cab && !cab->IsTrainModel())
+        {
+            ApplyTrailer(cab, e);
+        }
+    }
     RemoveUnsent(a, snap);
 }
 
 void net::engine::PrintReplicaLog()
 {
     PrintTrainLog();
-    if (gExplosionsCarried + gWrecksReplaced)
+    if (gExplosionsCarried + gWrecksReplaced + gWrecksMade)
     {
-        printf("net: %d explosions the server had carried out, %d wrecks of this game's own made again\n", gExplosionsCarried, gWrecksReplaced);
-        gExplosionsCarried = gWrecksReplaced = 0;
+        printf("net: %d explosions the server had carried out, %d wrecks of this game's own made again, %d of the server's made as wrecks\n",
+               gExplosionsCarried, gWrecksReplaced, gWrecksMade);
+        gExplosionsCarried = gWrecksReplaced = gWrecksMade = 0;
     }
+    const CarStateDiffs& d = gCarStateDiffs;
+    if (d.damage + d.fireAbove + d.fireBelow + d.wreckHereOnly + d.wreckThereOnly)
+    {
+        printf("net: cars against the snapshots: %d compared, damage differed %d, fire here above the server's %d, below %d, "
+               "wrecked here only %d, there only %d\n", d.cars, d.damage, d.fireAbove, d.fireBelow, d.wreckHereOnly, d.wreckThereOnly);
+    }
+    gCarStateDiffs = CarStateDiffs();
     if (gPickupsMade + gPickupsRemoved)
     {
         printf("net: %d pickups made as the server's, %d removed\n", gPickupsMade, gPickupsRemoved);

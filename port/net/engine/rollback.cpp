@@ -14,6 +14,7 @@
 #include "Source/sound_obj.hpp"
 #include "Source/Ped.hpp"
 #include "Source/SoundObject.hpp"
+#include "Source/TagGame.hpp"
 #include "port/src/net_hooks.hpp"
 #include <algorithm>
 #include <stddef.h>
@@ -97,6 +98,188 @@ const std::vector<net::engine::Block>& RollbackSet()
     }
     return sBlocks;
 }
+
+// The sounds a resimulation drains that the live ticks never played: what a snapshot's Apply set (a death the server
+// carried out: the cry, the killer's voice line, a car's explosion), and a player's shot the live prediction didn't
+// fire (another player's input arrives after its tick). They are given back after each resimulated save, so the
+// live tick's sound plays them and no save holds them
+struct OwedVoice
+{
+    Ped* mpPed;
+    s32 mId;
+    s32 mVoice;
+};
+struct OwedCar
+{
+    Car* mpCar;
+    s32 mId;
+    s32 mEvent;
+};
+std::vector<OwedVoice> sOwedVoices;
+std::vector<OwedCar> sOwedCars;
+s32 sOwedLine; // sound_obj::mVocals.mPendingVoice
+u32 sOwedShots[MAX_PLAYERS]; // by Player::mWeapons slot
+bool sFirstResim; // the next ResimTick is the first since a restore
+bool sResimSaved; // the next save is a resimulated tick's
+u32 sResimShots[MAX_PLAYERS]; // the weapons the last ResimTick fired
+// The weapons each live tick fired, from their ammo, and the ammo the next tick starts from
+const int kShotTicks = 64;
+struct LiveShots
+{
+    uint32_t mTick;
+    u32 mShots[MAX_PLAYERS];
+} sLiveShots[kShotTicks];
+u16 sAmmo[MAX_PLAYERS][net::engine::kPlayerWeapons];
+bool sWasDead[MAX_PLAYERS]; // each player's ped at the last save
+
+Weapon* SlotWeapon(int player, int slot)
+{
+    Game* g = gGame_0x40;
+    Player* p = player < (int)g->mNumPlayers ? g->mPlayers[player] : NULL;
+    return p && p->mInUse ? p->mWeapons[slot] : NULL;
+}
+
+void GiveOwedSounds(bool owed)
+{
+    for (const OwedVoice& v : sOwedVoices)
+    {
+        if (v.mpPed->mId == v.mId)
+        {
+            v.mpPed->mVoiceEvent = owed ? v.mVoice : 0;
+        }
+    }
+    for (const OwedCar& c : sOwedCars)
+    {
+        if (c.mpCar->mCarId == c.mId)
+        {
+            c.mpCar->mSoundEvent = owed ? c.mEvent : 0;
+        }
+    }
+    if (sOwedLine)
+    {
+        gSound_obj.mVocals.mPendingVoice = owed ? sOwedLine : 0;
+    }
+    for (int i = 0; i < MAX_PLAYERS; i++)
+    {
+        for (int w = 0; w < net::engine::kPlayerWeapons; w++)
+        {
+            Weapon* weapon = sOwedShots[i] >> w & 1 ? SlotWeapon(i, w) : NULL;
+            if (weapon)
+            {
+                weapon->mShotFired = owed;
+            }
+        }
+    }
+}
+
+void ForgetOwedSounds()
+{
+    sOwedVoices.clear();
+    sOwedCars.clear();
+    sOwedLine = 0;
+    memset(sOwedShots, 0, sizeof(sOwedShots));
+}
+
+// A sound from an Apply, unless it was heard within a second: a death the prediction showed too (its cry), or one a
+// late snapshot carries out again. By VoiceKey, car id + kCarKey, or kLineKey
+struct GivenVoice
+{
+    s32 mId;
+    s32 mVoice;
+    uint32_t mTick;
+};
+std::vector<GivenVoice> sGivenVoices;
+const s32 kCarKey = 1 << 24;
+const s32 kPlayerKey = 1 << 23; // a player's ped: by player, as a death gives the player another ped
+s32 VoiceKey(const Ped* p)
+{
+    return p->mPlayer ? kPlayerKey + p->mPlayer->mPlayerIdx : p->mId;
+}
+const s32 kDeathCry = 4; // Ped::Kill's voice
+const s32 kLineKey = -1;
+uint32_t sLiveTick;
+
+bool GivenLately(s32 id, s32 voice)
+{
+    const uint32_t kTicks = 30;
+    sGivenVoices.erase(std::remove_if(sGivenVoices.begin(), sGivenVoices.end(),
+                                      [](const GivenVoice& g) { return sLiveTick - g.mTick > kTicks; }),
+                       sGivenVoices.end());
+    for (const GivenVoice& g : sGivenVoices)
+    {
+        if (g.mId == id && g.mVoice == voice)
+        {
+            return true;
+        }
+    }
+    sGivenVoices.push_back({id, voice, sLiveTick});
+    return false;
+}
+
+// What a snapshot's Apply left for the sound: the world was a save's, which holds none
+void TakeApplySounds()
+{
+    for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
+    {
+        if (p->mVoiceEvent && !GivenLately(VoiceKey(p), p->mVoiceEvent))
+        {
+            sOwedVoices.push_back({p, p->mId, p->mVoiceEvent});
+        }
+    }
+    for (Car* c = gCar_BC_Pool->mPool.mpPrev; c; c = c->mpNext)
+    {
+        if (c->mSoundEvent && !GivenLately(kCarKey + c->mCarId, c->mSoundEvent))
+        {
+            sOwedCars.push_back({c, c->mCarId, c->mSoundEvent});
+        }
+    }
+    const s32 line = gSound_obj.mVocals.mPendingVoice;
+    sOwedLine = line && !GivenLately(kLineKey, line) ? line : 0;
+}
+
+// After a save: a resimulated tick's shots no live tick fired are owed; a live tick's shots and deaths are noted
+void NoteLiveSounds(uint32_t tick)
+{
+    LiveShots& live = sLiveShots[tick % kShotTicks];
+    if (live.mTick != tick)
+    {
+        live.mTick = tick;
+        memset(live.mShots, 0, sizeof(live.mShots));
+    }
+    for (int i = 0; i < MAX_PLAYERS; i++)
+    {
+        // A player's death in a live tick: its cry was heard
+        Player* player = i < (int)gGame_0x40->mNumPlayers ? gGame_0x40->mPlayers[i] : NULL;
+        Ped* ped = player && player->mInUse ? player->mPlayerPed : NULL;
+        const bool dead = ped && ped->isDead();
+        if (!sResimSaved && dead && !sWasDead[i])
+        {
+            GivenLately(kPlayerKey + i, kDeathCry);
+        }
+        sWasDead[i] = dead;
+        for (int w = 0; w < net::engine::kPlayerWeapons; w++)
+        {
+            const Weapon* weapon = SlotWeapon(i, w);
+            const u16 ammo = weapon ? weapon->mAmmo : 0;
+            if (!sResimSaved && weapon && ammo < sAmmo[i][w])
+            {
+                live.mShots[i] |= 1u << w;
+            }
+            sAmmo[i][w] = ammo;
+        }
+        if (sResimSaved)
+        {
+            // Within a tick of a live shot it is that shot, a tick early or late
+            u32 heard = 0;
+            for (uint32_t t = tick - 1; t != tick + 2; t++)
+            {
+                heard |= sLiveShots[t % kShotTicks].mTick == t ? sLiveShots[t % kShotTicks].mShots[i] : 0;
+            }
+            sOwedShots[i] |= sResimShots[i] & ~heard;
+            live.mShots[i] |= sResimShots[i];
+        }
+    }
+}
 } // namespace
 
 net::engine::SavedWorld::SavedWorld() : mImpl(new Impl())
@@ -116,6 +299,17 @@ void net::engine::SaveGame(SavedWorld& out, uint32_t tick)
     out.mImpl->replicas = SaveReplicas(out.mImpl->replicas);
     out.tick = tick;
     out.valid = true;
+    NoteLiveSounds(tick);
+    if (sResimSaved)
+    {
+        GiveOwedSounds(true);
+        sResimSaved = false;
+    }
+    else
+    {
+        ForgetOwedSounds(); // the live tick played them
+        sLiveTick++;
+    }
 }
 
 // A world saved with another set (taken again since: a function's static registered, or a pool a global points to
@@ -155,11 +349,19 @@ void net::engine::RestoreGame(const SavedWorld& in)
     memcpy((unsigned char*)&gSound_obj + radio, sRadio, sizeof(sRadio));
     gSound_obj.mnActiveSamples = active;
     RestoreReplicas(in.mImpl->replicas);
+    ForgetOwedSounds(); // the live tick played them, or the restore took them back
+    sFirstResim = true;
 }
 
 void net::engine::ResimTick(const uint32_t* buttons, int count)
 {
     Game* g = gGame_0x40;
+    if (sFirstResim)
+    {
+        TakeApplySounds();
+        sFirstResim = false;
+    }
+    GiveOwedSounds(false); // given back after the last save, not into this tick's
     for (int i = 0; i < count && i < (int)g->mNumPlayers; i++)
     {
         Player* p = g->mPlayers[i];
@@ -179,8 +381,19 @@ void net::engine::ResimTick(const uint32_t* buttons, int count)
     {
         g->UpdateGame(); // the tick without the sound service (Game::ExecuteGame without sound)
     }
+    gTagGame.ExecuteGamemodeTick(); // a network game's frame runs it after the tick (do_network_and_local_inputs)
     gPortNoRumble = noRumble;
     GuardPeds(); // after it too: the live tick follows the last one without a frame in between
+    for (int i = 0; i < MAX_PLAYERS; i++)
+    {
+        sResimShots[i] = 0;
+        for (int w = 0; w < kPlayerWeapons; w++)
+        {
+            const Weapon* weapon = SlotWeapon(i, w);
+            sResimShots[i] |= weapon && weapon->mShotFired ? 1u << w : 0;
+        }
+    }
+    sResimSaved = true;
     // What the sound service takes from the sim each tick, taken here as it doesn't run: a resimulated sound was heard
     // when it was predicted. Left there, it went into the saves and every restore played it again (a gun that went on
     // firing, a laugh or a step heard over and over). The sim's word to the sound: a weapon's shot, the impacts of the
@@ -197,7 +410,13 @@ void net::engine::ResimTick(const uint32_t* buttons, int count)
     // ... and what it takes from peds and cars (all the Take* accessors sound_obj.cpp uses)
     for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
     {
-        p->TakeVoiceEvent(); // what it says next (a landing from a roof, a hit)
+        const s32 voice = p->TakeVoiceEvent(); // what it says next (a landing from a roof, a hit)
+        // A player's death cry no live tick had is owed; any other voice was heard when the tick was predicted. Either
+        // way an Apply's same voice isn't owed
+        if (voice && !GivenLately(VoiceKey(p), voice) && voice == kDeathCry && p->mPlayer)
+        {
+            sOwedVoices.push_back({p, p->mId, voice});
+        }
         // Its weapons, which aren't on the weapon pool's list (an instant gang's dual pistols heard for ever)
         for (Weapon* w : {p->mSelectedWeapon, p->mpWeapon})
         {

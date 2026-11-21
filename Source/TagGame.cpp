@@ -10,6 +10,9 @@
 #include "error.hpp"
 #include "TextTable.hpp"
 #include <string>
+#if defined(GTA2_PORT)
+#include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
+#endif
 
 DEFINE_GLOBAL(TagGame, gTagGame, 0x6F8450);
 DEFINE_STATIC_GLOBAL(Fix16_Point, kZeroPoint, 0x6F8720);
@@ -75,7 +78,12 @@ void TagGame::ExecuteGamemodeTick()
             if (mTickTimer >= 30)
             {
                 mTickTimer = 0;
+#if defined(GTA2_PORT)
+                // Port: a network game has no game time limit (its rounds are the netcode's), yet "it" time counts
+                if (mFugitive && (gNetTimeLimitEnabled != 0 || gPortTagTimeCounts))
+#else
                 if (mFugitive && gNetTimeLimitEnabled != 0)
+#endif
                 {
                     mItTimeSecs[mFugitive->get_idx()]++;
                 }

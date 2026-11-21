@@ -14,8 +14,11 @@
 #include "Source/Hud.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
+#include "Source/TextTable.hpp"
 #include "Source/TrafficLights.hpp"
+#include "Source/root_sound.hpp"
 #include "Source/Weapon.hpp"
+#include "Source/WeaponManager.hpp"
 #include "Source/char.hpp"
 #include "Source/network_data.hpp"
 #include "Source/rng.hpp"
@@ -46,6 +49,32 @@ struct
     uint8_t mDone[MAX_PLAYERS];
     bool mKnown[MAX_PLAYERS];
 } gNetDeaths;
+
+// The scoring bonuses (gPortScoreBonusHook): a server counts each player's and sends the last one's voice line, a client
+// shows its own player's once each, as the server has them (-1: the count not seen yet, none shown for it)
+uint8_t gBonusCount[MAX_PLAYERS];
+uint8_t gBonusVoice[MAX_PLAYERS];
+int gBonusSeen = -1;
+const int kBonusVoices = 12;
+const char* const kBonusText[kBonusVoices] = {NULL, "fly_car", "stl_all", "dst_all", "excutin", "gencide", "copkill", "carjaka",
+                                              "elvis_d", "accurcy", "wrngway", "em_dest"}; // by voice_line
+
+// The server's bonus for our player: its message over the frame (the HUD's message line is rolled back), and its voice
+void ShowBonus(int voice)
+{
+    const wchar_t* text = voice > 0 && voice < kBonusVoices && gText_0x14 ? gText_0x14->Find(kBonusText[voice]) : NULL;
+    std::string line;
+    for (int k = 0; text && text[k] && k < 64; k++)
+    {
+        line += text[k] < 128 ? (char)text[k] : '?';
+    }
+    if (!line.empty())
+    {
+        ShowHudMessage(line.c_str());
+        gRoot_sound.PlayVoice(voice);
+        printf("net: the server's bonus for us: %s (voice %d)\n", line.c_str(), voice);
+    }
+}
 
 int PlayerIndexOfPed(s32 pedId)
 {
@@ -140,6 +169,17 @@ void CountDeath(int i, Player* p, Ped* ped)
 // Weapons and ammo are the server's
 void ApplyWeapons(Player* p, const net::EntityState& e)
 {
+    // A car weapon is its car's (WeaponManager::find): one the server's player has and this game's car lacks (the crate
+    // was collected there) is added as collecting it does, else this game never fires it
+    Ped* ped = p->mPlayerPed;
+    Car* car = ped ? ped->mCar : NULL;
+    for (int w = weapon_type::car_bomb; car && car->mDriver == ped && w < kPlayerWeapons; w++)
+    {
+        if (e.f[kPlayerAmmo0 + w] && !p->mWeapons[w] && !gWeapon_8->find(car, w))
+        {
+            gWeapon_8->add_car_weapon(w, 1, car);
+        }
+    }
     // Only to a weapon this game has made for the player (a new map's game: not yet, and the HUD reads it,
     // Hud_PlayerStats::DrawPlayerStats)
     if (e.f[kPlayerWeapon] >= 1 && e.f[kPlayerWeapon] <= kPlayerWeapons && p->mWeapons[e.f[kPlayerWeapon] - 1])
@@ -156,7 +196,7 @@ void ApplyWeapons(Player* p, const net::EntityState& e)
 }
 
 // Power-ups too (one collected here in a prediction the server didn't have ends here), with what they switch on the
-// ped (Player::CollectPowerUp, tick_down_powerups); invulnerability is the client's anyway
+// ped (Player::CollectPowerUp, tick_down_powerups)
 void ApplyPowerUps(Player* p, Ped* ped, const net::EntityState& e)
 {
     for (int k = 0; k < kPowerUps; k++)
@@ -171,6 +211,10 @@ void ApplyPowerUps(Player* p, Ped* ped, const net::EntityState& e)
             else if (k == power_up_indices::Invisibility_11)
             {
                 now ? ped->SetInvisible() : ped->SetVisible();
+            }
+            else if (k == power_up_indices::Invulnerability_6)
+            {
+                now ? ped->SetInvulnerable() : ped->ClearInvulnerable(); // ProtectPlayers keeps it above 0 after
             }
         }
         p->mPowerUpTimers[k] = now;
@@ -331,6 +375,7 @@ void net::engine::CapturePlayer(int i, Snapshot& out)
     CountDeath(i, p, ped);
     e.f[kPlayerDeaths] = i < MAX_PLAYERS ? gDeaths[i] : 0;
     e.f[kPlayerDeathEvents] = i < MAX_PLAYERS ? gDeathEvents[i] : 0;
+    e.f[kPlayerBonus] = i < MAX_PLAYERS ? gBonusCount[i] << 4 | gBonusVoice[i] : 0;
     e.f[kPlayerKiller] = i < MAX_PLAYERS ? gKiller[i] : 0;
     e.f[kPlayerWeapon] = p->mCurrWeaponIdx + 1;
     e.f[kPlayerFrags] = gGameSession.mFragsList[i];
@@ -340,7 +385,8 @@ void net::engine::CapturePlayer(int i, Snapshot& out)
         e.f[kPlayerAmmo0 + w] = p->mWeapons[w] ? p->mWeapons[w]->mAmmo : 0;
     }
     e.f[kPlayerCar] = CarRef(ped->mCar);
-    e.f[kPlayerState] = (InCarTransition(ped) ? kPlayerTransition : 0) | (ped->isDead() ? kPlayerDead : 0) | (LeavingCar(ped) ? kPlayerLeaving : 0);
+    e.f[kPlayerState] = (InCarTransition(ped) ? kPlayerTransition : 0) | (ped->isDead() ? kPlayerDead : 0) | (LeavingCar(ped) ? kPlayerLeaving : 0) |
+                         (ped->mBf21C.bOnFire ? kPlayerOnFire : 0);
     e.f[kPlayerTarget] = ped->get_objective() == objectives_enum::enter_car_as_driver_35 ? CarRef(ped->mTargetObjectiveCar) : 0;
     PackName(p, e);
     PackChat(p, e);
@@ -394,11 +440,26 @@ void net::engine::ApplyPlayer(const EntityState& e)
     }
     ApplyWeapons(p, e);
     ApplyPowerUps(p, ped, e);
+    ApplyFire(ped, (e.f[kPlayerState] & kPlayerOnFire) != 0);
     // Its wanted points, the server's: the HUD's cop heads, and the cops' AI here, which gave up the chase at 0 stars
     ped->mWantedPoints = (s16)e.f[kPlayerWanted];
     if (i != LocalPlayer())
     {
         UnpackChat(p, e); // the others' typing; ours is this game's (TakeLocalChat, PutLocalChat)
+    }
+    else
+    {
+        // Only a newer count: snapshots can come out of order
+        const int count = e.f[kPlayerBonus] >> 4;
+        const uint8_t ahead = (uint8_t)(count - gBonusSeen);
+        if (gBonusSeen < 0 || (ahead && ahead < 128))
+        {
+            if (gBonusSeen >= 0)
+            {
+                ShowBonus(e.f[kPlayerBonus] & 15);
+            }
+            gBonusSeen = count;
+        }
     }
     if (CarryOutDeath(i, p, ped, e))
     {
@@ -451,7 +512,19 @@ void net::engine::KillCredited(Ped* ped, int killerSlot)
     Player* killer = GetPlayer(killerSlot);
     ped->mKillerId = killer && killer->mPlayerPed ? killer->mPlayerPed->mId : 0;
     ped->mInvulnerability = 0;
+    KillNow(ped);
+}
+
+void net::engine::KillNow(Ped* ped)
+{
     ped->Kill();
+    // Knocked down (a blast threw it), the game keeps the ped's state until it gets up (Ped::ChangeNextPedState1), so
+    // the server's death didn't take and the next snapshot carried it out again: its cry, its killer's points
+    if (!ped->isDead())
+    {
+        ped->mPedState1 = ped_state_1::dead_9;
+        ped->mPedState2 = ped_state_2::ped2_dead_15;
+    }
 }
 
 void net::engine::SnapCamera(Player* p)
@@ -562,7 +635,20 @@ void net::engine::ResetDeathEvents()
     {
         gDeathEvents[i] = 0;
         gNetDeaths.mKnown[i] = false; // a client takes the new game's counts as it finds them
+        gBonusCount[i] = 0;
     }
+    gBonusSeen = -1;
+}
+
+bool net::engine::ScoreBonus(Player* p, s32 voice)
+{
+    const int i = p->mPlayerIdx;
+    if (!gPortServerKillAwards && i >= 0 && i < MAX_PLAYERS && voice > 0 && voice < kBonusVoices)
+    {
+        gBonusCount[i]++; // a server's: sent with the player (a client shows the server's only)
+        gBonusVoice[i] = (uint8_t)voice;
+    }
+    return false;
 }
 
 net::engine::LocalChat net::engine::TakeLocalChat()

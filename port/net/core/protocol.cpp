@@ -133,7 +133,7 @@ bool net::ReadWelcome(BitReader& r, Welcome& m)
     m.slot = (uint8_t)r.Bits(8);
     m.players = (uint8_t)r.Bits(8);
     m.gameType = (uint8_t)r.Bits(8);
-    m.fragLimit = (uint16_t)r.VarU();
+    m.fragLimit = r.VarU();
     m.timeLimitMin = (uint16_t)r.VarU();
     m.tickMs = (uint16_t)r.VarU();
     m.police = (uint8_t)r.Bits(8);

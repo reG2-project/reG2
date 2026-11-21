@@ -85,7 +85,7 @@ inline float Blocks(int32_t raw)
 void Capture(Snapshot& out);
 // Puts a snapshot's players, cars, peds and pickups into this game
 void Apply(const Snapshot& snap);
-// The scores (frags, points) of a snapshot's players: last, after a resimulation, so the server's count is shown
+// The scores (frags, points) of a snapshot's players: before a resimulation, and after it so the server's count is shown
 void ApplyScores(const Snapshot& snap);
 // How far a snapshot's area reaches: the server sets it per client (the farthest entity it kept), a client removes
 // what is missing only within it (blocks)
@@ -102,6 +102,7 @@ bool PlayerOf(const EntityState& e, int* pPlayer, uint32_t* pButtons);
 int PlayerHealth(const EntityState& e); // a player entity's health
 int PlayerFrags(const EntityState& e);
 int PlayerPoints(const EntityState& e);
+int TagSeconds(int slot); // a tag game's: the seconds the slot was "it" (the game's tag winner has the most)
 int PlayerDeaths(const EntityState& e);
 uint32_t PlayerCarId(const EntityState& e); // the NetId of the car it drives, 0 on foot
 int PlayerWeapon(const EntityState& e); // its weapon in hand (Player::mCurrWeaponIdx), -1: none

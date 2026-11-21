@@ -8,7 +8,7 @@
 
 namespace net
 {
-const uint32_t kProtocolVersion = 19;
+const uint32_t kProtocolVersion = 24;
 const uint16_t kDefaultPort = 27920;
 const size_t kMaxPayload = 1372; // the largest unreliable ENet packet that isn't fragmented at mtu 1400 (port/docs/netcode.md, "Wire format")
 const uint8_t kChannelUnreliable = 0; // snapshots, commands
@@ -57,7 +57,7 @@ struct Welcome
     uint8_t slot = 0; // the client's player index
     uint8_t players = 0; // player slots in the game
     uint8_t gameType = 1; // 1 frags, 2 points, 3 tag (MultiplayerGameType)
-    uint16_t fragLimit = 10;
+    uint32_t fragLimit = 10; // frags, or a points game's money
     uint16_t timeLimitMin = 10;
     uint16_t tickMs = 33;
     uint8_t police = 0;

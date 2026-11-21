@@ -8,6 +8,7 @@
 #include "Source/Player.hpp"
 #include "Source/PublicTransport.hpp"
 #include "Source/Weapon.hpp"
+#include "Source/WeaponManager.hpp"
 #include "Source/map_0x370.hpp"
 #include <stdlib.h>
 #include <string>
@@ -41,6 +42,8 @@ void net::engine::DebugPowerUp(int player, int powerUp)
 
 void net::engine::DebugCar(int player, int model)
 {
+    const int damage = model / 1000 * 1000; // model + 1000 * n: the car damaged by n * 1000 (16000: on fire, 25000: burning)
+    model %= 1000;
     Ped* ped = InGamePed(player);
     if (ped && !ped->mCar && gCarManager_6C)
     {
@@ -49,10 +52,20 @@ void net::engine::DebugCar(int player, int model)
         scale.mValue = 0x4000;
         Fix16 off;
         off.FromInt(2);
+        // A truck cab comes with a container trailer (CarManager::SpawnCabAndTrailer, as the map's parked trucks)
+        if (model == car_model_enum::TRUKCAB1 || model == car_model_enum::TRUKCAB2)
+        {
+            gCarManager_6C->SpawnCabAndTrailer(ped->get_cam_x() + off, ped->get_cam_y(), 0, model, car_model_enum::TRUKCONT);
+            return;
+        }
         Car* car = gCarManager_6C->SpawnCarAt(ped->get_cam_x() + off, ped->get_cam_y(), ped->get_cam_z(), 0, model, scale);
         if (car)
         {
             car->IncrementCarStats(car_kind::recycled_1);
+            if (damage)
+            {
+                car->AccumulateDamage((s16)damage, Fix16_Point(0, 0)); // as a hit does, its fire with it
+            }
         }
     }
 }
@@ -109,9 +122,31 @@ void net::engine::DebugTrain(int player, int train)
 void net::engine::DebugArm(int player, int weapon, int ammo)
 {
     Player* p = GetPlayer(player);
-    if (p && InGamePed(player) && weapon >= 0 && weapon < kPlayerWeapons && p->mWeapons[weapon] &&
-        p->mWeapons[weapon]->mAmmo == 0)
+    Ped* ped = p ? InGamePed(player) : NULL;
+    if (ped && weapon >= weapon_type::car_bomb && weapon < kPlayerWeapons && ped->mCar && ped->mCar->mDriver == ped &&
+        !gWeapon_8->find(ped->mCar, weapon))
+    {
+        gWeapon_8->add_car_weapon(weapon, (u8)ammo, ped->mCar); // a car weapon: the car's, while the player drives one
+    }
+    else if (ped && weapon >= 0 && weapon < kPlayerWeapons && p->mWeapons[weapon] && p->mWeapons[weapon]->mAmmo == 0)
     {
         p->AddWeaponWithAmmo(weapon, (u8)ammo);
+    }
+}
+
+void net::engine::DebugStreak(int player)
+{
+    Player* p = GetPlayer(player);
+    if (p && InGamePed(player))
+    {
+        p->mScores.mExecutionCount = 20; // its next PlayerScoreTracker::Service gives the bonus
+    }
+}
+
+void net::engine::DebugFire(int player)
+{
+    if (Ped* ped = InGamePed(player))
+    {
+        ped->SetOnFire();
     }
 }

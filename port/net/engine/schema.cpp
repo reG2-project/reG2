@@ -33,7 +33,7 @@ net::Schema BuildSchema()
                                          {"frags", 12, true}, {"points", 32, true}}};
     AppendNumbered(player.fields, "ammo", kPlayerWeapons, 16);
     player.fields.push_back(FieldDesc{"car", 25, false}); // kPlayerCar
-    player.fields.push_back(FieldDesc{"state", 3, false}); // kPlayerState
+    player.fields.push_back(FieldDesc{"state", 4, false}); // kPlayerState
     player.fields.push_back(FieldDesc{"target", 25, false}); // kPlayerTarget
     AppendNumbered(player.fields, "name", kPlayerNameEnd - kPlayerName, 32);
     AppendNumbered(player.fields, "power", kPowerUps, 16);
@@ -43,9 +43,12 @@ net::Schema BuildSchema()
     player.fields.push_back(FieldDesc{"money", 32, true}); // kPlayerMoney
     player.fields.push_back(FieldDesc{"multiplier", 8, false}); // kPlayerMultiplier
     player.fields.push_back(FieldDesc{"death_events", 8, false}); // kPlayerDeathEvents
+    player.fields.push_back(FieldDesc{"bonus", 12, false}); // kPlayerBonus
     net::EntityType car = {"car", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"model", 8, false},
                                    {"driver", 2, false}, {"damage", 16, false}, {"areas", 32, false}, {"wrecked", 1, false},
-                                   {"lights", 8, false}, {"flash", 8, false}, {"horn", 8, false}, {"horn_cooldown", 8, false}, {"remap", 16, true}}};
+                                   {"lights", 8, false}, {"flash", 8, false}, {"horn", 8, false}, {"horn_cooldown", 8, false}, {"remap", 16, true},
+                                   {"turret", 11, false}, {"trailer", 25, false},
+                                   {"flags", 16, false}}};
     CarPhysicsFields(car.fields);
     CarAiFields(car.fields);
     net::EntityType ped = {"ped", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"remap", 8, false},
@@ -78,6 +81,16 @@ net::Schema BuildSchema()
     world.fields.push_back(FieldDesc{"ambient", 32, true}); // kWorldAmbient
     world.fields.push_back(FieldDesc{"target_ambient", 32, true});
     world.fields.push_back(FieldDesc{"ambient_step", 32, true});
+    world.fields.push_back(FieldDesc{"police_level", 3, false}); // kWorldPoliceLevel ..
+    world.fields.push_back(FieldDesc{"police_crew_type", 3, false});
+    world.fields.push_back(FieldDesc{"police_crew_onscreen", 1, false});
+    world.fields.push_back(FieldDesc{"police_firing", 32, false});
+    AppendNumbered(world.fields, "pursuit_criminal", 4, 32); // kWorldPursuitCriminal ..
+    AppendNumbered(world.fields, "pursuit_level", 4, 3);
+    AppendNumbered(world.fields, "pursuit_state", 4, 3);
+    AppendNumbered(world.fields, "pursuit_timer", 4, 16);
+    AppendNumbered(world.fields, "pursuit_crews", 4, 3);
+    AppendNumbered(world.fields, "pursuit_chased", 4, 1);
     net::EntityType object = {"object", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"model", 9, false}, {"idx", 8, false},
                                          {"age", 6, false}}};
     net::EntityType train = {"train", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"wagons", 4, false},

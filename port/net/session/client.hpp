@@ -127,6 +127,7 @@ class Client
     bool mConnected = false;
     int mSlot = 0;
     int mTickMs = 33;
+    int mGameType = 1; // the welcome's: 1 frags, 2 points, 3 tag
     uint32_t mFrame = 0;
 
     // Snapshots by tick % kRing: the baselines
@@ -171,7 +172,7 @@ class Client
     std::vector<std::string> mMaps; // what a map vote chooses from (the welcome's)
     struct ScoreRow
     {
-        int slot, frags, deaths;
+        int slot, frags, deaths, tag; // tag: the seconds "it" in a tag game
     };
     std::vector<ScoreRow> mResultsRows; // the scores as the results began
     bool mWasChatting = false;

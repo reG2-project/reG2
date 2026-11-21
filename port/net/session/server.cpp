@@ -206,7 +206,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
             welcome.slot = (uint8_t)slot;
             welcome.players = (uint8_t)mSlots.size();
             welcome.gameType = (uint8_t)mConfig.game.gameType;
-            welcome.fragLimit = (uint16_t)mConfig.game.fragLimit;
+            welcome.fragLimit = (uint32_t)mConfig.game.fragLimit;
             welcome.timeLimitMin = (uint16_t)mConfig.game.timeLimitMin;
             welcome.tickMs = (uint16_t)mConfig.game.tickMs;
             welcome.police = (uint8_t)mConfig.game.police;
@@ -589,8 +589,8 @@ void net::Server::SetNextInputs(const Snapshot& world)
 }
 
 // GTA2_NET_JERKLOG: the same measure as the clients', on the server's own state
-// The round flow's view of the slots: who is in, a person or an arena bot, and the score that counts (frags, or
-// points in a points game)
+// The round flow's view of the slots: who is in, a person or an arena bot, and the score that counts (frags, points
+// in a points game, the seconds "it" in a tag game)
 std::vector<net::RoundPlayer> net::Server::RoundPlayers(const Snapshot& world) const
 {
     std::vector<RoundPlayer> players(mSlots.size());
@@ -609,7 +609,9 @@ std::vector<net::RoundPlayer> net::Server::RoundPlayers(const Snapshot& world) c
         uint32_t b = 0;
         if (engine::PlayerOf(e, &p, &b) && p < (int)players.size())
         {
-            players[p].score = mConfig.game.gameType == 2 ? engine::PlayerPoints(e) : engine::PlayerFrags(e);
+            // As the game's results: a tag game's winner was "it" the longest (Frontend::ChangeMenuPage)
+            const int type = mConfig.game.gameType;
+            players[p].score = type == 2 ? engine::PlayerPoints(e) : type == 3 ? engine::TagSeconds(p) : engine::PlayerFrags(e);
         }
     }
     return players;

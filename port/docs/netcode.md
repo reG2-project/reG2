@@ -13,7 +13,7 @@ DirectPlay sat (`NetPlay`), and the few changes to `Source/` are port-only hooks
 
 What works: 1-6 players on the game's multiplayer maps, frags, points and tag games, police, traffic, trains and ambient peds,
 joining and leaving mid-game, rounds with warmup, results and votes, map rotations, chat with commands, reconnecting,
-a frontend page to join, bots (scripted and trained), recordings that replay without a server. Protocol 19.
+a frontend page to join, bots (scripted and trained), recordings that replay without a server. Protocol 24.
 
 ## Running
 
@@ -30,7 +30,7 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 
 | | Options |
 |---|---|
-| Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players 1-6`, `--gametype 1-3` (frags, points, tag), `--fraglimit`, `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
+| Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players 1-6`, `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
 | Round flow | `--minplayers N` (2), `--warmup s` (60), `--results s` (15), `--votes start,map,kick` (or `none`), `--rounds on\|off` |
 | Arena | `--arena brain,...` (bots on the server itself), `--ticks N` (the result printed and the server ended at tick N), `--seed N` |
 | Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` |
@@ -96,8 +96,8 @@ player's name, as far as all that fit agree; when several fit they show over the
    new game (it acknowledged one of its snapshots: the newest its game took, not the newest that arrived, so a client
    still loading the map isn't counted), "Waiting for players" until then, 30 s at most. The players
    start where the map script puts them. Too few left: back to the warmup.
-3. **The round**, to the frag limit (points in a points game; tag: time only) or the time limit. The leader wins;
-   a tie at the time limit is a draw.
+3. **The round**, to the frag limit (points in a points game; tag: time only) or the time limit. The leader wins
+   (in a tag game, as the game's own results: the player who was "it" the longest); a tie at the time limit is a draw.
 4. **Results** (`--results` s): the winner, a table of frags and deaths, and the maps with their votes (the number keys, or `/map N`).
    The world stands still meanwhile: a tick runs only the players' own (the chat goes on) and the HUD, and the
    inputs are key events only, on the server and every client (`gPortWorldStill`); its sounds stop as in a pause.
@@ -155,6 +155,11 @@ command, applies snapshots and rolls back. Between frames both poll the network 
   game, and the first players' cameras took them all. A server allows the limits times its players, up to 3 players'
   worth (its traffic has drivers of its own: more ran the ped pool out). Before anything spawns, each client's camera
   bounds grow ahead along its motion by that client's lead, so nothing appears inside what it already shows.
+- **One view for everyone**: every player sees the same, 16:9 at the game's own zoom. CAMERA ZOOM doesn't apply in a
+  network game (`PortCameraZoom`), a wider screen shows bars at its sides (`ReadScreenSettings` keeps the game's screen
+  16:9 at most, the renderer its aspect) and a narrower one sees less width. The server gives every player's cameras
+  that view, so peds and cars spawn and go out of everyone's sight, and a traffic car, which the game spawns 5 blocks
+  beyond one camera's edge, isn't spawned where another player's view is (`TrafficSpawner::SpawnTrafficCar`).
 - **Joining and leaving** (`engine/slots.cpp`): a slot without a client is out of the game the way the game handles a
   player who left (its ped walks on as a pedestrian). A joining client gets a new player ped at the next restart zone
   and an empty score. Snapshots carry the slots in the game, and clients mirror them.
@@ -175,9 +180,11 @@ command, applies snapshots and rolls back. Between frames both poll the network 
   |---|---|---|
   | players, cars, peds, objects (movement, physics, collisions, weapons) | runs | the prediction |
   | traffic and ambient ped spawning, despawning | off | only the server creates and removes entities |
-  | scripts, police, ambulance, firefighters, emergency crews, generators, garages | off | they create entities; the results arrive as state |
+  | the map script's level start | its look and sound only | its shading level, ambient light and sounds, and the cars it puts on car transporters (`gPortScriptCommandRuns`); the rest is stepped over |
+  | scripts after the level start, police, ambulance, fire engines, buses | off | they create entities; the results arrive as state (the police's as the world entity's) |
+  | generators, the garage, emergency crews | run, idle | scripts switch generators on and park cars in the garage, the police and the ambulance send crews |
   | doors, cranes, crushers, trains, traffic lights | runs | predicted, corrected by snapshots (the lights' phase is in the world entity, each train has one of its own) |
-  | particles, tile animations, lights, HUD, sound | runs | cosmetic; a resimulated tick runs without the sound service, then takes what it left (shots, impacts, voice lines, sound events, radio reports), so a restore doesn't play them again |
+  | particles, tile animations, lights, HUD, sound | runs | cosmetic; a resimulated tick runs without the sound service, then takes what it left (shots, impacts, voice lines, sound events, radio reports), so a restore doesn't play them again; what no live tick played (a snapshot's death, another player's shot the prediction missed, by ammo) is given to the next live tick |
 
   Player peds take no damage on a client, and everything counts as seen there, so nothing is removed off screen.
 - **Replicas** (`engine/replica.cpp`): the client adopts what the map script made on both sides, makes the rest, moves
@@ -209,23 +216,26 @@ the original's.
 
 | Entity | Carries |
 |---|---|
-| World (one per snapshot, `engine/world_entity.cpp`) | the game's tick counter (timers are stamped with it), the random seed and stream, the restart zones' turn, the round's state (`core/round_state.hpp`), the game's generation (a map change), the traffic lights, the tag game's fugitive and times, the map's light level (its script sets it: `MapRenderer`'s ambient, its target and step) |
-| Player (`engine/players.cpp`) | place, input, health, death count and last killer, weapons and the ammo of all 28, frags and points, the HUD's money and multiplier, power-up timers, its car, the chat line |
-| Car (`engine/cars.cpp`, `car_ai.cpp`) | place, its whole `CarPhysics` (but its two pointers), damage, lights, horn, colour, its driver, and its AI (`CarAI`: route, speed, the cars it chases) |
+| World (one per snapshot, `engine/world_entity.cpp`) | the game's tick counter (timers are stamped with it), the random seed and stream, the restart zones' turn, the round's state (`core/round_state.hpp`), the game's generation (a map change), the traffic lights, the tag game's fugitive and times, the map's light level (its script sets it: `MapRenderer`'s ambient, its target and step), the police's state that a client's cops, cop cars and HUD read (the highest wanted level, the strongest crew, a crew on screen, the last cop whose shot hit, and each pursuit's criminal, level, state, timer and crews) |
+| Player (`engine/players.cpp`) | place, input, health, death count and last killer, weapons and the ammo of all 28 (a car weapon the car here lacks is added to it), frags and points, the HUD's money and multiplier, power-up timers, its car, the chat line |
+| Car (`engine/cars.cpp`, `car_ai.cpp`) | place, its whole `CarPhysics` (but its two pointers), damage, lights, horn, colour, its roof turret's angle, the trailer it tows (towed trailers sent too), its proofs and alarm (`Car::mFlags`), its driver, and its AI (`CarAI`: route, speed, the cars it chases) |
 | Ped (`engine/ped_state.cpp`) | place, and the plain values its AI runs on (objectives, targets, speeds, timers, occupation, flags, health, death cause), its references (targets, group) and its car and seat |
-| Pickup (`engine/pickups.cpp`) | model and place; roadblock barriers too (they are off the object pool's list) |
+| Pickup (`engine/pickups.cpp`) | model and place; roadblock barriers too (they are off the object pool's list), and the car weapons' mines and oil |
 | Train (`engine/trains.cpp`, every train in every snapshot) | its lead's place, speed and driver (none, the traffic driver, a ped, a player), its carriages' car ids (the client's train of the same index takes them), which end leads (`Train::ReassignTrainHead`), its state, stop phase and timers, the station it heads for and that station's state, each carriage's damage and explosion timer |
 
 Health, deaths, weapons and scores are the server's. A death the server had is carried out on the client with the
-game's own `Ped::Kill`, credited to the killer, and the deaths carried out are part of the rollback set, so a
+game's own `Ped::Kill` (dead at once, also when a blast has the ped knocked down), credited to the killer, and the deaths carried out are part of the rollback set, so a
 resimulation never repeats one. The HUD's kill notices come from these deaths only, with the server's killer (none for
 the police's), not from the deaths the client's prediction starts. A client goes by the game's death count, which only counts up (the round's, in the
-results, starts again with each round), and takes a player's count as it finds it the first time it sees the player. Scores (with the money and multiplier), power-up timers and the tag game's "it" are set after the resimulation;
+results, starts again with each round), and takes a player's count as it finds it the first time it sees the player. Scores (with the money and multiplier) are set before the resimulation, so its ticks and saves carry the server's
+(the HUD's rolling digits roll towards them), and again after it with power-up timers and the tag game's "it";
 a new round sets them all back to a game's start.
 
 A ped's AI state is applied only while it is on foot on both sides (a driver in the same car gets its objectives but
 not its states), its states only when plain (walking, running, standing) on both sides, and all or nothing: if a
-reference it carries isn't in the client's game, the ped keeps its own state for that snapshot. Groups are rebuilt on
+reference its objective acts on (its target ped, internal target, car thief, the car it heads for, enters or flees in)
+isn't in the client's game, the ped keeps its own state for that snapshot; the others (who attacked, punched, was hit
+or killed it, the car it stole) stay the client's when missing. Groups are rebuilt on
 the client from each ped's leader, keeping only members that are present (the game walks a group's list up to its
 count).
 
@@ -378,11 +388,23 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `port/src/rumble.cpp` | `gPortNoRumble` | no vibration on a server (its local player is a remote one) or in a client's resimulation |
 | `port/compat/src` | `gPortIdleHook`, `gPortNoAudio`, `gPortCrashHook` | polling while a frame waits (`window.cpp`), no sound on a server (`miles.cpp`), the crash report (`main.cpp`) |
 | `Ped.cpp` | `gPortKeepWantedPoints` | a client keeps the server's wanted points with its police off |
+| `Car.cpp` | `gPortNoFireEngines` | a client sends no fire engines (`bSkip_fire_engines`), and its wrecks burn all the same (`Car::SpawnFire`) |
+| `ScriptThread.cpp` | `gPortScriptCommandRuns` | a client runs the level start's look and sound commands, and steps over the rest |
+| `Car.cpp` | `gPortCarMayExplode` | a client's car the server sends blows up when a snapshot says the server's did, not on its own prediction |
 | `Car.cpp` | `Car::TryHonkHorn` | a train's lead without a driver (a player got out of a carriage that stood still) doesn't read it |
 | `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`) | the chat types the keyboard layout's characters |
 | `Hud.cpp` | `gPortServerKillNotices` | a client's kill notices are the server's deaths only |
+| `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
+| `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
 | `Pool.hpp`, `Car.cpp`, `Char_Pool.cpp`, `Game.cpp` | `PortRand::Scope` (`port/src/rand/owner.hpp`) | who a random draw belongs to |
 | `sound_obj.*`, `ParticleManager.cpp`, `Particle_4C.cpp` | `port/src/rand/sound.hpp`, `particle.hpp` | their own random streams; `SoundPosEntry` from the pool; `sound_obj`'s state public for the rollback |
+
+The game's own multiplayer assumed one machine per player in places; under `GTA2_PORT` a network game fixes them:
+the view (`winmain.cpp`'s `ReadScreenSettings`, `PortCameraZoom`) and the traffic spawn (`Car.cpp`) above, the police
+updating every pursuit and not the first criminal's alone (`Police.cpp`), and the nearest player instead of
+`mLocalPlayer` (on a server, slot 0) for the roadblock tank's aim and a roadblock's removal (`Ped.cpp`,
+`Police_38.cpp`, `Game::PortNearestPlayerPed`) and a group's gang respect (`Ped.cpp`). The tag game's tick, run after
+the game's tick outside `Game::UpdateGame`, runs in a resimulated tick too (`engine/rollback.cpp`).
 
 Other files' statics the netcode reads (winmain.cpp's inputs and its player, the restart zones' turn) it reaches through
 the registry by their 10.5.exe address (`PortStatic`, accessors in `engine/internal.hpp`).
@@ -477,9 +499,13 @@ off by default:
 | `GTA2_NET_NAVDUMP=<file.pgm>` | client bot | the bots' map as a picture |
 | `GTA2_NET_TESTKILL=<tick>:<victim>:<killer>,...` | server | a player killed by the game's own death |
 | `GTA2_NET_TESTPOWERUP=<tick>:<player>:<power-up>,...` | server | a power-up (12: an instant gang) |
-| `GTA2_NET_TESTCAR=<tick>:<player>:<model>,...` | server | a car beside the player (11: a bus) |
+| `GTA2_NET_TESTFIRE=<tick>:<player>,...` | server | the player set on fire |
+| `GTA2_NET_TESTSTREAK=<tick>:<player>,...` | server | a kill streak's bonus, as the 20th kill in a row gives it |
+| `GTA2_NET_TESTCAR=<tick>:<player>:<model>,...` | server | a car beside the player (11: a bus; 63, 64: a truck cab with a container trailer); model + 1000 * n: damaged by n * 1000 (16: on fire, 26: burning) |
 | `GTA2_NET_TESTTRAIN=<tick>:<player>:<train>,...` | server | the player at the wheel of a train; train + 10: that train into reverse; train + 20: the player on the platform of the station it stops at next |
-| `GTA2_NET_TESTARM=<weapon>:<ammo>[,...]`, `GTA2_NET_TESTWANTED=<points>` | server | every player kept armed (car weapons from 15), or at least that wanted (600: a star) |
+| `GTA2_NET_TESTARM=<weapon>:<ammo>[,...]`, `GTA2_NET_TESTWANTED=<points>` | server | every player kept armed (car weapons from 15: the car it drives), or at least that wanted (600: a star) |
+| `GTA2_NET_BOTCARFIRE=1` | both | bots fire their car weapons while driving (a second in three) |
+| `GTA2_NET_BOTTURRET=1` | both | bots turn their roof turret while driving (a second in three) |
 | `GTA2_NET_SAY=<frame>:<command>;...` | client | commands sent at those frames |
 | `GTA2_SIMBENCH=...`, `GTA2_SIMBENCH_FILL=<cars>`, `GTA2_NETEVAL=...`, `GTA2_OFFLINE_MP=...` | game | the measurements below (`port/net/eval`, `engine/netplay.cpp`) |
 
@@ -508,10 +534,6 @@ own (`single`) and rollback in scenes with explosions (`explode`).
 
 ## Open
 
-- **A server's spawn area is its own screen's**: the bounds where it spawns and removes traffic and peds come from its
-  cameras' screen size and ZOOM, widened by each client's lead, not from each client's screen. A widescreen or
-  zoomed-out client can see cars and peds appear at its sides. Next: the client's screen size and zoom in its hello,
-  applied to that player's cameras on the server.
 - **reG2's frame loop in a network game**: steps and frames go the original's way (a step, then a frame), so no frame
   limit above 30, no interpolation and no SHOW FPS. Interpolating would need the netcode's frame hook on reG2's steps.
 - **Typing on the network page with a gamepad**: the address and name take the keyboard only.
@@ -520,6 +542,9 @@ own (`single`) and rollback in scenes with explosions (`explode`).
   inputs, measured on recorded sessions (`GTA2_NET_COMPARE`, `GTA2_NET_JERKLOG`).
 - **Cops** differ the most of any entity (health from hits a client predicts, animation and aim on foot): corrected by
   the next snapshot; worth a look if players see cops jump.
+- **The police are the original's**: one city for every criminal. Four pursuits for six players, and the most wanted
+  player's level decides the cop cars in everyone's traffic, the roadblocks and the crews (`--police N` above 1 shows
+  it). The ambient peds' density cap is also one count for all the players' screens.
 - **An instant gang doesn't board a bus** (on the server, so the game's own AI): the members walk to the doors and stay
   there; normal cars work. To check against a traffic bus, then the original under wine.
 - **The game's results page** instead of the overlay's text; a minimum of players that counts people only.

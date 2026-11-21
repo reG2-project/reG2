@@ -84,6 +84,8 @@ void net::engine::StartNetworkGame(const NetworkGame& game)
     gChecked = true;
     gPortNextNetworkGame = NextNetworkGame;
     gPortWorldStill = WorldStill;
+    gPortTagTimeCounts = true;
+    gPortScoreBonusHook = net::engine::ScoreBonus;
     gNetPlay.mPlayerIdx = game.localPlayer;
     gNetPlay.mN2.mPlayersCount = 2; // > 1: the game calls SendToAll every frame
 }
@@ -120,6 +122,8 @@ void net::engine::StopNetworkGame()
     gLeftForMenu = false;
     gActive = false;
     gPortWorldStill = NULL;
+    gPortTagTimeCounts = false;
+    gPortScoreBonusHook = NULL;
     gNetPlay.mPlayerIdx = 0;
     gNetPlay.mN2.mPlayersCount = 0;
     // Off, not as before: a network game cleared them at its start (ClearDebugFlags)
@@ -128,8 +132,15 @@ void net::engine::StopNetworkGame()
     bSkip_mission = false;
     bSkip_police = false;
     bSkip_ambulance = false;
+    bSkip_fire_engines = false;
+    bSkip_buses = false;
+    gPortNoFireEngines = false;
     gPortKeepWantedPoints = false;
     gPortServerKillNotices = false;
+    gPortServerKillAwards = false;
+    gPortProtectsPlayers = false;
+    gPortCarMayExplode = NULL;
+    gPortScriptCommandRuns = NULL;
     ClearRandOwners();
     ResetForNewGame();
     gGeneration++;

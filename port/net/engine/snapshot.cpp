@@ -248,6 +248,10 @@ void net::engine::Capture(Snapshot& out)
         if (c->mCarSprite)
         {
             CaptureCar(c, out);
+            if (Car* trailer = TowedTrailer(c)) // off the pool's list while towed (Car::AttachTrailer)
+            {
+                CaptureCar(trailer, out);
+            }
             if (c->mDriver && !IsSpareDriver(c->mDriver))
             {
                 driving[c->mDriver] = c;
@@ -280,7 +284,9 @@ void net::engine::Apply(const Snapshot& snap)
     {
         ApplyWorld(*w);
     }
+    const s16 zoneTurn = ZoneTurn(); // the server's: a player put in the game here takes a restart zone in its turn
     ApplySlots(snap);
+    ZoneTurn() = zoneTurn;
     for (const EntityState& e : snap.entities)
     {
         if (e.type == kEntityPlayer)

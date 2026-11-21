@@ -639,6 +639,15 @@ EXPORT s32 ReadScreenSettings()
         window_height = gRegistry.Get_Screen_Setting("window_height", 480);
         sFullWidth = gRegistry.Get_Screen_Setting("full_width", 640);
         sFullHeight = gRegistry.Get_Screen_Setting("full_height", 480);
+#if defined(GTA2_PORT)
+        // Port: a network game's view is 16:9 at most for every player, the server spawning out of it: a wider
+        // screen shows bars at its sides (the renderer keeps the frame's aspect), not more of the map
+        if (bStartNetworkGame)
+        {
+            window_width = window_width * 9 > window_height * 16 ? (window_height * 16 / 9) & ~1 : window_width;
+            sFullWidth = sFullWidth * 9 > sFullHeight * 16 ? (sFullHeight * 16 / 9) & ~1 : sFullWidth;
+        }
+#endif
     }
 
     sStartMode = gRegistry.Get_Screen_Setting("start_mode", 1);

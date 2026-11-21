@@ -230,8 +230,7 @@ bool net::engine::ApplyTrain(const EntityState& e, std::vector<std::pair<uint32_
         const bool there = e.f[kTrainDamage0 + k] >= 32000;
         if (there && !IsWrecked(c))
         {
-            c->HandleCarExplosion(explosion_type::item_19);
-            gExplosionsCarried++;
+            ExplodeAsServer(c);
         }
         else if (!there && !IsWrecked(c))
         {

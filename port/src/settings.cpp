@@ -1357,6 +1357,10 @@ void Change(Id id, s32 delta)
 
 Fix16 PortCameraZoom(Fix16 zoom)
 {
+    if (bStartNetworkGame)
+    {
+        return zoom; // one view for every player (and for the server's spawning, port/docs/netcode.md)
+    }
     PortSettings::Zoom();
     return zoom * PortSettings::sZoomFactor;
 }

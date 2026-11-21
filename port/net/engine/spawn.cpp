@@ -36,6 +36,22 @@ void LeadCameras()
 {
     for (int i = 0; i < MAX_PLAYERS; i++)
     {
+        // Every player's view is the network game's (16:9 at the game's zoom, ReadScreenSettings, PortCameraZoom): the
+        // cameras here have the server's window size (slot 0) or 640x480 (the others)
+        if (Player* p = net::engine::GetPlayer(i))
+        {
+            Camera* views[3] = {&p->mGameCamera, &p->mAuxGameCamera, &p->mViewCamera};
+            for (Camera* c : views)
+            {
+                if (c->mScreenPxWidth != 1920 || c->mScreenPxHeight != 1080)
+                {
+                    c->SetScreenSize(1920, 1080);
+                }
+            }
+        }
+    }
+    for (int i = 0; i < MAX_PLAYERS; i++)
+    {
         Player* p = gSpawnLead[i] ? net::engine::GetPlayer(i) : NULL;
         if (!p || !p->mInUse)
         {

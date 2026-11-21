@@ -2215,7 +2215,12 @@ void PoliceRoadblock::Update()
                 {
                     return;
                 }
+#if defined(GTA2_PORT)
+                // Port: no player near it, in a network game every player (a server's mLocalPlayer is its first slot)
+                Ped* pPlayerPed = gGame_0x40->PortNearestPlayerPed(Fix16(mX), Fix16(mY), false);
+#else
                 Ped* pPlayerPed = gGame_0x40->mLocalPlayer->mPlayerPed;
+#endif
                 if (Fix16::MaxAbsDistance(pPlayerPed->get_cam_x(),
                                           pPlayerPed->get_cam_y(),
                                           Fix16(mX),

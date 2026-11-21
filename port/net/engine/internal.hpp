@@ -39,7 +39,7 @@ enum PlayerField
     kPlayerPoints,
     kPlayerAmmo0, // each weapon's ammo
     kPlayerCar = kPlayerAmmo0 + kPlayerWeapons, // the car it drives (CarRef)
-    kPlayerState, // kPlayerTransition | kPlayerDead | kPlayerLeaving
+    kPlayerState, // kPlayerTransition | kPlayerDead | kPlayerLeaving | kPlayerOnFire
     kPlayerTarget, // the car it is going to get into (Ped::mTargetObjectiveCar, CarRef)
     kPlayerName, // its name (Player::mPlayerName), 4 characters a field
     kPlayerNameEnd = kPlayerName + 4,
@@ -52,12 +52,14 @@ enum PlayerField
     kPlayerMoney, // the money on the HUD (Player::mScores; in a points game the score players see)
     kPlayerMultiplier, // and its multiplier (Player::mMultipliers)
     kPlayerDeathEvents, // how often it died this game (wraps at 256): what a client carries out (kPlayerDeaths: the round's)
+    kPlayerBonus, // its scoring bonuses this game (wraps at 256) << 4 | the last one's voice line (ScoreBonus)
 };
 enum PlayerState
 {
     kPlayerTransition = 1, // getting into or out of a car (InCarTransition)
     kPlayerDead = 2,
     kPlayerLeaving = 4, // getting out of one (LeavingCar)
+    kPlayerOnFire = 8, // burning (Ped::mBf21C.bOnFire)
 };
 enum WorldField
 {
@@ -88,6 +90,20 @@ enum WorldField
     kWorldAmbient = kWorldMapChoice + kRoundSlots,
     kWorldTargetAmbient,
     kWorldAmbientStep,
+    // The police (Police: its service runs on the server only), what a client's cops, cop cars and HUD read: the highest
+    // wanted level, the strongest crew in a pursuit, a crew ped on screen, the last cop whose shot hit (a ped's net id)
+    kWorldPoliceLevel,
+    kWorldPoliceCrewType,
+    kWorldPoliceCrewOnscreen,
+    kWorldPoliceFiring,
+    // and each pursuit (Police::mPursuitTargets, four): its criminal (net id), level, state, timer, crews
+    // and whether it is chased
+    kWorldPursuitCriminal,
+    kWorldPursuitLevel = kWorldPursuitCriminal + 4,
+    kWorldPursuitState = kWorldPursuitLevel + 4,
+    kWorldPursuitTimer = kWorldPursuitState + 4,
+    kWorldPursuitCrews = kWorldPursuitTimer + 4,
+    kWorldPursuitChased = kWorldPursuitCrews + 4,
 };
 enum CarField
 {
@@ -105,6 +121,9 @@ enum CarField
     kCarHorn,
     kCarHornCooldown,
     kCarRemap, // its colour (the sprite's remap): a respray, or a car made here, had another
+    kCarTurret, // its roof turret's angle on the car (a tank's cannon, a gun jeep's gun, a fire truck's water cannon)
+    kCarTrailer, // the trailer a cab tows (CarRef; the trailer, off the pool's list then, is sent as a car of its own)
+    kCarFlags, // the behaviour bits of Car::mFlags (kCarFlagsSent: proofs, alarm, no passengers...), the level start's
     kCarPhysics, // then its whole CarPhysics, member by member (cars.cpp; all 0 without physics), then its AI (car_ai.cpp)
 };
 enum CarDriver
@@ -186,6 +205,8 @@ EntityState Entity(uint32_t id, uint8_t type);
 void PutPosition(EntityState& e, const Sprite* s); // fields 0..3
 bool Near(const Sprite* s, int32_t x, int32_t y, int32_t radius); // within <radius> (raw) on both axes
 const EntityState* FindWorld(const Snapshot& snap);
+uint32_t PedNetId(const Ped* p); // a ped as a field (a player's entity or a ped's), 0 none
+Ped* NetIdPed(uint32_t id); // and back to this game's ped (NULL: none or not here)
 // The area a snapshot covered around the local player, less a margin (blocks): what the snapshot lacks is gone only
 // inside it (beyond, a busy area's snapshot was cut for size). Without a local player, nothing is inside or beyond
 class ReachArea
@@ -225,9 +246,12 @@ void ApplyWorld(const EntityState& w);
 void ApplySlots(const Snapshot& snap); // the slots in the game: the snapshot's
 void ApplyPlayer(const EntityState& e);
 void KillCredited(Ped* ped, int killerSlot); // the game's own death, credited to a player (-1: nobody)
+void KillNow(Ped* ped);
+void ApplyFire(Ped* p, bool onFire); // on fire or not as the server has it, the game's own way // the game's own death (Ped::Kill), dead at once even when knocked down
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there
 void ResetDeaths(int slot); // the round's death count the snapshots carry (a new round)
-void ResetDeathEvents(); // and the game's, which a client carries out (a new game)
+void ResetDeathEvents(); // and the game's, which a client carries out (a new game), and the scoring bonuses
+bool ScoreBonus(Player* p, s32 voice); // gPortScoreBonusHook: a server counts it for the player, nobody shows it there
 void ResetHudScores(Player* p); // the HUD's money, frags and multiplier as at a game's start (slots.cpp)
 
 // A client's game (client_mode.cpp)
@@ -238,13 +262,25 @@ void SeenByAll(); // every ped and car counts as seen: no removal off screen on 
 void CarPhysicsFields(std::vector<FieldDesc>& out);
 void CaptureCar(Car* c, Snapshot& out);
 bool CarHasPhysics(const EntityState& e); // a car entity's physics is there (awake): not all zeros
+Car* TowedTrailer(const Car* cab); // the trailer a cab tows (Car::mpTrailer), NULL: none
+void ApplyTrailer(Car* cab, const EntityState& e); // hitched or not as the server has it
 void SetCarPhysics(Car* car, const EntityState& e); // the physics the snapshot has for it, after MoveCar
 // Whether it has exploded (or is burning out); its state as the server has it: an explosion the server had is carried
 // out (the game's own), damage, dents, lights, horn and colour are set. False: it is a wreck here and not there (it has
 // to be made again)
 bool IsWrecked(const Car* car);
-bool SetCarState(Car* car, const EntityState& e);
-extern int gExplosionsCarried, gWrecksReplaced; // for the log
+// fresh: made or adopted for this entity in this apply, so a wreck there is made one here without blowing up
+bool SetCarState(Car* car, const EntityState& e, bool fresh = false);
+void ExplodeAsServer(Car* car); // a car blown up as the server's was (gPortCarMayExplode lets it)
+extern int gExplosionsCarried, gWrecksReplaced, gWrecksMade; // for the log
+// For the log: how each car's state here compared with the snapshot's, before it was applied
+struct CarStateDiffs
+{
+    int cars, damage, fireAbove, fireBelow, wreckHereOnly, wreckThereOnly;
+};
+extern CarStateDiffs gCarStateDiffs;
+int FireLevel(int32_t damage); // Car::mDamageLevel for that damage
+bool ClientCarMayExplode(Car* car); // gPortCarMayExplode on a client
 void CarAiFields(std::vector<FieldDesc>& out); // after the physics
 void CaptureCarAi(const Car* car, EntityState& e);
 void ApplyCarAi(Car* car, const EntityState& e);

@@ -4,6 +4,8 @@
 #pragma once
 #include "types.hpp"
 
+class Car;
+class Player;
 class Sprite;
 struct Frontend;
 
@@ -40,6 +42,12 @@ extern void (*gPortAfterPlayersHook)();
 // Asked in Game::UpdateGame after the players' tick: true, and nothing else runs this tick but the HUD (a network
 // game's results: the world stands still, the chat goes on)
 extern bool (*gPortWorldStill)();
+// Asked as a car would blow up (Car::HandleCarExplosion): false, and it doesn't. NULL but on a network client, whose cars
+// the server sends blow up when the server's do (a prediction can't be taken back)
+extern bool (*gPortCarMayExplode)(Car* pCar);
+// Asked for each command a script thread runs (ScriptThread::PreExecOpCode): false, and it is stepped over. NULL but on a
+// network client, which runs its map script's level start for what only shows or sounds here (the server runs the rest)
+extern bool (*gPortScriptCommandRuns)(u16 type);
 // The frontend's network page (port/net/menu.cpp): set up after the game's own (SetupMenuStringsOptionsElements),
 // and its input taken first (UpdatePageFromUserInput: true, the game's handling is skipped)
 extern void (*gPortFrontendSetup)(Frontend* pFrontend);
@@ -57,6 +65,26 @@ extern bool gPortKeepWantedPoints;
 // A network client's: the HUD's kill notices (Hud_MpMessage::AnnounceKill) are the server's deaths only, not the ones
 // its prediction starts and a restore undoes
 extern bool gPortServerKillNotices;
+// A network client's: a kill's points and bonuses (PlayerScoreTracker::AwardPedKilledScore, with the multi-kill messages
+// and voices) are the server's, whose scores come with its snapshots, not its prediction's
+extern bool gPortServerKillAwards;
+// A network game's: the tag game counts the fugitive's seconds (TagGame::ExecuteGamemodeTick) though the game has no
+// time limit (the netcode ends the rounds), whose flag the original counts by
+extern bool gPortTagTimeCounts;
+// A network client's: its players are kept at mInvulnerability 2 so that only the server takes their health
+// (ProtectPlayers); how a ped reacts to a car, a blast or fire goes by the invulnerability the server gives
+extern bool gPortProtectsPlayers;
+inline bool PortReactsInvulnerable(s32 invulnerability, bool player)
+{
+    return gPortProtectsPlayers && player ? invulnerability > 2 : invulnerability > 0;
+}
+// A scoring bonus (PlayerScoreTracker: a kill streak, a stunt...) with its voice line (voice_line.hpp): true, and this
+// machine shows its message and plays the voice. NULL: the user's player's, as the original; in a network game the
+// server sends each player its own and a client shows only those
+extern bool (*gPortScoreBonusHook)(Player* pPlayer, s32 voice);
+// A network client's: it dispatches no fire engines (bSkip_fire_engines), yet a car turned to a wreck burns as one does
+// when a fire engine is sent to it (Car::SpawnFire)
+extern bool gPortNoFireEngines;
 // A network client's "Leave the game? Y / N" is up: a gamepad's A and B answer it as they do the game's quit message
 // (port_QuitMessageShown, compat/src/pad.cpp)
 extern bool gPortLeavePromptShown;

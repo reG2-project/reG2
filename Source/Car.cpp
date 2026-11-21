@@ -3040,7 +3040,12 @@ s32 __stdcall Car::GetFireExplosionType(u8 fire_level)
 MATCH_FUNC(0x43bbc0)
 void Car::SpawnFire()
 {
+#if defined(GTA2_PORT)
+    // Port: a network client sends no fire engine (the server's come in its snapshots), and its wrecks burn all the same
+    if (gPortNoFireEngines || gFirefighterPool_54->TryDispatchFirefightersToCar(this))
+#else
     if (gFirefighterPool_54->TryDispatchFirefightersToCar(this))
+#endif
     {
         Object* pExplosion =
             gObject_5C->CreateExplosion(mCarSprite->mXy.x, mCarSprite->mXy.y, 4, kAngZero_67791C, explosion_type::car_fire_4, mExploderPedId);
@@ -3567,6 +3572,13 @@ void Car::TriggerExplosion(s32 type)
 MATCH_FUNC(0x43d840)
 void Car::HandleCarExplosion(s32 type)
 {
+#if defined(GTA2_PORT)
+    // Port: a network client's car blows up as the server's does, not when its own prediction says so
+    if (gPortCarMayExplode && !gPortCarMayExplode(this))
+    {
+        return;
+    }
+#endif
     bool bOcc2 = false;
     if (mpChaseTask)
     {
@@ -7337,6 +7349,14 @@ bool TrafficSpawner::SpawnTrafficCar(s32 spawn_type, s32 arrow_direction, s32 bl
                     {
                         return false;
                     }
+#if defined(GTA2_PORT)
+                    // Port: not where another player sees it. The original spawns 5 blocks beyond this camera's edge,
+                    // which can be inside a nearby player's view (its lockstep network game did the same)
+                    if (gGame_0x40->IsRectVisibleToAnyPlayer(mRect))
+                    {
+                        return false;
+                    }
+#endif
 
                     s32 car_model;
                     u16 traffic_category;

@@ -1037,7 +1037,12 @@ void Ped::ManageBurning()
 {
     if (mBf21C.bOnFire)
     {
+#if defined(GTA2_PORT)
+        // Port: a network client's players burn as on the server; their health is the server's.
+        if (PortReactsInvulnerable(mInvulnerability, mPlayer != NULL))
+#else
         if (mInvulnerability > 0)
+#endif
         {
             PutOutFire();
         }
@@ -8832,7 +8837,12 @@ void Ped::FireAtPlayer()
         return;
     }
 
+#if defined(GTA2_PORT)
+    // Port: the tank aims at the nearest wanted player, in a network game not always the server's first slot
+    Ped* pPlayerPed = gGame_0x40->PortNearestPlayerPed(mCar->GetX(), mCar->GetY(), true);
+#else
     Ped* pPlayerPed = gGame_0x40->mLocalPlayer->mPlayerPed;
+#endif
     if (!pPlayerPed->IsInvisibleOnFoot_433DA0())
     {
         Sprite* pCannonSprite = mCar->mAttachments.GetSpriteForModel(objects::tank_cannon_148)->mpSprite;
@@ -11519,7 +11529,14 @@ void Ped::UpdateStatsForKiller()
                     pGroup = this->mPedKiller->mPedGroup;
                     if (pGroup)
                     {
+#if defined(GTA2_PORT)
+                        // Port: in a network game the group's own player (its leader), not the server's first slot
+                        Ped* pLocalPed = !bStartNetworkGame ? gGame_0x40->mLocalPlayer->mPlayerPed
+                                         : pGroup->mPedLeader && pGroup->mPedLeader->mPlayer ? pGroup->mPedLeader
+                                                                                             : NULL;
+#else
                         Ped* pLocalPed = gGame_0x40->mLocalPlayer->mPlayerPed;
+#endif
                         if (pLocalPed)
                         {
                             if (pGroup == pLocalPed->mPedGroup)

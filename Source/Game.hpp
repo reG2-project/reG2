@@ -96,6 +96,11 @@ class Game
     EXPORT bool IsSpriteInAnyPlayerView(Sprite* pSprite, s32 wide_view) const;
     EXPORT bool IsSpriteInPlayerView(Sprite* pSprite, u8 player_idx, s32 wide_view) const;
     EXPORT bool IsSpriteInPlayerBounds(Sprite* pSprite, u8 player_idx, Fix16 margin) const;
+#if defined(GTA2_PORT)
+    // Port: the player ped nearest to (x, y), a wanted one before any other if asked; mLocalPlayer's alone outside a
+    // network game, every player's in one (a server's mLocalPlayer is just its first slot)
+    class Ped* PortNearestPlayerPed(Fix16 x, Fix16 y, bool bWantedFirst) const;
+#endif
     EXPORT bool IsSpriteCameraSubjectForPlayer(Sprite* pSprite, u8 player_idx) const;
     EXPORT bool IsPointOnScreen(Fix16 x, Fix16 y);
     EXPORT bool IsRectVisibleToAnyPlayer(Fix16_Rect* pBounds);

@@ -56,8 +56,9 @@ const int kType = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, m
 const int kOccupation = net::engine::MemberIndex(kValues, kValueCount, offsetof(Ped, mOccupation));
 
 // The flags that are the ped's own behaviour; the others say where it is in this game's structures (active, scheduled for
-// removal, in the pathfinder's list, on fire with a flame object of this game's)
-const u32 kFlagsSent = ~((1u << 0) | (1u << 10) | (1u << 14) | (1u << 24));
+// removal, in the pathfinder's list, on fire with a flame object of this game's: sent, and applied as the game sets it)
+const u32 kOnFire = 1u << 24;
+const u32 kFlagsSent = ~((1u << 0) | (1u << 10) | (1u << 14) | kOnFire);
 
 // Its states (Ped::mPedState1 ..): set only when both sides have it on foot and alive; in, into and out of cars and
 // deaths go their own ways (replica.cpp, below)
@@ -210,12 +211,17 @@ void net::engine::PedStateRefFields(std::vector<int>* peds, std::vector<int>* ca
     }
 }
 
+uint32_t net::engine::PedNetId(const Ped* p)
+{
+    return PedId(p);
+}
+
 void net::engine::CapturePedState(const Ped* p, EntityState& e)
 {
     CaptureMembers(p, kValues, kValueCount, e, kFirst);
     u32 flags;
     memcpy(&flags, &p->mBf21C, sizeof(flags));
-    e.f[kFlags] = (int32_t)(flags & kFlagsSent);
+    e.f[kFlags] = (int32_t)(flags & (kFlagsSent | kOnFire));
     e.f[kHealth] = p->mHealth;
     e.f[kStates + kState1] = p->mPedState1;
     e.f[kStates + kState2] = p->mPedState2;
@@ -465,7 +471,7 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
         {
             ForceOutOfCar(p, Raw(e.f[kPedX]), Raw(e.f[kPedY]), Raw(e.f[kPedZ]), Angle(e.f[kPedRot]));
         }
-        p->Kill(); // the server's death, the game's own way (as a player's, snapshot.cpp)
+        KillNow(p); // the server's death, the game's own way (as a player's, snapshot.cpp)
         return true;
     }
     if (deadHere && !deadThere)
@@ -477,6 +483,7 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
         return true; // a corpse on both sides
     }
     ApplyWeapons(p, e);
+    ApplyFire(p, (e.f[kFlags] & kOnFire) != 0);
 
     // Sitting in the same car on both sides (a driver), its AI goes too, but not its states (in and out of cars are
     // replica.cpp's): a chasing driver followed its own objectives here
@@ -497,24 +504,32 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
         // server's, the char's walk to a door read a car the client had no part in (Char::UpdateImmobilized)
         return true;
     }
-    // The references first: one this game doesn't have (out of its area) keeps the ped as it is here for this snapshot,
-    // whole. Its AI runs by its occupation as much as by its objective (a robbed driver reads its car thief:
-    // Ped::RobbedDriver_AI), so a part of the server's state with a target missing isn't safe
+    // The references first: one its objective acts on that this game doesn't have (out of its area) keeps the ped as it
+    // is here for this snapshot, whole. Its AI runs by its occupation as much as by its objective (a robbed driver reads
+    // its car thief: Ped::RobbedDriver_AI), so a part of the server's state with a target missing isn't safe. The others
+    // (who attacked, punched, was hit or killed it, the car it stole) the game rarely clears and often name what is gone
+    // or far: one this game doesn't have stays as it is here, the rest of the state goes
+    static const bool kPedRefBlocks[kPedRefCount] = {false, true, true, true, false, false, false};
+    static const bool kCarRefBlocks[kCarRefCount] = {false, true, true, true};
     bool ok;
     Ped* pedRefs[kPedRefCount];
+    bool pedKept[kPedRefCount];
     for (int i = 0; i < kPedRefCount; i++)
     {
         pedRefs[i] = LocalPed((uint32_t)e.f[kPedRefs + i], &ok);
-        if (!ok)
+        pedKept[i] = !ok;
+        if (!ok && kPedRefBlocks[i])
         {
             return true;
         }
     }
     Car* carRefs[kCarRefCount];
+    bool carKept[kCarRefCount];
     for (int i = 0; i < kCarRefCount; i++)
     {
         carRefs[i] = LocalCar((uint32_t)e.f[kCarRefs + i], &ok);
-        if (!ok)
+        carKept[i] = !ok;
+        if (!ok && kCarRefBlocks[i])
         {
             return true;
         }
@@ -545,7 +560,10 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
                                       &p->mPedKiller};
     for (int i = 0; i < kPedRefCount; i++)
     {
-        *pedMembers[i] = pedRefs[i];
+        if (!pedKept[i])
+        {
+            *pedMembers[i] = pedRefs[i];
+        }
     }
     Car** carMembers[kCarRefCount] = {&p->mStolenCar, &p->mTargetObjectiveCar, &p->mTargetToEnter,
                                       &p->mEscapeCar};
@@ -555,7 +573,10 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
         {
             continue; // in a car: what it got into is its car, and leaving it reads this (Ped::ExitCarStateMachine)
         }
-        *carMembers[i] = carRefs[i];
+        if (!carKept[i])
+        {
+            *carMembers[i] = carRefs[i];
+        }
     }
     p->mpGang = GangAt(e.f[kGangs]);
     p->mDummyGang = GangAt(e.f[kGangs + 1]);
@@ -571,4 +592,24 @@ void net::engine::SetPedKind(Ped* p, const EntityState& e)
 bool net::engine::PassengerThere(const EntityState& e)
 {
     return e.f[kPedCar] && e.f[kFirst + kPassenger];
+}
+
+Ped* net::engine::NetIdPed(uint32_t id)
+{
+    bool resolved;
+    return LocalPed(id, &resolved);
+}
+
+// On fire as the server has it, the game's own way (flames on its char, a scream): on foot only, burning in a car blows
+// the car up (Ped::ManageBurning)
+void net::engine::ApplyFire(Ped* p, bool onFire)
+{
+    if (onFire && !p->mBf21C.bOnFire && p->mGameObject && !p->mCar)
+    {
+        p->SetOnFire();
+    }
+    else if (!onFire && p->mBf21C.bOnFire)
+    {
+        p->PutOutFire();
+    }
 }

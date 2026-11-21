@@ -27,6 +27,13 @@
 #include "root_sound.hpp"
 #include "TextTable.hpp"
 #include "Ped.inl"
+#if defined(GTA2_PORT)
+#include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
+// Port: a bonus's message and voice go through the network game's hook (a client shows the server's).
+#define BONUS_SHOWN(voice) (gPortScoreBonusHook ? gPortScoreBonusHook(mPlayer, voice) : mPlayer->IsUser())
+#else
+#define BONUS_SHOWN(voice) mPlayer->IsUser()
+#endif
 #include <string.h>
 
 EXTERN_GLOBAL(s32, bStartNetworkGame);
@@ -99,7 +106,7 @@ void PlayerScoreTracker::Service()
         mExecutionCount = 0;
         mPlayer->AddScore(100000);
 
-        if (mPlayer->IsUser())
+        if (BONUS_SHOWN(voice_line::expiditious_4))
         {
             gHud_2B00->mMessage.ShowMessage(gText_0x14->Find("excutin"), hud_message_priority::normal_1);
             gRoot_sound.PlayVoice(voice_line::expiditious_4);
@@ -110,7 +117,7 @@ void PlayerScoreTracker::Service()
     {
         mNumElvisKilled = 0;
         mPlayer->AddScore(30000);
-        if (mPlayer->IsUser())
+        if (BONUS_SHOWN(voice_line::elvis_8))
         {
             gHud_2B00->mMessage.ShowMessage(gText_0x14->Find("elvis_d"), hud_message_priority::normal_1);
             gRoot_sound.PlayVoice(voice_line::elvis_8);
@@ -121,7 +128,7 @@ void PlayerScoreTracker::Service()
     {
         mKilledCarsFlags = emergency_car_kill_flag::none_0;
         mPlayer->AddScore(10000);
-        if (mPlayer->IsUser())
+        if (BONUS_SHOWN(voice_line::medicalemer_11))
         {
             gHud_2B00->mMessage.ShowMessage(gText_0x14->Find("em_dest"), hud_message_priority::normal_1);
             gRoot_sound.PlayVoice(voice_line::medicalemer_11);
@@ -132,7 +139,7 @@ void PlayerScoreTracker::Service()
     {
         mTotalKills = 0;
         mPlayer->AddScore(30000);
-        if (mPlayer->IsUser())
+        if (BONUS_SHOWN(voice_line::genocide_5))
         {
             gHud_2B00->mMessage.ShowMessage(gText_0x14->Find("gencide"), hud_message_priority::normal_1);
             gRoot_sound.PlayVoice(voice_line::genocide_5);
@@ -143,7 +150,7 @@ void PlayerScoreTracker::Service()
     {
         mCopCarsDestroyed = 0;
         mPlayer->AddScore(5000);
-        if (mPlayer->IsUser())
+        if (BONUS_SHOWN(voice_line::copkilla_6))
         {
             gHud_2B00->mMessage.ShowMessage(gText_0x14->Find("copkill"), hud_message_priority::normal_1);
             gRoot_sound.PlayVoice(voice_line::copkilla_6);
@@ -154,7 +161,7 @@ void PlayerScoreTracker::Service()
     {
         mCarsStolenCount = 0;
         mPlayer->AddScore(10000);
-        if (mPlayer->IsUser())
+        if (BONUS_SHOWN(voice_line::carjacker_7))
         {
             gHud_2B00->mMessage.ShowMessage(gText_0x14->Find("carjaka"), hud_message_priority::normal_1);
             gRoot_sound.PlayVoice(voice_line::carjacker_7);
@@ -165,7 +172,7 @@ void PlayerScoreTracker::Service()
     {
         mAccuracyCount = 0;
         mPlayer->AddScore(5000);
-        if (mPlayer->IsUser())
+        if (BONUS_SHOWN(voice_line::accuracyb_9))
         {
             gHud_2B00->mMessage.ShowMessage(gText_0x14->Find("accurcy"), hud_message_priority::normal_1);
             gRoot_sound.PlayVoice(voice_line::accuracyb_9);
@@ -191,7 +198,7 @@ void PlayerScoreTracker::Service()
     {
         mReverseTimeMs = 0;
         mPlayer->AddScore(1000);
-        if (mPlayer->IsUser())
+        if (BONUS_SHOWN(voice_line::back2front_10))
         {
             gHud_2B00->mMessage.ShowMessage(gText_0x14->Find("wrngway"), hud_message_priority::normal_1);
             gRoot_sound.PlayVoice(voice_line::back2front_10);
@@ -214,7 +221,7 @@ void PlayerScoreTracker::Service()
     {
         mPlayer->AddScore(1000);
         mFlyCarTimeMs = 2250;
-        if (mPlayer->IsUser())
+        if (BONUS_SHOWN(voice_line::insanestunt_1))
         {
             gHud_2B00->mMessage.ShowMessage(gText_0x14->Find("fly_car"), hud_message_priority::normal_1);
             gRoot_sound.PlayVoice(voice_line::insanestunt_1);
@@ -355,7 +362,7 @@ void PlayerScoreTracker::CheckAllCarModelsFlagged(char_type bits)
         }
 
         mPlayer->AddScore(30000);
-        if (mPlayer->IsUser())
+        if (BONUS_SHOWN(voice_line::gta_2))
         {
             gHud_2B00->mMessage.ShowMessage(gText_0x14->Find("stl_all"), hud_message_priority::normal_1);
             gRoot_sound.PlayVoice(voice_line::gta_2);
@@ -373,7 +380,7 @@ void PlayerScoreTracker::CheckAllCarModelsFlagged(char_type bits)
         }
 
         mPlayer->AddScore(50000);
-        if (mPlayer->IsUser())
+        if (BONUS_SHOWN(voice_line::wipeout_3))
         {
             gHud_2B00->mMessage.ShowMessage(gText_0x14->Find("dst_all"), hud_message_priority::normal_1);
             gRoot_sound.PlayVoice(voice_line::wipeout_3);
@@ -423,6 +430,13 @@ void PlayerScoreTracker::AddCash(s32 cash)
 MATCH_FUNC(0x592660)
 void PlayerScoreTracker::AwardPedKilledScore(Ped* pVictim, Ped* pKiller)
 {
+#if defined(GTA2_PORT)
+    // Port: a network client's kills score nothing; the server's scores come with its snapshots.
+    if (gPortServerKillAwards)
+    {
+        return;
+    }
+#endif
     const s32 multiplier = mPlayer->get_multiplier();
     gmp_map_zone* pZone = gMap_0x370->GetFirstZoneAtPos(pKiller->get_cam_x().ToInt(), pKiller->get_cam_y().ToInt());
 

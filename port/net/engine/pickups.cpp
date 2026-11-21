@@ -1,5 +1,5 @@
-// port/net (port/docs/netcode.md, "Entities"): the server's pickups (weapons, power-ups, tokens: Object::IsPickup) and
-// roadblock barriers on the clients. Other objects aren't sent: a client makes its own fires, explosions and projectiles. A client adopts a
+// port/net (port/docs/netcode.md, "Entities"): the server's pickups (weapons, power-ups, tokens: Object::IsPickup),
+// roadblock barriers, mines and oil on the clients. Other objects aren't sent: a client makes its own fires, explosions and projectiles. A client adopts a
 // pickup of its own at the same place (the map script made it on both sides), makes the ones it lacks
 // (Object_5C::NewPhysicsObj, as the game drops one) and removes those the server no longer has (collected, or
 // its own: one it collected in a prediction comes back while the server still has it).
@@ -19,11 +19,13 @@ namespace
 std::unordered_map<uint32_t, Object*> gObjects; // NetId -> this game's pickup
 
 // A pickup, or a police roadblock's barrier: the police are the server's (Police_38's roadblocks make them), so a
-// client has none of its own
+// client has none of its own. And the car weapons' mines and oil, which lie for good: a client that came later, or that
+// a car's drop reached only now, had none of the server's, and one it predicted the server never had stayed
 bool Usable(const Object* o)
 {
     return o && o->mSprite && o->mDefinition && !o->mRemovalState &&
-           (const_cast<Object*>(o)->IsPickup() || o->mModel == objects::roadblock_21);
+           (const_cast<Object*>(o)->IsPickup() || o->mModel == objects::roadblock_21 || o->mModel == objects::mine_10 ||
+            o->mModel == objects::animating_oil_8 || o->mModel == objects::oil_9);
 }
 
 // Every live object, whether on the pool's list or not: a barrier is made off it (Object_5C::CreateObject, a

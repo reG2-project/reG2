@@ -60,6 +60,7 @@
 #include "../port/src/autosave.hpp"
 #include "../port/src/retry.hpp"
 #include "../port/src/saves.hpp"
+#include "../port/src/net_hooks.hpp" // a network client's level start (gPortScriptCommandRuns)
 #endif
 // Back to force inline
 #define INLINE_MODE __forceinline
@@ -6909,6 +6910,14 @@ void ScriptThread::PreExecOpCode()
     {
         SCR_CMD_HEADER* pCmd = gScriptManager->GetBasePointer(mNextCmd);
         gBasePtr = static_cast<SCR_POINTER*>(pCmd);
+#if defined(GTA2_PORT)
+        // Port: a network client steps over what the server's script makes or changes for everyone (port/net)
+        if (gPortScriptCommandRuns && !gPortScriptCommandRuns(pCmd->mType))
+        {
+            ScriptThread::Next(gBasePtr);
+            return;
+        }
+#endif
         switch (pCmd->mType)
         {
             case SCRCMD_LEVELSTART:

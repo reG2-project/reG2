@@ -15,6 +15,8 @@
 #include "Source/sprite.hpp"
 #include "Source/debug.hpp"
 #include "Source/Police.hpp"
+#include "Source/ScriptManager.hpp"
+#include "Source/ScriptThread.hpp"
 #include "Source/Hud.hpp"
 #include "Source/GameSession.hpp"
 #include "port/src/net_hooks.hpp"
@@ -42,6 +44,42 @@ void net::engine::ProtectPlayers()
     }
 }
 
+namespace
+{
+// The map script's commands a client runs itself: the control of its level start, and what only shows or sounds here.
+// The rest makes or changes what the snapshots carry (cars, their weapons and flags, generators, cranes)
+bool ClientScriptCommandRuns(u16 type)
+{
+    switch (type)
+    {
+        case SCRCMD_LEVELSTART:
+        case SCRCMD_LEVELEND:
+        case SCRCMD_START_EXEC:
+        case SCRCMD_STOP_EXEC:
+        case SCRCMD_SET_SHADING_LEV:
+        case SCRCMD_SET_AMBIENT:
+        case SCRCMD_CREATE_SOUND:
+        case SCRCMD_PUT_CAR_ON_TRAILER: // the level start's cars on car transporters, declared on both sides
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool LevelStartRunning()
+{
+    for (ScriptThread* t = miss2_0x11C_Pool ? miss2_0x11C_Pool->mPool.mpPrev : NULL; t; t = t->mpNext)
+    {
+        const SCR_CMD_HEADER* next = gScriptManager->GetBasePointer(t->mNextCmd);
+        if (t->mInLevelStart || (next && next->mType == SCRCMD_LEVELSTART && t->mStopped != 1))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+} // namespace
+
 void net::engine::ClientModeFrame()
 {
     ProtectPlayers();
@@ -49,13 +87,21 @@ void net::engine::ClientModeFrame()
     KeepPlayerArrows(); // in the tick: its saves have it, so a rollback doesn't take it back
     bSkip_recycling = true; // no traffic generation, no car despawning (TrafficSpawner::GenerateTraffic)
     bSkip_dummies = true; // no ambient peds (PedManager::Dummies)
-    bSkip_mission = true; // scripts run on the server only (they set up the level before the first frame)
+    // Scripts run on the server, but for their level start's look and sound here (ClientScriptCommandRuns), until it ends
+    bSkip_mission = !LevelStartRunning();
+    gPortScriptCommandRuns = ClientScriptCommandRuns;
     bSkip_police = true;
+    bSkip_fire_engines = true; // the server's fire trucks arrive as cars; this game's own would never be removed
+    bSkip_buses = true; // the server's bus arrives as a car; this game's own went with the next snapshot
+    gPortNoFireEngines = true;
     // With the police off, every ped tick zeroes the wanted points (Ped::PoolUpdate): no cop heads, and the cops chasing a
     // player gave up between snapshots
     gPortKeepWantedPoints = true; // the server's (players' entities, peds' AI state)
     gPortServerKillNotices = true;
+    gPortServerKillAwards = true;
+    gPortProtectsPlayers = true;
     bSkip_ambulance = true;
+    gPortCarMayExplode = ClientCarMayExplode;
     SeenByAll();
 }
 

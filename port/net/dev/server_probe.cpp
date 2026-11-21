@@ -29,6 +29,8 @@ void net::ServerProbe::Start()
     Parse(Env().testPowerUp, TestEvent::kPowerUp, 3, 0, v); // <tick>:<player>:<power-up> (12: an instant gang)
     Parse(Env().testCar, TestEvent::kCar, 3, 0, v); // <tick>:<player>:<model> beside the player (11: a bus)
     Parse(Env().testTrain, TestEvent::kTrain, 2, 0, v); // <tick>:<player>[:<train>] at the wheel of that train
+    Parse(Env().testStreak, TestEvent::kStreak, 2, 0, v); // <tick>:<player>: a kill streak's bonus (its 20th kill)
+    Parse(Env().testFire, TestEvent::kFire, 2, 0, v); // <tick>:<player>: set on fire
     for (size_t i = 0; i < v.size(); i += 4)
     {
         mEvents.push_back(TestEvent{(TestEvent::Kind)v[i], (uint32_t)v[i + 1], v[i + 2], v[i + 3]});
@@ -73,6 +75,14 @@ void net::ServerProbe::Tests(uint32_t tick, int players)
             case TestEvent::kTrain:
                 printf("net: test train %d for player %d at tick %u\n", e.arg, e.player, tick);
                 engine::DebugTrain(e.player, e.arg);
+                break;
+            case TestEvent::kStreak:
+                printf("net: test kill streak for player %d at tick %u\n", e.player, tick);
+                engine::DebugStreak(e.player);
+                break;
+            case TestEvent::kFire:
+                printf("net: test fire on player %d at tick %u\n", e.player, tick);
+                engine::DebugFire(e.player);
                 break;
         }
     }

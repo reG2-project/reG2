@@ -1,6 +1,6 @@
 // port/net (port/docs/netcode.md, "Entities"): the world entity, one per snapshot: the game's random cycle and seed, the
 // restart zones' turn, the round's state (round_state.hpp), the game's generation, the traffic lights, the tag game's
-// fugitive and the map's light level.
+// fugitive, the map's light level and the police's state.
 #include "internal.hpp"
 #include "port/src/rand/owner.hpp"
 #include "port/src/net_hooks.hpp"
@@ -10,6 +10,7 @@
 #include "Source/Game.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
+#include "Source/Police.hpp"
 #include "Source/SpriteGrid.hpp"
 #include "Source/TrafficLights.hpp"
 #include "Source/char.hpp"
@@ -58,6 +59,23 @@ void net::engine::CaptureWorld(Snapshot& out)
         w.f[kWorldTargetAmbient] = gpMapRenderer->mTargetAmbient.mValue;
         w.f[kWorldAmbientStep] = gpMapRenderer->mAmbientStep.mValue;
     }
+    if (const Police* police = gPolice_7B8)
+    {
+        w.f[kWorldPoliceLevel] = police->mMaxWantedLevel;
+        w.f[kWorldPoliceCrewType] = police->mHighestCrewTypeInPursuit;
+        w.f[kWorldPoliceCrewOnscreen] = police->mCrewPedOnscreen;
+        w.f[kWorldPoliceFiring] = (int32_t)PedNetId(police->mLastFiringEmergencyPed);
+        for (int i = 0; i < MAX_PURSUIT_TARGETS; i++)
+        {
+            const PolicePursuitTarget& t = police->mPursuitTargets[i];
+            w.f[kWorldPursuitCriminal + i] = (int32_t)PedNetId(t.mCriminalPed);
+            w.f[kWorldPursuitLevel + i] = t.mWantedLevel;
+            w.f[kWorldPursuitState + i] = t.mState;
+            w.f[kWorldPursuitTimer + i] = t.mTimer;
+            w.f[kWorldPursuitCrews + i] = t.mNumCrews;
+            w.f[kWorldPursuitChased + i] = t.mIsActivelyChased;
+        }
+    }
     w.f[kWorldIt] = gTagGame.mFugitive ? gTagGame.mFugitive->mPlayerIdx + 1 : 0;
     for (int i = 0; i < MAX_PLAYERS; i++)
     {
@@ -105,6 +123,25 @@ void net::engine::ApplyWorld(const EntityState& w)
         gpMapRenderer->mTargetAmbient.mValue = w.f[kWorldTargetAmbient];
         gpMapRenderer->mAmbientStep.mValue = w.f[kWorldAmbientStep];
     }
+    // The police's state as the server's, for what this game's cops, cop cars and HUD read; its crews stay this
+    // game's (they are serviced in Police::Service, which runs on the server only)
+    if (Police* police = gPolice_7B8)
+    {
+        police->mMaxWantedLevel = w.f[kWorldPoliceLevel];
+        police->mHighestCrewTypeInPursuit = w.f[kWorldPoliceCrewType];
+        police->mCrewPedOnscreen = w.f[kWorldPoliceCrewOnscreen] != 0;
+        police->mLastFiringEmergencyPed = NetIdPed((uint32_t)w.f[kWorldPoliceFiring]);
+        for (int i = 0; i < MAX_PURSUIT_TARGETS; i++)
+        {
+            PolicePursuitTarget& t = police->mPursuitTargets[i];
+            t.mCriminalPed = NetIdPed((uint32_t)w.f[kWorldPursuitCriminal + i]);
+            t.mWantedLevel = w.f[kWorldPursuitLevel + i];
+            t.mState = w.f[kWorldPursuitState + i];
+            t.mTimer = (u16)w.f[kWorldPursuitTimer + i];
+            t.mNumCrews = (u8)w.f[kWorldPursuitCrews + i];
+            t.mIsActivelyChased = w.f[kWorldPursuitChased + i] != 0;
+        }
+    }
     PortRand::SetState((unsigned int)w.f[kWorldRand]);
     PortRand::SetSeed((unsigned int)w.f[kWorldSeed]);
     // The traffic lights as the server's: each game ran its own from its start, so a client's cars waited at a red
@@ -130,4 +167,9 @@ int net::engine::SnapshotGame(const Snapshot& snap)
 {
     const EntityState* w = FindWorld(snap);
     return w ? w->f[kWorldGame] : -1;
+}
+
+int net::engine::TagSeconds(int slot)
+{
+    return slot >= 0 && slot < MAX_PLAYERS ? gTagGame.mItTimeSecs[slot] : 0;
 }
