@@ -974,7 +974,20 @@ void net::Server::Kick(int slot)
 // next starts at once on it
 void net::Server::ChangeToMap(int map)
 {
-    mMap = (size_t)map;
+    // Its files may have changed since the start: one without a restart zone would end the game here and on the clients
+    const size_t n = mConfig.voteMaps.size();
+    size_t pick = (size_t)map;
+    while (!Playable(mConfig.voteMaps[pick].name, mConfig.voteMaps[pick].gmp, "the next playable map instead"))
+    {
+        pick = (pick + 1) % n;
+        if (pick == (size_t)map)
+        {
+            fprintf(stderr, "net: no map here is playable any more: the server ends\n");
+            Shutdown();
+            _Exit(1);
+        }
+    }
+    mMap = pick;
     const MapFiles& m = mConfig.voteMaps[mMap];
     // The slots renumbered from 0 for it (CompactSlots): every player stays, as every map has the server's slots
     std::vector<bool> taken(mSlots.size()), kept(mSlots.size());

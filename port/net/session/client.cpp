@@ -82,6 +82,17 @@ void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
     mProbe.Start();
 }
 
+// A map the game can start: one without a restart zone ends it with a fatal error (a server's checks leave such a map out)
+static bool PlayableMap(const std::string& map, const std::string& gmp, std::string* error)
+{
+    if (net::Playable(map, gmp, NULL))
+    {
+        return true;
+    }
+    *error = "the server's map " + map + " has no restart zone (data/" + gmp + "): not playable";
+    return false;
+}
+
 bool net::Client::StartReplay(const char* path, engine::NetworkGame* pGame, std::string* error)
 {
     Welcome welcome;
@@ -90,7 +101,7 @@ bool net::Client::StartReplay(const char* path, engine::NetworkGame* pGame, std:
     {
         return false;
     }
-    if (!PlainNames(BadMapName(welcome), "the recording", error))
+    if (!PlainNames(BadMapName(welcome), "the recording", error) || !PlayableMap(welcome.map, welcome.gmp, error))
     {
         return false;
     }
@@ -220,7 +231,8 @@ bool net::Client::OnWelcome(const TransportEvent& e, engine::NetworkGame* pGame,
         *error = "a welcome we don't understand";
         return false;
     }
-    if (!PlainNames(BadMapName(welcome), "the server", error) || !HaveMap(welcome.gmp, welcome.sty, welcome.scr, error) || !SameMap(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, error))
+    if (!PlainNames(BadMapName(welcome), "the server", error) || !HaveMap(welcome.gmp, welcome.sty, welcome.scr, error) || !SameMap(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, error) ||
+        !PlayableMap(welcome.map, welcome.gmp, error))
     {
         SendLeave(*error);
         Leave();
@@ -980,7 +992,8 @@ bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, con
     {
         missing = "the server's next game has " + std::to_string(players) + " players, not enough for us (player " + std::to_string(slot) + ")";
     }
-    if (!missing.empty() || !PlainNames(BadMapName(map, gmp, sty, scr), "the server", &missing) || !HaveMap(gmp, sty, scr, &missing) || !SameMap(map, gmp, sty, scr, print, &missing))
+    if (!missing.empty() || !PlainNames(BadMapName(map, gmp, sty, scr), "the server", &missing) || !HaveMap(gmp, sty, scr, &missing) || !SameMap(map, gmp, sty, scr, print, &missing) ||
+        !PlayableMap(map, gmp, &missing))
     {
         printf("net: frame %u, %s\n", mFrame, missing.c_str());
         SendLeave(missing);
