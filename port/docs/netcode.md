@@ -58,6 +58,11 @@ on, else one in the next zone (`core/spawn_spots.cpp`). Both read only the game'
 place them alike; a client's prediction of its own respawn can still pick another block when it sees the others
 elsewhere, and the server's snapshot corrects it.
 
+A map without a restart zone isn't playable (the game ends at its start with "No Restart Zone"): the server leaves
+it out of its rotation and votes with a warning, refuses to start if no map is left, checks a map again before it
+changes to it (the next playable one instead), and a client sent one leaves with the reason (`Playable`,
+`core/map_players.cpp`).
+
 Choosing maps that suit the server's players is the admin's job. The shipped maps have 4 (Residential) to 10 (Tiny Town)
 restart zones; their scripts handle players alike, so extras play as the others. A community map whose script
 handles players one by one (missions, scores kept per player on `p1`..`pN`) leaves the extras out of those.
