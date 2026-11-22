@@ -12,4 +12,7 @@ namespace net
 int ScriptPlayerPeds(const uint8_t* scr, size_t size);
 // <mmpPlayerCount> 0: none in the .mmp
 int MapPlayers(int scriptPlayerPeds, int mmpPlayerCount);
+// The restart zones of a map (data/<name>.gmp, its ZONE chunk), where the game starts and respawns a network game's
+// players: a map without one isn't playable (Player::InitializePlayerState's fatal error). -1: not a map
+int GmpRestartZones(const uint8_t* gmp, size_t size);
 } // namespace net

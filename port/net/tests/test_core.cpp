@@ -536,6 +536,22 @@ void TestMapPlayers()
     CHECK(net::ScriptPlayerPeds(scr.data(), 1000) == -1);
     CHECK(net::MapPlayers(10, 0) == 10 && net::MapPlayers(6, 0) == 6 && net::MapPlayers(6, 4) == 4 && net::MapPlayers(6, 8) == 6);
     CHECK(net::MapPlayers(net::kMaxPlayers + 2, 0) == net::kMaxPlayers && net::MapPlayers(0, 6) == 0);
+    // A map's restart zones: a ZONE chunk after another chunk, with a restart zone, a navigation one and another restart
+    std::vector<uint8_t> gmp = {'G', 'B', 'M', 'P', 0xF4, 0x01, 'U', 'M', 'A', 'P', 3, 0, 0, 0, 1, 2, 3};
+    const uint8_t zones[] = {16, 1, 2, 3, 4, 2, 'r', '1', 1, 5, 5, 1, 1, 0, 16, 9, 9, 2, 2, 3, 'a', 'b', 'c'};
+    const uint8_t header[] = {'Z', 'O', 'N', 'E', sizeof(zones), 0, 0, 0};
+    std::vector<uint8_t> two = gmp;
+    two.insert(two.end(), header, header + sizeof(header));
+    two.insert(two.end(), zones, zones + sizeof(zones));
+    CHECK(net::GmpRestartZones(two.data(), two.size()) == 2);
+    std::vector<uint8_t> none = gmp; // no ZONE chunk, or only other zones: not playable
+    CHECK(net::GmpRestartZones(none.data(), none.size()) == 0);
+    const size_t first = gmp.size() + sizeof(header);
+    two[first] = 0;
+    two[first + 14] = 1;
+    CHECK(net::GmpRestartZones(two.data(), two.size()) == 0);
+    CHECK(net::GmpRestartZones(two.data(), two.size() - 1) == -1); // a chunk past the end
+    CHECK(net::GmpRestartZones(scr.data(), n) == -1 && net::GmpRestartZones(NULL, 0) == -1);
     printf("map players ok\n");
 }
 
