@@ -5,6 +5,7 @@
 #include "../core/map_players.hpp"
 #include "../core/protocol.hpp"
 #include "../core/snapshot.hpp"
+#include "../core/spawn_spots.hpp"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -538,6 +539,76 @@ void TestMapPlayers()
     printf("map players ok\n");
 }
 
+// A test world: ground at level 2 but for the blocks in <holes> (none) and <roofs> (level 5), peds on <taken>
+struct TestWorld : net::SpawnWorld
+{
+    std::vector<std::pair<int, int>> holes, roofs, taken;
+    static bool In(const std::vector<std::pair<int, int>>& v, int x, int y)
+    {
+        for (const auto& b : v)
+        {
+            if (b.first == x && b.second == y)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    bool Ground(int x, int y, int* z) const override
+    {
+        *z = In(roofs, x, y) ? 5 : 2;
+        return !In(holes, x, y);
+    }
+    bool Occupied(int x, int y) const override
+    {
+        return In(taken, x, y);
+    }
+};
+
+// The extra players' looks, and their start blocks: apart, in the zone, the next zone once it is full
+void TestSpawnSpots()
+{
+    uint32_t used = 1u << 0 | 1u << 6 | 1u << 9; // the script's: police, the blond redneck (the red-head's colours), Krishna
+    CHECK(net::FreeLook(&used) == 7 && net::FreeLook(&used) == 8 && net::FreeLook(&used) == 10);
+    for (int i = 0; i < 4; i++)
+    {
+        net::FreeLook(&used);
+    }
+    CHECK(used == (1u << 0 | 1u << 6 | 0x7F80u) && net::FreeLook(&used) == 0);
+    uint32_t none = 0;
+    CHECK(net::FreeLook(&none) == 0 && net::FreeLook(&none) == 5 && none == 0x21u);
+
+    const std::vector<net::SpawnZone> zones = {{10, 20, 3, 3}, {50, 60, 1, 1}};
+    TestWorld w;
+    int x = 0, y = 0, z = 0;
+    CHECK(net::SpawnBlock(zones, 0, w, &x, &y, &z) && x == 11 && y == 21 && z == 2); // the centre, as the game's
+    // Each ped taken in turn: 9 distinct blocks of the zone, the nearest first, then the next zone
+    std::vector<std::pair<int, int>> got;
+    for (int i = 0; i < 10; i++)
+    {
+        CHECK(net::SpawnBlock(zones, 0, w, &x, &y, &z));
+        CHECK(!TestWorld::In(w.taken, x, y));
+        const bool first = x >= 10 && x < 13 && y >= 20 && y < 23;
+        CHECK(i < 9 ? first : x == 50 && y == 60);
+        CHECK(i == 0 || i >= 9 || (x - 11) * (x - 11) + (y - 21) * (y - 21) >= 1);
+        w.taken.push_back({x, y});
+    }
+    CHECK(!net::SpawnBlock(zones, 0, w, &x, &y, &z) && !net::SpawnBlock(zones, 1, w, &x, &y, &z)); // all full
+    // A hole at the centre: the level of the first block with ground; a roof in the zone is skipped
+    TestWorld w2;
+    w2.holes = {{11, 21}};
+    CHECK(net::SpawnBlock(zones, 0, w2, &x, &y, &z) && x == 10 && y == 20 && z == 2);
+    TestWorld w3;
+    w3.roofs = {{10, 20}};
+    w3.taken = {{11, 21}};
+    CHECK(net::SpawnBlock(zones, 0, w3, &x, &y, &z) && x == 11 && y == 20 && z == 2);
+    // The next zone first, wrapping; out of range: the first
+    CHECK(net::SpawnBlock(zones, 1, w2, &x, &y, &z) && x == 50 && y == 60);
+    CHECK(net::SpawnBlock(zones, 7, w2, &x, &y, &z) && x == 10 && y == 20);
+    CHECK(!net::SpawnBlock(std::vector<net::SpawnZone>(), 0, w2, &x, &y, &z));
+    printf("spawn spots ok\n");
+}
+
 int main()
 {
     TestBits();
@@ -555,6 +626,7 @@ int main()
     TestFileNames();
     TestPrintable();
     TestMapPlayers();
+    TestSpawnSpots();
     printf("messages ok\n");
     printf("net core tests passed\n");
     return 0;
