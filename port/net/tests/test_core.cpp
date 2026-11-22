@@ -524,7 +524,7 @@ void TestEntryBits()
     }
 }
 
-// The players a map takes: the test map's script (testdata/tiny-10p.scr, scripts/mis2scr.py) has 10 PLAYER_PEDs
+// The players a map is made for: the test map's script (testdata/tiny-10p.scr, scripts/mis2scr.py) has 10 PLAYER_PEDs
 void TestMapPlayers()
 {
     FILE* f = fopen(NET_TESTDATA "/tiny-10p.scr", "rb");

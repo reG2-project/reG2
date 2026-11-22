@@ -33,7 +33,7 @@ int ScriptPlayerPeds(const std::string& scr)
     return net::ScriptPlayerPeds(data.data(), n);
 }
 
-// data/<name>.mmp's files into <g> ([MapFiles] GMPFile, STYFile, SCRFile) and the players it takes into <players>
+// data/<name>.mmp's files into <g> ([MapFiles] GMPFile, STYFile, SCRFile) and the players it is made for into <players>
 // (net::MapPlayers); false: no such map (printed if <required>), one of its files missing, names a client would refuse
 // (net::BareFileName) or a script without players, printed
 bool ReadMmp(const std::string& name, net::engine::NetworkGame& g, bool required, int* players)

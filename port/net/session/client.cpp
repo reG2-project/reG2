@@ -978,7 +978,7 @@ bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, con
     std::string missing;
     if (players <= slot)
     {
-        missing = "the server's next map takes " + std::to_string(players) + " players, not enough for us (player " + std::to_string(slot) + ")";
+        missing = "the server's next game has " + std::to_string(players) + " players, not enough for us (player " + std::to_string(slot) + ")";
     }
     if (!missing.empty() || !PlainNames(BadMapName(map, gmp, sty, scr), "the server", &missing) || !HaveMap(gmp, sty, scr, &missing) || !SameMap(map, gmp, sty, scr, print, &missing))
     {
