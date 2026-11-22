@@ -230,6 +230,7 @@ class Client
     bool mLeft = false; // left the server (the pause menu's LEAVE GAME, a kick, a lost server)
     std::vector<std::string> mMaps; // what a map vote chooses from (the welcome's)
     std::vector<std::string> mMapTitles; // their names as players know them (MapTitle)
+    std::vector<int> mMapPlayers; // the players each is made for (MapOwnPlayers), shown with it
     struct ScoreRow
     {
         int slot, frags, deaths, tag, points; // tag: the seconds "it" in a tag game

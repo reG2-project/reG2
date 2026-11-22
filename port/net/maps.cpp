@@ -123,6 +123,13 @@ bool ReadMmp(const std::string& name, net::engine::NetworkGame& g, bool required
 }
 } // namespace
 
+int net::MapOwnPlayers(const std::string& name)
+{
+    engine::NetworkGame g;
+    int players = 0;
+    return ReadMmp(name, g, false, &players) ? players : 0;
+}
+
 std::string net::MapTitle(const std::string& name)
 {
     if (!BareFileName(name, ""))

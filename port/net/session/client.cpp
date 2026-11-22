@@ -58,9 +58,11 @@ void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
     mConfig.name = welcome.name; // a reconnect asks for it: the server keeps our slot under it
     mMaps = welcome.maps;
     mMapTitles.clear();
+    mMapPlayers.clear();
     for (const std::string& m : mMaps)
     {
         mMapTitles.push_back(MapTitle(m)); // every client has the maps (the data check)
+        mMapPlayers.push_back(MapOwnPlayers(m));
     }
     mConnected = true;
     pGame->players = welcome.players;
@@ -1738,7 +1740,8 @@ void net::Client::ShowRound()
                 votes += r.mapChoice[i] == m + 1;
             }
             const bool mine = mSlot < kRoundSlots && r.mapChoice[mSlot] == m + 1;
-            const std::string name = m == mMapCursor ? "(" + mMapTitles[m] + ")" : mMapTitles[m]; // the font has no '>'
+            const std::string title = mMapTitles[m] + (mMapPlayers[m] ? " " + std::to_string(mMapPlayers[m]) + "p" : "");
+            const std::string name = m == mMapCursor ? "(" + title + ")" : title; // the font has no '>'
             lines.push_back(std::to_string(m + 1) + "\t" + name + "\t" + (votes ? std::to_string(votes) : std::string("-")) + "\t" + (mine ? "you" : ""));
         }
     }
