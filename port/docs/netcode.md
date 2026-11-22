@@ -16,10 +16,10 @@ joining and leaving mid-game, rounds with warmup, results and votes, map rotatio
 a frontend page to join, bots (scripted and trained), recordings that replay without a server. Protocol 30.
 
 The player limit is `NET_MAX_PLAYERS` (`core/player_limit.hpp`, 10), the port build's `MAX_PLAYERS`; the original and
-the MSVC build have 6. The map decides how many play on it ("Maps and players"). Each look a script gives a player has
+the MSVC build have 6. Every map has the server's player slots ("Maps and players"). Each look a script gives a player has
 its HUD colour and arrow from one table (`port/src/player_looks.hpp`): the original's, and three more looks (the police,
 Elvis, the fireman) for 10 apart. What stays as the game has it: the police chase 4 criminals at once, the ambient
-traffic and peds are 3 players' worth for everyone, and Residential has 4 restart zones (players start two to a zone).
+traffic and peds are 3 players' worth for everyone, and the respawns go round the map's restart zones (Residential has 4).
 
 ## Running
 
@@ -36,7 +36,7 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 
 | | Options |
 |---|---|
-| Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players N` (1-10, a cap; by default what the maps take), `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
+| Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players N` (1-10, 10: every map's slots), `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
 | Round flow | `--minplayers N` (2), `--warmup s` (60), `--results s` (15), `--votes start,map,kick` (or `none`), `--rounds on\|off` |
 | Arena | `--arena brain,...` (bots on the server itself), `--ticks N` (the result printed and the server ended at tick N), `--seed N` |
 | Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` |
@@ -45,20 +45,28 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 
 ### Maps and players
 
-A map's script makes a ped for each of its players (`PLAYER_PED`, `ScriptThread::Handle_PLAYER_PED`) and the game has no
-other, so a map takes as many players as its script has `PLAYER_PED`s, at most its `.mmp`'s `PlayerCount` when it has
-one (maps since Vike's 11.3 leave it out: any number; Mini City has one script and an `.mmp` for each of 2 to 6
-players), at most 10 (`core/map_players.cpp`). The game's maps take 6.
+The server's `--players` (10 by default) is how many play on every map. A map's script makes a ped for each player it
+was made for (`PLAYER_PED`, `ScriptThread::Handle_PLAYER_PED`): that count, at most its `.mmp`'s `PlayerCount` when it
+has one (`core/map_players.cpp`), is only shown, in the results' map list ("Downtown 6p") and in the server's warning
+at start about the maps it plays that were made for fewer players than its slots. The game's maps are made for 6.
 
-A server has as many slots as its biggest map takes, fewer with `--players N` (more than the maps take are cut, with a
-message). The game on a map has that map's players: past them a client is turned away ("the server is full: Downtown
-takes 6 players"), and the slots open again with a map that takes more. Slot N is the map's N-th `PLAYER_PED`. A join
-takes the first free slot of the current map; at a map change the taken slots are numbered again from 0 in their order
-(`CompactSlots`: 0, 1, 8 become 0, 1, 2), then those of players who dropped in the last 40 s (their reconnect), as far
-as the map goes; the other names are forgotten. Each client hears its new slot in its `kMsgMapChange` and takes it with
-the new game (its local player); the server moves each slot's token, name, commands, ready flag, votes and map choice
-with it, and holds every input through the pause. A vote, a results' choice and the rotation go to a map only if it
-takes as many players as are in or connecting (`RoundFlow::Fits`).
+The players past the script's get a ped at boot (`Game::BootGame`, `engine/starts.cpp`), the k-th at the k-th restart
+zone in the map's order (the restart zones' turn stays the script's), in the first of the 10 looks below the map's
+players don't have. A ped starting at a restart zone (those, a join, a respawn: `Ped::SpawnCharInZone`) takes the
+first block from the zone's centre, at the level of its first block with ground, that no other player's ped stands
+on, else one in the next zone (`core/spawn_spots.cpp`). Both read only the game's state, so the server and its clients
+place them alike; a client's prediction of its own respawn can still pick another block when it sees the others
+elsewhere, and the server's snapshot corrects it.
+
+Choosing maps that suit the server's players is the admin's job. The shipped maps have 4 (Residential) to 10 (Tiny Town)
+restart zones; their scripts handle players alike, so extras play as the others. A community map whose script
+handles players one by one (missions, scores kept per player on `p1`..`pN`) leaves the extras out of those.
+
+A join takes the first free slot; at a map change the taken slots are numbered again from 0 in their order
+(`CompactSlots`: 0, 1, 8 become 0, 1, 2), then those of players who dropped in the last 40 s (their reconnect); the
+other names are forgotten. Slot N is the map's N-th `PLAYER_PED` while there is one. Each client hears its new slot in
+its `kMsgMapChange` and takes it with the new game (its local player); the server moves each slot's token, name,
+commands, ready flag, votes and map choice with it, and holds every input through the pause.
 
 A player's look is the remap its `PLAYER_PED` gives the ped, and the HUD tells players apart by it (the digits' colour,
 the arrow's). For a map of its own, give each player a different one of these 10:
@@ -286,8 +294,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   that view, so peds and cars spawn and go out of everyone's sight, and a traffic car, which the game spawns 5 blocks
   beyond one camera's edge, isn't spawned where another player's view is (`TrafficSpawner::SpawnTrafficCar`).
 - **Joining and leaving** (`engine/slots.cpp`): a slot without a client is out of the game the way the game handles a
-  player who left (its ped walks on as a pedestrian). A joining client gets a new player ped at the next restart zone
-  and an empty score. Snapshots carry the slots in the game, and clients mirror them. The others read "BOB joined",
+  player who left (its ped walks on as a pedestrian). A joining client gets a new player ped at the next restart zone,
+  on a block nobody stands on ("Maps and players"), and an empty score. Snapshots carry the slots in the game, and clients mirror them. The others read "BOB joined",
   "BOB is back", "BOB left" or "BOB was kicked" (the server's notices).
 - **Idle when empty**: a server with nobody to play for (no client connected or connecting, no arena bot) runs no
   step: its idle hook waits on the network up to 100 ms at a time (`Server::Deserted`, `Transport::Wait`) and puts the
@@ -592,7 +600,7 @@ port/net/
   cmdline.cpp     the command line            maps.cpp   the .mmp files, the rotation, what a vote chooses from
   menu.cpp        the frontend's network page (game UI, so it includes the game's headers)
   core/           no game, unit-tested: the bitstream, the protocol, entity states and their delta coding, the
-                  round's state
+                  round's state, a map's players, the extra players' looks and start blocks
   transport/      the network: an interface, its ENet implementation, a link conditioner for tests
   session/        server.cpp, client.cpp, round_flow.cpp (no game: tested on its own), the bots (bot*.cpp),
                   recording.cpp, env.cpp (the GTA2_NET_* switches)
@@ -607,7 +615,7 @@ port/net/
                     world.cpp, rollback.cpp, sound_pool.cpp             the rollback set, save and resimulate
                     rounds.cpp        new rounds, map changes           overlay.cpp       what a client draws over the frame
                     stats.cpp         the periodic log's statistics     navmap.cpp        the map for bots
-                    sound_log.cpp     a client's sound over rollbacks
+                    sound_log.cpp     a client's sound over rollbacks  starts.cpp        the players' peds and start blocks
                     dev/              checks, logs and test cheats (dev.hpp), off unless switched on
   dev/            the session's checks and test hooks (client_probe.cpp, server_probe.cpp), the arena, the jerk meter
   eval/           measurements behind the design (sim_bench.cpp, neteval.cpp)
@@ -631,6 +639,8 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | Where | Hook | |
 |---|---|---|
 | `Game.cpp` | `gPortAfterPlayersHook` | after the players' tick, before anything spawns: the server's camera lead |
+| `Game.cpp` | `gPortExtraPlayerPeds` | at boot, after the level start: a ped for each player past the script's `PLAYER_PED`s |
+| `Ped.cpp` | `gPortSpawnBlock` | a ped starting at a restart zone: a block of it no other player stands on |
 | `Game.cpp`, `sound_obj.cpp` | `gPortWorldStill` | the results: nothing runs but the players' tick and the HUD; the world's sounds stop |
 | `Game.cpp` | `gPortDrawOverlay` | drawn last: the status, the round's panel, chat completion |
 | `Car.cpp`, `Char_Pool.cpp` | `PortTrafficLimit()`, `gPortSpawnPlayers` | the spawn limits times the players |
