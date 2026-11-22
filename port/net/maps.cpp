@@ -2,6 +2,7 @@
 #include "maps.hpp"
 #include "cmdline.hpp"
 #include "core/map_players.hpp"
+#include "core/player_limit.hpp"
 #include <SDL3/SDL.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -226,21 +227,20 @@ bool net::SetUpMaps(const std::string& firstMap, const std::string& maps, Server
         sc.voteMaps.insert(sc.voteMaps.begin(), MapFiles{map, sc.game.gmp, sc.game.sty, sc.game.scr, firstPlayers});
         sc.currentMap = 0;
     }
-    // The slots: as many as the server's biggest map takes at most; the game on a map, as many as it takes
-    int most = 0;
-    for (const MapFiles& m : sc.voteMaps)
+    // Every map has the server's slots: past its PLAYER_PEDs, players start at its restart zones (engine/starts.cpp)
+    sc.slots = asked ? asked : kMaxPlayers;
+    sc.game.players = sc.slots;
+    std::string fewer;
+    for (const MapFiles& m : sc.maps.empty() ? std::vector<MapFiles>{sc.voteMaps[sc.currentMap]} : sc.maps)
     {
-        most = m.players > most ? m.players : most;
+        if (m.players < sc.slots)
+        {
+            fewer += (fewer.empty() ? "" : ", ") + MapTitle(m.name) + " (" + std::to_string(m.players) + ")";
+        }
     }
-    sc.slots = asked && asked < most ? asked : most;
-    if (asked > most)
+    if (!fewer.empty())
     {
-        printf("net: --players %d: the maps here take %d players at most, %d player slots\n", asked, most, sc.slots);
-    }
-    sc.game.players = firstPlayers < sc.slots ? firstPlayers : sc.slots;
-    if (sc.game.players < sc.slots)
-    {
-        printf("net: %s takes %d players, the other slots open on a map that takes more\n", map.c_str(), sc.game.players);
+        printf("net: warning: maps made for fewer than %d players, whose scripts may leave the others out: %s\n", sc.slots, fewer.c_str());
     }
     return true;
 }

@@ -19,15 +19,15 @@ namespace net
 struct MapFiles // a multiplayer map, from its data/<name>.mmp
 {
     std::string name, gmp, sty, scr;
-    int players = 0; // it takes (core/map_players.hpp)
+    int players = 0; // its own players (core/map_players.hpp): a map has the server's slots, more start at its restart zones
 };
 
 struct ServerConfig
 {
     std::string build; // port_BuildId: a client of another build is turned away
     uint16_t port = kDefaultPort;
-    engine::NetworkGame game; // game.players: the first map's players (at most <slots>)
-    int slots = 6; // the most players a map here takes, at most --players
+    engine::NetworkGame game; // game.players: <slots>
+    int slots = 10; // the players on every map (--players, else NET_MAX_PLAYERS)
     float interestRadius = 24.0f; // blocks around a client's player that its snapshots cover (players: always)
     int packets = 4; // a snapshot's packets at most (--packets, 1..8): a busy area's goes in parts
     LinkShape link; // the link conditioner (tests)
@@ -139,7 +139,6 @@ class Server
     std::vector<RoundPlayer> mRoundPlayers; // as of the last frame, for commands between frames
     std::map<std::string, uint32_t> mBanned; // kicked names, until this tick
     size_t mMap = 0; // in mConfig.voteMaps
-    int mGamePlayers = 0; // the players of the game running, or of the next once a map change is pending
     uint32_t mSession = 0; // this run's (the welcome's)
     uint32_t mCarInfo = 0; // data/nyc.gci's CRC-32
     MapPrint mPrint; // the map being played's files

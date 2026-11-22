@@ -12,7 +12,6 @@ std::vector<net::RoundPlayer> Players(int in)
     std::vector<net::RoundPlayer> p(net::kRoundSlots);
     for (int i = 0; i < in; i++)
     {
-        p[i].taken = true;
         p[i].in = true;
         p[i].voter = true;
         p[i].name = "P" + std::to_string(i);
@@ -238,34 +237,26 @@ int main()
         }
         CHECK(k.kick == last);
     }
-    // Maps that take fewer players than are in: not voted for, not chosen, skipped by the rotation
+    // Every map has the server's slots: 8 players vote for one and choose one, whatever it was made for
     {
         net::RoundRules rot = rules;
         rot.rotation = true;
         net::RoundFlow f;
         f.Start(rot, maps, 0);
-        f.SetMapPlayers({10, 6, 10});
         auto eight = Players(8);
-        CHECK(f.Fits(0, eight) && !f.Fits(1, eight) && f.Fits(1, Players(6)));
-        auto gap = Players(2);
-        gap[7].taken = true; // connecting: counts, wherever its slot is (a map change renumbers them)
-        CHECK(f.Fits(1, gap));
-        auto seven = Players(6);
-        seven[9].taken = true;
-        CHECK(!f.Fits(1, seven));
         uint32_t tick = RunTo(f, 1, net::kPhasePlaying, eight, 120 * kTps);
         net::RoundActions m;
         f.Command(tick, 0, "/map 2", eight, m);
-        CHECK(f.State().voteKind == net::kVoteNone && !m.notices.empty() && m.notices.back().second.find("takes 6") != std::string::npos);
+        CHECK(f.State().voteKind == net::kVoteMap && f.State().voteArg == 1);
         tick = RunTo(f, tick, net::kPhaseResults, eight, 120 * kTps);
         net::RoundActions c;
         for (int i = 0; i < 8; i++)
         {
-            f.Command(tick, i, "/map 2", eight, c); // refused: no choice made
+            f.Command(tick, i, "/map 2", eight, c);
         }
         net::RoundActions next;
         RunTo(f, tick, net::kPhaseCountdown, eight, 30 * kTps, &next);
-        CHECK(next.changeMap == 2); // the rotation's next that fits, not mp2-6p
+        CHECK(next.changeMap == 1);
     }
     // A map change's slots: 0, 1 and 8 in, 4 kept for a reconnect: 0, 1, 2 and 3; on a map of 3 the kept one goes
     {
@@ -281,7 +272,7 @@ int main()
         auto players = Players(0);
         for (int i : {0, 1, 8})
         {
-            players[i].taken = players[i].in = players[i].voter = true;
+            players[i].in = players[i].voter = true;
             players[i].name = "P" + std::to_string(i);
         }
         net::RoundActions a;
