@@ -16,6 +16,8 @@ bool gPortNoRumble;
 s32 gPortTrafficCap = 16;
 s32 gPortSpawnPlayers = 1;
 void (*gPortAfterPlayersHook)();
+void (*gPortExtraPlayerPeds)();
+bool (*gPortSpawnBlock)(Ped*, gmp_map_zone*, s32*, s32*, s32*);
 bool (*gPortWorldStill)();
 bool (*gPortCarMayExplode)(Car* pCar);
 bool (*gPortScriptCommandRuns)(u16 type);

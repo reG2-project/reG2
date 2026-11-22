@@ -5,7 +5,9 @@
 #include "types.hpp"
 
 class Car;
+class Ped;
 class Player;
+class gmp_map_zone;
 class Sprite;
 struct Frontend;
 
@@ -53,6 +55,12 @@ inline s32 PortTrafficLimit()
 // network server, which moves a client's cameras' bounds to where that client already shows them (its lag ahead): a car
 // or ped spawned out of sight here would come into a fast client's view
 extern void (*gPortAfterPlayersHook)();
+// Called in Game::BootGame after the map script's level start, before the players are set up: NULL but in a network
+// game, whose players past the script's PLAYER_PEDs get a ped there
+extern void (*gPortExtraPlayerPeds)();
+// Asked as a ped (re)starts at a restart zone (Ped::SpawnCharInZone): true, and it starts on the block *x, *y at the
+// level *z instead of the zone's first block with ground. NULL but in a network game: a block nobody stands on
+extern bool (*gPortSpawnBlock)(Ped* pPed, gmp_map_zone* pZone, s32* x, s32* y, s32* z);
 // Asked in Game::UpdateGame after the players' tick: true, and nothing else runs this tick but the HUD (a network
 // game's results: the world stands still, the chat goes on)
 extern bool (*gPortWorldStill)();

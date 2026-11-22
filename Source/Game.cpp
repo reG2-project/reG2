@@ -343,6 +343,13 @@ void Game::BootGame()
     }
     gPublicTransport_181C->SpawnTrainsFromStations(); // trains?
 
+#if defined(GTA2_PORT)
+    // Port: a network game's players past the script's PLAYER_PEDs get a ped too (InitializePlayerState needs one).
+    if (gPortExtraPlayerPeds)
+    {
+        gPortExtraPlayerPeds();
+    }
+#endif
     for (s32 i = 0; i < mNumPlayers; i++)
     {
         mPlayers[i]->InitializePlayerState();
