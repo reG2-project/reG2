@@ -6,6 +6,7 @@
 // arrows, Enter and Escape. With TWIN STICK on foot, the sticks move and aim (port_TwinStickInput) and RT
 // attacks. Each control's second key (alt_<n>), a key, mouse button or wheel notch, presses it the same way.
 // A network game's round: Back is F1 (ready, or yes to a vote), and the results' map list takes the d-pad and A.
+// SCORES, a 13th binding the game never sees, holds a network game's scoreboard.
 #define DIRECTINPUT_VERSION 0x0700
 #include <windows.h>
 #include <dinput.h>
@@ -18,14 +19,16 @@
 namespace
 {
 const int kNumControls = 12;
-const DWORD kDefaultKeys[kNumControls] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN,
-                                          DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT};
+const int kScoresControl = 12;
+const int kNumBindings = 13;
+const DWORD kDefaultKeys[kNumBindings] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN,
+                                          DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT, DIK_Q};
 // Forward, backward, left, right, attack, enter/exit, jump/handbrake, previous and next weapon,
-// special 1 to 3.
-const int kDefaultPad[kNumControls] = {kPadUp, kPadDown, kPadLeft, kPadRight, 0, 3, 1, 4, 5, 2, 10, 11};
+// special 1 to 3, scores (Back, fixed: the capture takes Back as cancel).
+const int kDefaultPad[kNumBindings] = {kPadUp, kPadDown, kPadLeft, kPadRight, 0, 3, 1, 4, 5, 2, 10, 11, 6};
 // W, S, A, D, F and E by position.
-const int kDefaultAlt[kNumControls] = {DIK_W, DIK_S, DIK_A, DIK_D, kMouseCode + SDL_BUTTON_LEFT, DIK_F, 0,
-                                       kWheelUpCode, kWheelDownCode, DIK_E, 0, 0};
+const int kDefaultAlt[kNumBindings] = {DIK_W, DIK_S, DIK_A, DIK_D, kMouseCode + SDL_BUTTON_LEFT, DIK_F, 0,
+                                       kWheelUpCode, kWheelDownCode, DIK_E, 0, 0, 0};
 const Sint16 kThreshold = 24000;
 
 const int kMaxGamepads = 8;
@@ -53,9 +56,9 @@ bool sAccelHeld; // RT held since the player drove or was getting into a vehicle
 bool sMouseAims; // the mouse was used in game after the pad
 bool sKeyDown[256]; // by DIK code
 unsigned sButtonsDown; // bit n: SDL mouse button n
-int sAlt[kNumControls];
+int sAlt[kNumBindings];
 bool sAltRead;
-int sPad[kNumControls]; // pad_<n>, read once: port_UpdatePad wants them several times a frame
+int sPad[kNumBindings]; // pad_<n>, read once: port_UpdatePad wants them several times a frame
 bool sPadRead;
 int sWheelCode; // a wheel notch holds its control down for two steps
 unsigned sWheelUntil;
@@ -447,7 +450,7 @@ int port_GetPadBinding(int control)
             MigrateBindings();
         }
         sPadRead = true;
-        for (int i = 0; i < kNumControls; i++)
+        for (int i = 0; i < kNumBindings; i++)
         {
             sPad[i] = static_cast<int>(ReadControl("pad_%d", i, static_cast<DWORD>(kDefaultPad[i])));
         }
@@ -473,8 +476,8 @@ int port_GetAltBinding(int control)
     {
         sAltRead = true;
         const DWORD kUnsaved = 0xFFFFFFFF;
-        bool unsaved[kNumControls];
-        for (int i = 0; i < kNumControls; i++)
+        bool unsaved[kNumBindings];
+        for (int i = 0; i < kNumBindings; i++)
         {
             const DWORD saved = ReadControl("alt_%d", i, kUnsaved);
             unsaved[i] = saved == kUnsaved;
@@ -523,6 +526,15 @@ bool port_AltKeyInGame(DWORD dik)
         alt = alt || port_GetAltBinding(i) == static_cast<int>(dik);
     }
     return alt;
+}
+
+bool port_ScoresHeld()
+{
+    if (!port_GameRunning() || port_QuitMessageShown() || port_ChatTyping())
+    {
+        return false;
+    }
+    return sKeyDown[KeyFor(kScoresControl)] || AltDown(kScoresControl);
 }
 
 void port_CaptureStart()

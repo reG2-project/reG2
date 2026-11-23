@@ -90,14 +90,22 @@ const s32 kMaxItems = 20;
 const wchar_t* const kTitles[kNumPages] = {L"OPTIONS", L"GAME", L"GRAPHICS", L"DISPLAY", L"SOUND", L"CONTROLS", L"STATISTICS",
                                            L"MISSION TRANSCRIPT", L"LOAD GAME", L"LOAD GAME", L"QUIT GAME", L"PLAYERS"};
 
+// The game's 12 controls, then SCORES: held, a network game's scoreboard (compat/src/pad.cpp); its pad input is Back.
+// The DirectX build has no network game.
+#if defined(GTA2_PORT_SDL)
+const s32 kScoresControl = 12;
+const s32 kNumControls = 13;
+#else
 const s32 kNumControls = 12;
-// SPECIAL 3, the last control, does nothing in the game: it keeps its bindings but is not shown.
-const s32 kShownControls = 11;
-const s32 kDefaultControls[kNumControls] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN,
-                                            DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT};
-const wchar_t* const kControlNames[kShownControls] = {L"FORWARD", L"BACKWARD", L"LEFT", L"RIGHT", L"ATTACK",
-                                                      L"ENTER OR EXIT", L"JUMP OR BRAKE", L"PREVIOUS WEAPON",
-                                                      L"NEXT WEAPON", L"HORN OR TAUNT", L"LOOK AROUND"};
+#endif
+// SPECIAL 3 does nothing in the game: it keeps its bindings but is not shown.
+const s32 kSpecial3Control = 11;
+const s32 kShownControls = kNumControls - 1;
+const s32 kDefaultControls[13] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN, DIK_SPACE,
+                                  DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT, DIK_Q};
+const wchar_t* const kControlNames[13] = {L"FORWARD", L"BACKWARD", L"LEFT", L"RIGHT", L"ATTACK",
+                                          L"ENTER OR EXIT", L"JUMP OR BRAKE", L"PREVIOUS WEAPON",
+                                          L"NEXT WEAPON", L"HORN OR TAUNT", L"LOOK AROUND", L"SPECIAL 3", L"SCORES"};
 // Pad binding codes (compat/src/pad.cpp): buttons 0 to 11, then the stick and d-pad directions.
 const wchar_t* const kPadButtonNames[12] = {L"A", L"B", L"X", L"Y", L"LB", L"RB", L"BACK", L"START", L"L3", L"R3", L"LT", L"RT"};
 const s32 kPadB = 1;
@@ -287,7 +295,7 @@ s32 Items(Page page, Item* pItems)
         default:
             for (s32 i = 0; i < kShownControls; i++)
             {
-                pItems[n++] = Item{kBinding, i, false};
+                pItems[n++] = Item{kBinding, i < kSpecial3Control ? i : i + 1, false};
             }
 #if defined(GTA2_PORT_SDL)
             pItems[n++] = Item{kSetting, PortSettings::kControls, true};
@@ -1679,6 +1687,10 @@ Result HandleInput(Input input)
                     return kRaised;
                 case kBinding:
 #if defined(GTA2_PORT_SDL)
+                    if (item.mArg == kScoresControl && sColumn == kPadColumn)
+                    {
+                        return kNothing; // Back, whose short press is the network game's ready and yes
+                    }
                     port_CaptureStart();
 #else
                     if (!gFrontend)

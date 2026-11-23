@@ -399,6 +399,7 @@ const Translation kTranslations[] = {
     {L"NEXT WEAPON", NULL, {L"ARME SUIVANTE", L"NÄCHSTE WAFFE", L"ARMA SUCCESSIVA", L"ARMA SIGUIENTE"}},
     {L"HORN OR TAUNT", NULL, {L"KLAXON/NARGUER", L"HUPE/SPOTT", L"CLACSON/PROVOCA", L"CLÁXON/BURLA"}},
     {L"LOOK AROUND", NULL, {L"REGARDER AUTOUR", L"UMSCHAUEN", L"GUARDARSI INTORNO", L"MIRAR ALREDEDOR"}},
+    {L"SCORES", NULL, {L"SCORES", L"PUNKTE", L"PUNTEGGI", L"PUNTOS"}},
 };
 const s32 kNumTranslations = sizeof(kTranslations) / sizeof(kTranslations[0]);
 
