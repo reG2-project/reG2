@@ -663,6 +663,29 @@ bool net::engine::PlayerPosition(int player, float* pX, float* pY)
     return PlayerPose(player, pX, pY, &z, &rot);
 }
 
+Ped* net::engine::ViewedPed(Player* p)
+{
+    return p->mCameraMode == 2 && p->mAuxPed ? p->mAuxPed : p->mPlayerPed;
+}
+
+net::engine::Foci net::engine::PlayerFoci(int player)
+{
+    Foci f;
+    Player* p = GetPlayer(player);
+    Ped* const peds[2] = {p ? ViewedPed(p) : NULL, p ? p->mPlayerPed : NULL};
+    for (int k = 0; k < 2; k++)
+    {
+        Sprite* s = peds[k] && (k == 0 || peds[1] != peds[0]) ? PedSprite(peds[k]) : NULL;
+        if (s)
+        {
+            f.x[f.count] = s->mXy.x.ToFloat();
+            f.y[f.count] = s->mXy.y.ToFloat();
+            f.count++;
+        }
+    }
+    return f;
+}
+
 bool net::engine::PlayerWasted(int player)
 {
     Player* p = GetPlayer(player);

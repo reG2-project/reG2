@@ -154,6 +154,14 @@ int CarModel(const EntityState& e); // a car entity's Car::mCarInfoIdx (car_mode
 bool PlayerPosition(int player, float* pX, float* pY);
 bool PlayerPose(int player, float* pX, float* pY, float* pZ, int* pRot); // and its height and heading (0..1439)
 bool PlayerWasted(int player); // dead and waiting to respawn (Player::mWastedOrBusted)
+// Where a player's snapshots are centred, in blocks: what its view follows (its corpse or arrested self while wasted or
+// busted, Player::Update's camera mode 2), then its own ped when that is another (respawned at its restart zone)
+struct Foci
+{
+    int count = 0;
+    float x[2] = {}, y[2] = {};
+};
+Foci PlayerFoci(int player);
 bool PlayerInCar(int player); // in this game
 // How far a player's camera shows (blocks, centre to corner): it zooms out with speed
 float PlayerViewRadius(int player);

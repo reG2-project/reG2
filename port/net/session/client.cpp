@@ -412,12 +412,12 @@ uint32_t net::Client::Lead() const
 
 int net::Client::InView(float x, float y) const
 {
-    float px, py;
-    if (!engine::PlayerPosition(mSlot, &px, &py))
+    const engine::Foci foci = engine::PlayerFoci(mSlot);
+    if (!foci.count)
     {
         return 1;
     }
-    const float dx = x - px, dy = y - py;
+    const float dx = x - foci.x[0], dy = y - foci.y[0];
     const float r = engine::PlayerViewRadius(mSlot) + 1.0f;
     return dx * dx + dy * dy <= r * r ? 0 : 1;
 }

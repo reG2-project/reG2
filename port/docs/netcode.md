@@ -306,7 +306,7 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   ticks late are caught up by running the missing ticks at once, saved, and only more than 8 late or 20 early make it
   jump (its saves lost until snapshots of the new ticks come).
 - **Snapshots**, per client, every tick (`Server::SendSnapshot`): every player and the car each sits in, wherever they
-  are, and everything within the client's interest area (24 blocks around its player; a camera sees 6 to 8). Each
+  are, and everything within the client's interest area (24 blocks around its player's foci; a camera sees 6 to 8). Each
   entity is a delta against the state that client acknowledged for it (per-entity baselines, so a snapshot can carry
   part of the world and nothing waits for a lost packet). What doesn't fit the budget goes with the state the client
   already has and its age, a few bits. New state goes by priority: the age plus one over one plus a sixth of the
@@ -369,7 +369,7 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   punch (`ShowServerHit`, `engine/players.cpp`), which the client's own hits on an invulnerable ped don't give.
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
   server's world. It carries every player, the car each sits in and every train wherever they are, and everything
-  within the reach (the interest area, 24 blocks around the client's player as the server has it), each entity the
+  within the reach (the interest area, 24 blocks around the client's player's foci as the server has them), each entity the
   client has acknowledged at least as its last state and its age when the budget is short: so nothing the client has
   inside the reach is ever left out, and what a snapshot lacks is gone on the server or out of the client's area,
   where nothing more will come for it. Hence:
@@ -431,6 +431,12 @@ the police's), not from the deaths the client's prediction starts. A client goes
 results, starts again with each round), and takes a player's count as it finds it the first time it sees the player. Scores (with the money and multiplier) are set before the resimulation, so its ticks and saves carry the server's
 (the HUD's rolling digits roll towards them), and again after it with power-up timers and the tag game's "it";
 a new round sets them all back to a game's start.
+
+**The interest follows the view** (`engine::PlayerFoci`): a player's foci are what its view camera follows and its own
+ped, when that is another. The game respawns a wasted or busted player's ped at once, at its restart zone, and shows its
+corpse or its arrested self (`Player::mAuxPed`, camera mode 2) until the death's countdown ends: the interest covers
+both, so the world around the death goes on in the view and the respawn's surroundings are there when the view jumps
+to them. The client's reach is the same foci of its own prediction.
 
 A ped's AI state is applied only while it is on foot on both sides (a driver in the same car gets its objectives but
 not its states), its states only when plain (walking, running, standing) on both sides, and all or nothing: if a
@@ -812,7 +818,7 @@ off by default:
 | `GTA2_NET_JERKLOG=1\|2` | both | how jerky what is shown moves (2: and each jump), and how far its way is from its facing and how fast it turns (on a client also where the newest snapshots have the two agree) |
 | `GTA2_NET_MARKER=1` | client | a square where the newest snapshot has the local player |
 | `GTA2_NET_SFXLOG=1` (client), `=<slot>` (server) | both | every sample the mixer starts, by tick, what made it and where; a server with it opens its audio device and listens at that slot's player (to count what a client misses or plays twice) |
-| `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death and the server's hits on players, the sound's channels and the car radio |
+| `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death (and the cars around its view) and the server's hits on players, the sound's channels and the car radio |
 | `GTA2_NET_CARDIFF=1` | client | where the prediction of the local player's car differs from the snapshot |
 | `GTA2_NET_GANGLOG=1` | both | player 0's group every 15 ticks, by the server's ids |
 | `GTA2_NET_STACKLOG=1` | both | two cars in one place (under 0.4 blocks apart), once per pair: a car the client kept that the server dropped |

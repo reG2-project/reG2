@@ -33,6 +33,16 @@ float Distance(const net::EntityState& e, float x, float y)
     return fabsf(dx) > fabsf(dy) ? fabsf(dx) : fabsf(dy);
 }
 
+float Distance(const net::EntityState& e, const net::engine::Foci& f) // to the nearer
+{
+    float d = Distance(e, f.x[0], f.y[0]);
+    for (int k = 1; k < f.count; k++)
+    {
+        d = std::min(d, Distance(e, f.x[k], f.y[k]));
+    }
+    return d;
+}
+
 // Its state in the client's baseline (NULL: new to it)
 const net::EntityState* InBase(const net::Snapshot* base, const net::EntityState& e)
 {
@@ -508,7 +518,7 @@ const int kFarAgeTicks = 3;
 
 // Each nearby entity with what it costs new and aged, and its priority: the age plus one, over one plus a sixth of the
 // distance (an entity new to the client counts as 8 ticks old: one near comes soon)
-std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::vector<const EntityState*>& area, const Snapshot* base, float x, float y) const
+std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::vector<const EntityState*>& area, const Snapshot* base, const engine::Foci& foci) const
 {
     const Schema& schema = engine::NetSchema();
     std::vector<Item> items(area.size());
@@ -531,16 +541,16 @@ std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::
                 it.aged.f[f] = age < 1 ? 1 : age > 63 ? 63 : age;
             }
             it.agedBits = EntryBits(schema, it.had, it.aged);
-            it.priority = (float)(age + 1) / (1.0f + Distance(*it.now, x, y) / 6.0f);
+            it.priority = (float)(age + 1) / (1.0f + Distance(*it.now, foci) / 6.0f);
             // Off screen with a margin (a view is 8 to 11 blocks centre to corner), new state every third tick when it
             // costs more than its age: the client's own simulation keeps it within a pixel meanwhile (netcode.md, "Drift")
             const auto last = s.lastFresh.find(it.now->id);
             it.hold = last != s.lastFresh.end() && mTick - last->second < (uint32_t)kFarAgeTicks &&
-                      Distance(*it.now, x, y) > kFullRateRadius && it.freshBits > it.agedBits;
+                      Distance(*it.now, foci) > kFullRateRadius && it.freshBits > it.agedBits;
         }
         else
         {
-            it.priority = 9.0f / (1.0f + Distance(*it.now, x, y) / 6.0f);
+            it.priority = 9.0f / (1.0f + Distance(*it.now, foci) / 6.0f);
         }
     }
     return items;
@@ -681,12 +691,11 @@ void net::Server::Transmit(const Slot& s, const BitWriter& w)
 }
 
 // The client's area: every player and the cars they sit in (wherever they are: a player far off isn't a ped without its
-// car), every train (a few, and a client's own moves on wherever it is), and the cars, peds and pickups near its own,
-// nearest first
+// car), every train (a few, and a client's own moves on wherever it is), and the cars, peds and pickups near what its view
+// follows and near its ped (PlayerFoci: apart while it is wasted), nearest first
 void net::Server::SendSnapshot(int slot, Slot& s, const Snapshot& world)
 {
-    float x = 0, y = 0;
-    const bool located = engine::PlayerPosition(slot, &x, &y);
+    const engine::Foci foci = engine::PlayerFoci(slot);
     std::vector<uint32_t> playersCars;
     for (const EntityState& e : world.entities)
     {
@@ -705,15 +714,15 @@ void net::Server::SendSnapshot(int slot, Slot& s, const Snapshot& world)
         {
             fixed.entities.push_back(e);
         }
-        else if (located && Distance(e, x, y) <= mConfig.interestRadius)
+        else if (foci.count && Distance(e, foci) <= mConfig.interestRadius)
         {
             area.push_back(&e);
         }
     }
-    std::sort(area.begin(), area.end(), [&](const EntityState* a, const EntityState* b) { return Distance(*a, x, y) < Distance(*b, x, y); });
+    std::sort(area.begin(), area.end(), [&](const EntityState* a, const EntityState* b) { return Distance(*a, foci) < Distance(*b, foci); });
     const Snapshot& acked = s.sent[s.ackTick % kRing];
     const Snapshot* base = s.ackTick && acked.tick == s.ackTick && mTick - s.ackTick < (uint32_t)kRing ? &acked : NULL;
-    std::vector<Item> items = PriceArea(s, area, base, x, y);
+    std::vector<Item> items = PriceArea(s, area, base, foci);
     BitWriter w;
     if (Fill(s, fixed, items, base, w))
     {

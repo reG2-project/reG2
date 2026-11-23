@@ -209,25 +209,26 @@ uint32_t CarRefNetId(int32_t ref);
 Car* RefCar(int32_t ref);
 Sprite* CharSprite(const Ped* ped); // its char's (on foot), NULL without one
 Sprite* PedSprite(Ped* ped); // its car's when it is in one
+Ped* ViewedPed(Player* p); // the ped its view camera follows (PlayerFoci)
 EntityState Entity(uint32_t id, uint8_t type);
 void PutPosition(EntityState& e, const Sprite* s); // fields 0..3
 bool Near(const Sprite* s, int32_t x, int32_t y, int32_t radius); // within <radius> (raw) on both axes
 const EntityState* FindWorld(const Snapshot& snap);
 uint32_t PedNetId(const Ped* p); // a ped as a field (a player's entity or a ped's), 0 none
 Ped* NetIdPed(uint32_t id); // and back to this game's ped (NULL: none or not here)
-// The area a snapshot covered around the local player, less a margin (blocks): what the snapshot lacks is gone only
-// inside it (beyond, a busy area's snapshot was cut for size). Without a local player, nothing is inside or beyond
+// The area a snapshot covered around the local player's foci (PlayerFoci), less a margin (blocks): what the snapshot
+// lacks is gone only inside it (beyond, a busy area's snapshot was cut for size). Without a focus, nothing is inside or beyond
 class ReachArea
 {
   public:
     ReachArea(const Snapshot& snap, float margin);
     bool Inside(const Sprite* s) const;
     bool Beyond(const Sprite* s) const;
-    float DistanceTo(const Sprite* s) const;
+    float DistanceTo(const Sprite* s) const; // to the nearer focus
 
   private:
-    bool mLocated;
-    float mX = 0, mY = 0, mReach;
+    Foci mFoci;
+    float mReach;
 };
 // The one dummy ped every traffic car shares as its driver (Car::SpawnDriverPed, CarManager::mSpareDriver): no
 // ped of its own, never sent, moved, forced or removed

@@ -30,7 +30,7 @@ struct ServerConfig
     uint16_t port = kDefaultPort;
     engine::NetworkGame game; // game.players: <slots>
     int slots = 10; // the players on every map (--players, else NET_MAX_PLAYERS)
-    float interestRadius = 24.0f; // blocks around a client's player that its snapshots cover (players: always)
+    float interestRadius = 24.0f; // blocks around a client's player and its view that its snapshots cover (players: always)
     int packets = 4; // a snapshot's packets at most (--packets, 1..8): a busy area's goes in parts
     LinkShape link; // the link conditioner (tests)
     std::vector<std::string> arena; // bot brains playing the first slots on the server itself (--arena)
@@ -125,7 +125,7 @@ class Server
     void StartOver(); // a new game (the next map): its start, and every client's baseline, again
     void PrintStats(const Snapshot& world);
     void SendSnapshot(int slot, Slot& s, const Snapshot& world);
-    std::vector<Item> PriceArea(const Slot& s, const std::vector<const EntityState*>& area, const Snapshot* base, float x, float y) const;
+    std::vector<Item> PriceArea(const Slot& s, const std::vector<const EntityState*>& area, const Snapshot* base, const engine::Foci& foci) const;
     ForwardedInputs Forwarded(int slot) const; // the other players' controls after this tick, for <slot>'s snapshot
     bool Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items, const Snapshot* base, BitWriter& w);
     void Transmit(const Slot& s, const BitWriter& w);

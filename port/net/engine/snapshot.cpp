@@ -3,6 +3,7 @@
 // (pickups.cpp) do the parts. Also the helpers the engine's files share, the game's controls the session uses
 // (running, the player count, the inputs, the tick) and a client's view of what is shown.
 #include "internal.hpp"
+#include <algorithm>
 #include "port/src/rand/owner.hpp"
 #include "port/src/menu.hpp"
 #include "port/src/net_hooks.hpp"
@@ -93,31 +94,29 @@ bool net::engine::Near(const Sprite* s, int32_t x, int32_t y, int32_t radius)
     return dx < radius && dx > -radius && dy < radius && dy > -radius;
 }
 
-net::engine::ReachArea::ReachArea(const Snapshot& snap, float margin) : mReach(SnapshotReach(snap) - margin)
+net::engine::ReachArea::ReachArea(const Snapshot& snap, float margin) : mFoci(PlayerFoci(LocalPlayer())), mReach(SnapshotReach(snap) - margin)
 {
-    mLocated = PlayerPosition(LocalPlayer(), &mX, &mY);
 }
 
 float net::engine::ReachArea::DistanceTo(const Sprite* s) const
 {
-    const float dx = s->mXy.x.ToFloat() - mX, dy = s->mXy.y.ToFloat() - mY;
-    return sqrtf(dx * dx + dy * dy);
+    float d = 1e9f;
+    for (int k = 0; k < mFoci.count; k++)
+    {
+        const float dx = s->mXy.x.ToFloat() - mFoci.x[k], dy = s->mXy.y.ToFloat() - mFoci.y[k];
+        d = std::min(d, sqrtf(dx * dx + dy * dy));
+    }
+    return d;
 }
 
 bool net::engine::ReachArea::Inside(const Sprite* s) const
 {
-    const float dx = s->mXy.x.ToFloat() - mX, dy = s->mXy.y.ToFloat() - mY;
-    return mLocated && dx * dx + dy * dy < mReach * mReach;
+    return mFoci.count && DistanceTo(s) < mReach;
 }
 
 bool net::engine::ReachArea::Beyond(const Sprite* s) const
 {
-    if (!s || !mLocated)
-    {
-        return false;
-    }
-    const float dx = s->mXy.x.ToFloat() - mX, dy = s->mXy.y.ToFloat() - mY;
-    return dx * dx + dy * dy > mReach * mReach;
+    return s && mFoci.count && DistanceTo(s) > mReach;
 }
 
 bool net::engine::IsSpareDriver(const Ped* ped)
