@@ -184,7 +184,7 @@ defaults to C; a profile that still has it on Tab keeps it (saved bindings are n
 round the SCORES key's presses don't reach the game (`port_ScoresKeyInGame`), so Tab shows the board without the horn.
 On a translucent panel: the map's title, the game type and its limit, the round and its time left, the players in the
 game and the server's address (until servers have a name); then a row per player by score: its name in its HUD colour (a square for the cyan, which no font has), then chat,
-IT, dead or ready, its score, its money ("$1010": the money on its HUD, which the original's HUD listed for the other
+IT, dead or ready, its score (a tag game's time IT as 1:23), its money ("$1010": the money on its HUD, which the original's HUD listed for the other
 players; a points game's score is already the money, shown so), frags in a points or tag game, deaths, and the ping for
 the local player only (the others' isn't sent). The columns are laid out from the right by their widest entry, and the
 names cut to what is left. The local row is marked. Under the rows, what the round panel it hides would ask (ready, a vote:

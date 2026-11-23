@@ -310,6 +310,7 @@ struct Scoreboard
     std::string lines[2];
     std::string hint; // under the rows ("": none)
     const char* scoreHeading; // the game type's score
+    bool clock; // the score is seconds, shown m:ss (a tag game's time "it")
     bool money; // a money column after the score; without it the score is the money (a points game)
     bool frags; // a frags column after the score (a points or tag game's)
     std::vector<PlayerRow> rows;

@@ -206,16 +206,17 @@ std::string Ordinal(int n)
     return std::to_string(n) + suffix;
 }
 
+std::string Clock(int seconds)
+{
+    char clock[16];
+    snprintf(clock, sizeof(clock), "%d:%02d", seconds / 60, seconds % 60);
+    return clock;
+}
+
 // The local player's score on the HUD's line: its frags or the time "it" (a points game's is the game's money)
 std::string Score(int score, int gameType)
 {
-    if (gameType == 3)
-    {
-        char clock[16];
-        snprintf(clock, sizeof(clock), "%d:%02d it", score / 60, score % 60);
-        return clock;
-    }
-    return std::to_string(score) + (score == 1 ? " frag" : " frags");
+    return gameType == 3 ? Clock(score) + " it" : std::to_string(score) + (score == 1 ? " frag" : " frags");
 }
 
 std::string Money(int money)
@@ -282,7 +283,7 @@ bool net::engine::DrawScoreboard()
     for (const PlayerRow& row : b.rows)
     {
         size_t c = 0;
-        columns[c++].cells.push_back(!b.money ? Money(row.score) : std::to_string(row.score));
+        columns[c++].cells.push_back(!b.money ? Money(row.score) : b.clock ? Clock(row.score) : std::to_string(row.score));
         if (b.money)
         {
             columns[c++].cells.push_back(Money(row.money));

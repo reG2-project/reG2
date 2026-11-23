@@ -1846,7 +1846,8 @@ void net::Client::ShowScoreboard(const std::vector<engine::PlayerRow>& players, 
                  : vote   ? (pad ? "Vote in the Start menu" : "Vote: Y / N")
                  : unready ? (pad ? "Ready in the Start menu" : "F1: ready")
                            : "";
-    board.scoreHeading = mGameType == 3 ? "It (s)" : mGameType == 2 ? "Points" : "Frags";
+    board.scoreHeading = mGameType == 3 ? "Time IT" : mGameType == 2 ? "Points" : "Frags";
+    board.clock = mGameType == 3;
     board.money = mGameType != 2;
     board.frags = mGameType != 1;
     board.rows = players;
