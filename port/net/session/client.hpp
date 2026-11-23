@@ -158,8 +158,9 @@ class Client
     void WatchChat(); // a chat line typed to its end that starts with '/' goes as a command
     void KeepChatLines(); // the lines players ended, kept over the frame for a while (the game shows them while typed)
     void ShowRound(); // the warmup, countdown, results and an open vote over the frame
-    // The scoreboard over the frame if <shown> (SCORES or the gamepad's Back held, GTA2_NET_SCOREBOARD=1), else hidden
-    void ShowScoreboard(const std::vector<engine::PlayerRow>& players, bool shown);
+    // The scoreboard over the frame if <shown> (SCORES or the gamepad's Back held, the pause menu's PLAYERS <fromMenu>,
+    // GTA2_NET_SCOREBOARD=1), else hidden
+    void ShowScoreboard(const std::vector<engine::PlayerRow>& players, bool shown, bool fromMenu);
     std::string RoundCorner() const;
     void BotRound(); // a bot readies up and votes
     uint32_t BotMapChoice() const; // the map a bot votes for in the results (1-based)

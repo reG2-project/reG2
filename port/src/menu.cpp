@@ -167,11 +167,8 @@ const wchar_t* sRadio;
 // QUIT GAME's choices offered, and why SAVE AND QUIT is greyed, NULL if it is not.
 bool sQuitChoices;
 const wchar_t* sQuitBlocked;
-// A network game's menu (OfferNetwork): its players, the score's heading, READY (1) or NOT READY (2), the open vote.
+// A network game's menu (OfferNetwork): READY (1) or NOT READY (2), the open vote.
 bool sNetwork;
-NetworkPlayer sPlayers[kMaxNetworkPlayers];
-s32 sNumPlayers;
-const wchar_t* sScoreHeading = L"FRAGS";
 s32 sReady;
 wchar_t sVote[kTextLength];
 s32 sColumn; // a Column
@@ -1223,7 +1220,6 @@ void GetLayout(Layout* pLayout)
         f32 y = ListTop() + (sPage == kStatsPage ? sStatRows * kStatStep + kGapStep - kLineStep : 0);
         y += sPage == kTranscriptPage ? Max(sTranscript, kLineStep) + kGapStep - kLineStep : 0;
         y += sPage == kLoadPage ? kLineStep + kGapStep : 0;
-        y += sPage == kPlayersPage ? sNumPlayers * kLineStep + kGapStep : 0;
         y += saves ? (count == 1 ? kTabsStep - kHeadingsStep + kGapStep : kTabsStep) : 0;
         for (s32 i = 0; i < count; i++)
         {
@@ -1511,7 +1507,6 @@ void Open()
     sQuitBlocked = NULL;
     sRadio = NULL;
     sNetwork = false;
-    sNumPlayers = 0;
     sReady = 0;
     sVote[0] = 0;
     sCapturing = -1;
@@ -1591,16 +1586,13 @@ void OpenSaves(const PortSaves::Entry* pEntries, s32 count, const bool* pCities)
     GoTo(kSavesPage);
 }
 
-void OfferNetwork(const NetworkPlayer* pPlayers, s32 count, const wchar_t* pScoreHeading, s32 ready, const wchar_t* pVote)
+void OfferNetwork(s32 ready, const wchar_t* pVote)
 {
     Item items[kMaxItems];
     s32 n = Items(kMainPage, items);
     s32& selected = sSelected[kMainPage];
     const Item was = items[selected < n ? selected : n - 1];
     sNetwork = true;
-    sNumPlayers = count < kMaxNetworkPlayers ? count : kMaxNetworkPlayers;
-    memcpy(sPlayers, pPlayers, sNumPlayers * sizeof(sPlayers[0]));
-    sScoreHeading = pScoreHeading;
     sReady = ready;
     wcsncpy(sVote, pVote ? pVote : L"", kTextLength - 1);
     sVote[kTextLength - 1] = 0;
@@ -1612,6 +1604,11 @@ void OfferNetwork(const NetworkPlayer* pPlayers, s32 count, const wchar_t* pScor
     }
     // A line gone (a vote ended): the one in its place.
     selected = i < n ? i : (selected < n ? selected : n - 1);
+}
+
+bool OnPlayers()
+{
+    return sPage == kPlayersPage;
 }
 
 bool OnLeaveQuestion()
@@ -1900,38 +1897,6 @@ const wchar_t* Title()
     return Translate(sNetwork && sPage == kQuitPage ? L"LEAVE GAME" : kTitles[sPage]);
 }
 
-// PLAYERS: a heading, then a line per player, the local one in red.
-static void DrawPlayers()
-{
-    const s16 font = MenuFont();
-    const f32 kNameX = 80;
-    const f32 kRights[3] = {350, 460, 560};
-    const auto row = [&](wchar_t (*pTexts)[kTextLength], f32 y, bool selected, bool dim) {
-        Text(pTexts[0], kNameX, y, font, selected, dim);
-        for (s32 c = 1; c < 4; c++)
-        {
-            Text(pTexts[c], kRights[c - 1] - Width(pTexts[c], font), y, font, selected, dim);
-        }
-    };
-    wchar_t texts[4][kTextLength];
-    const wchar_t* const headings[4] = {L"PLAYER", sScoreHeading, L"DEATHS", L"PING"};
-    for (s32 c = 0; c < 4; c++)
-    {
-        swprintf(texts[c], L"%ls", Translate(headings[c]));
-    }
-    row(texts, ListTop(), false, true);
-    for (s32 i = 0; i < sNumPlayers; i++)
-    {
-        const NetworkPlayer& player = sPlayers[i];
-        swprintf(texts[0], L"%ls", player.mName);
-        FitText(texts[0], kRights[0] - kNameX - 60);
-        swprintf(texts[1], L"%d", player.mScore);
-        swprintf(texts[2], L"%d", player.mDeaths);
-        swprintf(texts[3], player.mPing < 0 ? L"-" : L"%d", player.mPing);
-        row(texts, ListTop() + (i + 1) * kLineStep, player.mYou, false);
-    }
-}
-
 void Draw(f32 scale, f32 left, f32 top, bool panel)
 {
     sScale = scale;
@@ -1967,10 +1932,6 @@ void Draw(f32 scale, f32 left, f32 top, bool panel)
     {
         const wchar_t* pEmpty = Translate(L"NO MESSAGES YET");
         Text(pEmpty, 320 - Width(pEmpty, normal) / 2, ListTop(), normal, false, true);
-    }
-    if (sPage == kPlayersPage)
-    {
-        DrawPlayers();
     }
     if (sPage == kLoadPage)
     {

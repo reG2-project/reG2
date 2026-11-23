@@ -1,6 +1,6 @@
 // port/net engine (port/docs/netcode.md, "Playing"): a client's scoreboard, over the frame while SCORES or the gamepad's
-// Back is held: the match on a translucent panel, then a row per player with its $ sign, its name in its HUD colour, its
-// scores, the local player's ping and what it is doing.
+// Back is held, or as the pause menu's PLAYERS: the match on a translucent panel, then a row per player with its $ sign,
+// its name in its HUD colour, its scores, the local player's ping and what it is doing.
 #include "internal.hpp"
 #include "Source/Camera.hpp"
 #include "Source/Draw.hpp"
@@ -165,7 +165,8 @@ bool net::engine::DrawScoreboard()
     const Scoreboard& b = *gBoard;
     PortUiCentred centred;
     const s32 headingsY = kTop + 60, rowsY = headingsY + kRowStep;
-    const s32 bottom = rowsY + (s32)b.rows.size() * kRowStep + 6;
+    const s32 hintY = rowsY + (s32)b.rows.size() * kRowStep + 4;
+    const s32 bottom = b.hint.empty() ? hintY + 2 : hintY + kRowStep + 2;
     Fill(kLeft, kTop, kRight, bottom, kPanelColour);
     CentredText(b.title, kTop + 6);
     CentredText(b.lines[0], kTop + 24);
@@ -196,6 +197,10 @@ bool net::engine::DrawScoreboard()
         }
         RightText(std::to_string(row.deaths), kDeathsRight, y);
         RightText(row.ping >= 0 ? std::to_string(row.ping) : std::string("-"), kPingRight, y);
+    }
+    if (!b.hint.empty())
+    {
+        CentredText(b.hint, hintY);
     }
     return true;
 }

@@ -1766,7 +1766,7 @@ void net::Client::ShowRound()
                              : r.voteKind == kVoteMap   ? "change to " + (r.voteArg < mMapTitles.size() ? mMapTitles[r.voteArg] : std::string("a map"))
                                                         : "kick " + engine::PlayerName(r.voteArg);
     const bool mine = mSlot < kRoundSlots && ((r.voteYes | r.voteNo) >> mSlot & 1);
-    // The pause menu's PLAYERS and the scoreboard, by score (the ping is only ours: the others' isn't sent)
+    // The scoreboard, by score (the ping is only ours: the others' isn't sent)
     std::vector<engine::PlayerRow> players;
     for (const ScoreRow& row : rows)
     {
@@ -1781,11 +1781,12 @@ void net::Client::ShowRound()
     if (engine::MenuOpen())
     {
         const bool ready = mSlot < kRoundSlots && (r.ready >> mSlot & 1);
-        engine::OfferMenu(players, mGameType == 3 ? "IT" : mGameType == 2 ? "POINTS" : "FRAGS",
-                          r.phase == kPhaseWarmup && r.minPlayers ? (ready ? 2 : 1) : 0,
+        engine::OfferMenu(r.phase == kPhaseWarmup && r.minPlayers ? (ready ? 2 : 1) : 0,
                           r.voteKind != kVoteNone && !mine ? "Vote to " + what : std::string());
     }
-    ShowScoreboard(players, !hidden && (Env().scoreboard || engine::ScoresHeld()));
+    // Held, or the pause menu's PLAYERS
+    const bool fromMenu = mConnected && !mLeft && engine::MenuOnPlayers();
+    ShowScoreboard(players, fromMenu || (!hidden && (Env().scoreboard || engine::ScoresHeld())), fromMenu);
     if (r.voteKind != kVoteNone && !hidden)
     {
         lines.push_back("");
@@ -1795,7 +1796,7 @@ void net::Client::ShowRound()
     engine::SetNetPanel(lines);
 }
 
-void net::Client::ShowScoreboard(const std::vector<engine::PlayerRow>& players, bool shown)
+void net::Client::ShowScoreboard(const std::vector<engine::PlayerRow>& players, bool shown, bool fromMenu)
 {
     if (!shown)
     {
@@ -1837,6 +1838,14 @@ void net::Client::ShowScoreboard(const std::vector<engine::PlayerRow>& players, 
     // The server's address until servers have a name
     board.lines[1] = std::to_string(players.size()) + " of " + std::to_string(engine::PlayerCount()) + " players   " + mConfig.host + ":" +
                      std::to_string(mConfig.port);
+    // What the round panel it hides would have asked of this player
+    const bool pad = engine::PadMode();
+    const bool unready = r.phase == kPhaseWarmup && r.minPlayers && !(mSlot < kRoundSlots && (r.ready >> mSlot & 1));
+    const bool vote = r.voteKind != kVoteNone && !(mSlot < kRoundSlots && ((r.voteYes | r.voteNo) >> mSlot & 1));
+    board.hint = fromMenu ? (pad ? "B: back" : "Esc: back")
+                 : vote   ? (pad ? "Vote in the Start menu" : "Vote: Y / N")
+                 : unready ? (pad ? "Ready in the Start menu" : "F1: ready")
+                           : "";
     board.scoreHeading = mGameType == 3 ? "It (s)" : mGameType == 2 ? "Points" : "Frags";
     board.frags = mGameType != 1;
     board.rows = players;

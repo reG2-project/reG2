@@ -42,6 +42,7 @@ void SetTickMs(int ms);
 // The client's pause menu (port/src/pause_menu.cpp), over the game going on: Escape opens it, a key while open is its own
 // (with the character it typed), and what was chosen in it is taken once
 bool MenuOpen();
+bool MenuOnPlayers(); // on its PLAYERS page, which the scoreboard is
 void MenuKey(uint32_t dik, uint16_t typed);
 enum MenuChoice
 {
@@ -52,7 +53,7 @@ enum MenuChoice
     kMenuNo,
 };
 MenuChoice TakeMenuChoice();
-// A player as the pause menu's PLAYERS and the scoreboard list it
+// A player as the scoreboard lists it
 struct PlayerRow
 {
     int slot;
@@ -60,8 +61,8 @@ struct PlayerRow
     int score, frags, deaths, ping; // score: the game type's (frags, points, seconds "it"); ping: -1 unknown
     bool you, dead, chatting, ready; // ready: in a warmup
 };
-// What it shows while open: PLAYERS, READY (1) or NOT READY (2) or neither (0), an open vote's question ("": none)
-void OfferMenu(const std::vector<PlayerRow>& players, const char* scoreHeading, int ready, const std::string& vote);
+// What it shows while open: READY (1) or NOT READY (2) or neither (0), an open vote's question ("": none)
+void OfferMenu(int ready, const std::string& vote);
 // The client's round keys on the gamepad: Back held for the scoreboard, and in the results the d-pad and A as the
 // arrows and Enter
 void SetRoundPad(bool results);
@@ -306,6 +307,7 @@ struct Scoreboard
 {
     std::string title;
     std::string lines[2];
+    std::string hint; // under the rows ("": none)
     const char* scoreHeading; // the game type's score
     bool frags; // a frags column after the score (a points or tag game's)
     std::vector<PlayerRow> rows;
