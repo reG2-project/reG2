@@ -370,12 +370,12 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   takes 1 a tick without bleeding (`Ped::ManageBurning`), so only what drops beyond the burn is a hit.
 - **Throws** (`engine/throws.cpp`): the game throws a ped (a blast, a car, a door) on a moving object its char follows
   until the object stops, then lands it by the throw's outcome: back on its feet, knocked down, or dead (a blast at its
-  feet: the flying death). A client's players are thrown only as the snapshots have them (`PortThrownByServer` in
-  `Char::HandleGenericImpact` and `HandleCarImpact`): the player entity carries the object's place and motion and the
-  outcome, a client starts the throw the server has, puts its object where the server's is each snapshot and stops
-  one the server's has ended, and the resimulated ticks fly it on. The client's own blasts and cars are predictions
-  (explosions aren't synced) and its players invulnerable, which gave throws the server never had, a flight that no
-  snapshot moved (the char follows its object, not the place applied), and always the outcome of getting up.
+  feet: the flying death). A client predicts its players' throws as the game makes them, so its own player flies at
+  once, and the snapshots correct them: the player entity carries the object's place and motion and the outcome, a
+  client starts a throw it didn't predict (also on a player lying knocked down; not one it landed in the last 10
+  ticks), puts the object where the server's is, and stops one the server doesn't have at the server's place, landing
+  it back on its feet. Deaths are the server's only: before each tick a client's fatal outcome becomes knocked down
+  (`GuardThrow`), and the server's death (`KillNow`) leaves the dead state that any landing then restores.
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
   server's world. It carries every player, the car each sits in and every train wherever they are, and everything
   within the reach (the interest area, 24 blocks around the client's player's foci as the server has them), each entity the
@@ -466,7 +466,7 @@ or killed it, the car it stole) stay the client's when missing. Groups are rebui
 the client from each ped's leader, keeping only members that are present (the game walks a group's list up to its
 count).
 
-Not synced: objects other than pickups (fires, explosions, projectiles) and the players' throws; the client's own
+Not synced: objects other than pickups (fires, explosions, projectiles); the client's own
 simulation makes them, and rolls them back with the world, but nothing corrects them.
 
 ### Random draws
@@ -727,7 +727,6 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Ped.cpp` | `gPortKeepWantedPoints` | a client keeps the server's wanted points with its police off |
 | `ScriptThread.cpp` | `gPortScriptCommandRuns` | a client runs the level start's look and sound commands, and steps over the rest |
 | `Car.cpp` | `gPortCarMayExplode` | a client's car the server sends blows up when a snapshot says the server's did, not on its own prediction |
-| `char.cpp` | `PortThrownByServer()` | a client's players are thrown, knocked down or run over only as its snapshots have them (`engine/throws.cpp`) |
 | `Car.cpp` | `Car::TryHonkHorn` | a train's lead without a driver (a player got out of a carriage that stood still) doesn't read it |
 | `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`), `gPortChatChar` | the chat types the keyboard layout's characters; a server, those its clients typed |
 | `Hud.cpp` | `gPortServerKillNotices` | a client's kill notices are the server's deaths only |
