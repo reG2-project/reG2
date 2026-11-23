@@ -113,6 +113,12 @@ inline bool PortReactsInvulnerable(s32 invulnerability, bool player)
 // machine shows its message and plays the voice. NULL: the user's player's, as the original; in a network game the
 // server sends each player its own and a client shows only those
 extern bool (*gPortScoreBonusHook)(Player* pPlayer, s32 voice);
+// Asked as a player is wasted (Player::Wasted), with the player who killed it (NULL: none): the ticks its death's
+// countdown runs longer. NULL but in a network game, whose kill cam then shows the killer
+extern s32 (*gPortKillCamTicks)(Player* pPlayer, Player* pKiller);
+// The ped a wasted or busted player's view follows (Player::Service, camera mode 2) in place of its corpse or arrested
+// self, pAuxPed. NULL but in a network game: the killer's during the kill cam
+extern Ped* (*gPortDeathViewPed)(Player* pPlayer, Ped* pAuxPed);
 // A network client's round keys on the gamepad (port_NetRoundPad, compat/src/pad.cpp): 0 none (no network game), 1
 // Back shows the scoreboard, 2 the round's results: also the d-pad and A as the arrows and Enter (a map)
 extern int gPortNetRoundPad;

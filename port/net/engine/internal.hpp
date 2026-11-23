@@ -210,6 +210,10 @@ Car* RefCar(int32_t ref);
 Sprite* CharSprite(const Ped* ped); // its char's (on foot), NULL without one
 Sprite* PedSprite(Ped* ped); // its car's when it is in one
 Ped* ViewedPed(Player* p); // the ped its view camera follows (PlayerFoci)
+s32 KillCamTicks(Player* p, Player* killer); // gPortKillCamTicks
+// The killer's during the kill cam (coming: from the death on, the kill cam to come), else auxPed
+Ped* DeathViewPed(Player* p, Ped* auxPed, bool coming = false);
+Ped* DeathCamera(Player* p, Ped* auxPed); // gPortDeathViewPed
 EntityState Entity(uint32_t id, uint8_t type);
 void PutPosition(EntityState& e, const Sprite* s); // fields 0..3
 bool Near(const Sprite* s, int32_t x, int32_t y, int32_t radius); // within <radius> (raw) on both axes

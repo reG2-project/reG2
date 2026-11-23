@@ -438,6 +438,14 @@ corpse or its arrested self (`Player::mAuxPed`, camera mode 2) until the death's
 both, so the world around the death goes on in the view and the respawn's surroundings are there when the view jumps
 to them. The client's reach is the same foci of its own prediction.
 
+**The kill cam** (`engine::KillCamTicks`, `DeathCamera`; `gPortKillCamTicks`, `gPortDeathViewPed` in `Player.cpp`): a
+player wasted by another player sees its corpse zoomed in with WASTED for the original's 70 ticks, then its killer for
+90 more (the killer's own view: its corpse if it died meanwhile), then respawns. Its view cuts to a killer more than 6
+blocks off, as the camera's own follow would cross the map slowly. Both ends run it from the game's own death (the
+killer as `Player::Wasted` finds it, the client's from the credited death), so the respawn comes on the same tick; the
+killer is in the rollback set, and from the death on the interest covers it too, so its surroundings are there at the
+cut. A death by anything else (the police, a fall, its own rocket) and a busted player respawn as in the original.
+
 A ped's AI state is applied only while it is on foot on both sides (a driver in the same car gets its objectives but
 not its states), its states only when plain (walking, running, standing) on both sides, and all or nothing: if a
 reference its objective acts on (its target ped, internal target, car thief, the car it heads for, enters or flees in)
@@ -714,6 +722,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Hud.cpp` | `PortDrawPlayerNames` (`port/src/player_names.cpp`) | the names over the other players: centred over the ped (its car in one) where the frame draws it, by the drawn camera, at three quarters of the HUD's text size. The original's are placed by the game camera, which the frame doesn't draw between steps, and by the HUD's layout, whose edge anchors move them on wide screens |
 | `Hud.cpp` | `PortHudTextPalette` (`port/src/player_looks.hpp`) | the names over the players and the tag times in the port's looks' colours (the fonts have 9 remaps) |
 | `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
+| `Player.cpp` | `gPortKillCamTicks`, `gPortDeathViewPed` | the kill cam: a player wasted by another has a longer death countdown (`Player::Wasted`), whose end its view spends on the killer (`Player::Service`, camera mode 2) |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
 | `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
 | `Pool.hpp`, `Car.cpp`, `Char_Pool.cpp`, `Game.cpp` | `PortRand::Scope` (`port/src/rand/owner.hpp`) | who a random draw belongs to |
@@ -818,7 +827,7 @@ off by default:
 | `GTA2_NET_JERKLOG=1\|2` | both | how jerky what is shown moves (2: and each jump), and how far its way is from its facing and how fast it turns (on a client also where the newest snapshots have the two agree) |
 | `GTA2_NET_MARKER=1` | client | a square where the newest snapshot has the local player |
 | `GTA2_NET_SFXLOG=1` (client), `=<slot>` (server) | both | every sample the mixer starts, by tick, what made it and where; a server with it opens its audio device and listens at that slot's player (to count what a client misses or plays twice) |
-| `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death (and the cars around its view) and the server's hits on players, the sound's channels and the car radio |
+| `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death (and the cars around its view, its camera) and the server's hits on players, the sound's channels and the car radio |
 | `GTA2_NET_CARDIFF=1` | client | where the prediction of the local player's car differs from the snapshot |
 | `GTA2_NET_GANGLOG=1` | both | player 0's group every 15 ticks, by the server's ids |
 | `GTA2_NET_STACKLOG=1` | both | two cars in one place (under 0.4 blocks apart), once per pair: a car the client kept that the server dropped |

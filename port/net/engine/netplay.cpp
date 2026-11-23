@@ -94,6 +94,8 @@ void net::engine::StartNetworkGame(const NetworkGame& game)
     gPortWorldStill = WorldStill;
     gPortTagTimeCounts = true;
     gPortScoreBonusHook = net::engine::ScoreBonus;
+    gPortKillCamTicks = KillCamTicks;
+    gPortDeathViewPed = DeathCamera;
     InstallStarts(true);
     gNetPlay.mPlayerIdx = game.localPlayer;
     gNetPlay.mN2.mPlayersCount = 2; // > 1: the game calls SendToAll every frame
@@ -135,6 +137,8 @@ void net::engine::StopNetworkGame()
     gPortTagTimeCounts = false;
     gPortChatChar = NULL;
     gPortScoreBonusHook = NULL;
+    gPortKillCamTicks = NULL;
+    gPortDeathViewPed = NULL;
     InstallStarts(false);
     gNetPlay.mPlayerIdx = 0;
     gNetPlay.mN2.mPlayersCount = 0;

@@ -1,6 +1,7 @@
 #include "Player.hpp"
 #if defined(GTA2_PORT)
-// Port: the autosave's restore, TWIN STICK and the network players' HUD colours.
+// Port: the autosave's restore, TWIN STICK, the network players' HUD colours and the network game's kill cam.
+#include "../port/src/net_hooks.hpp"
 #include "../port/src/saves.hpp"
 #include "../port/src/twin_stick.hpp"
 #include "../port/src/player_looks.hpp"
@@ -1794,6 +1795,10 @@ void Player::Wasted()
         mWastedOrBusted = true;
         mDeathCountdown = 70;
 #if defined(GTA2_PORT)
+        if (gPortKillCamTicks)
+        {
+            mDeathCountdown += (s16)gPortKillCamTicks(this, bStartNetworkGame ? player_killer : NULL);
+        }
         if (mLives.get_value() > 1 || LastLifeKept())
 #else
         if (mLives.get_value() > 1)
@@ -2152,7 +2157,11 @@ void Player::Service()
                 {
                     Player::HandleControls(this->mAuxPed);
                 }
+#if defined(GTA2_PORT)
+                mAuxGameCamera.UpdateFollowPedCamera(gPortDeathViewPed ? gPortDeathViewPed(this, this->mAuxPed) : this->mAuxPed);
+#else
                 mAuxGameCamera.UpdateFollowPedCamera(this->mAuxPed);
+#endif
             }
             mGameCamera.UpdateFollowPedCamera(this->mPlayerPed);
             mGameCamera.Update();

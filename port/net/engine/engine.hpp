@@ -155,11 +155,12 @@ bool PlayerPosition(int player, float* pX, float* pY);
 bool PlayerPose(int player, float* pX, float* pY, float* pZ, int* pRot); // and its height and heading (0..1439)
 bool PlayerWasted(int player); // dead and waiting to respawn (Player::mWastedOrBusted)
 // Where a player's snapshots are centred, in blocks: what its view follows (its corpse or arrested self while wasted or
-// busted, Player::Update's camera mode 2), then its own ped when that is another (respawned at its restart zone)
+// busted, Player::Service's camera mode 2; its killer in the kill cam), the killer its kill cam will follow, and its own
+// ped (respawned at its restart zone), each when another
 struct Foci
 {
     int count = 0;
-    float x[2] = {}, y[2] = {};
+    float x[3] = {}, y[3] = {};
 };
 Foci PlayerFoci(int player);
 bool PlayerInCar(int player); // in this game

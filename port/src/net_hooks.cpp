@@ -35,4 +35,6 @@ bool gPortTagTimeCounts;
 u16 (*gPortChatChar)(Player*, s32);
 bool gPortProtectsPlayers;
 bool (*gPortScoreBonusHook)(Player* pPlayer, s32 voice);
+s32 (*gPortKillCamTicks)(Player* pPlayer, Player* pKiller);
+Ped* (*gPortDeathViewPed)(Player* pPlayer, Ped* pAuxPed);
 int gPortNetRoundPad;

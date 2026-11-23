@@ -52,6 +52,12 @@ struct
     bool mKnown[MAX_PLAYERS];
 } gNetDeaths;
 
+// The kill cam: after the original's 70 ticks on its corpse, a player killed by another sees its killer this long
+// before it respawns. The killer's slot + 1 (0: none) per player, set as it is wasted, in the rollback set
+const int kKillCamTicks = 90;
+const float kKillCamCutBlocks = 6.0f;
+uint8_t gKillCamKiller[MAX_PLAYERS];
+
 // The scoring bonuses (gPortScoreBonusHook): a server counts each player's and sends the last one's voice line, a client
 // shows its own player's once each, as the server has them (-1: the count not seen yet, none shown for it)
 uint8_t gBonusCount[MAX_PLAYERS];
@@ -665,17 +671,64 @@ bool net::engine::PlayerPosition(int player, float* pX, float* pY)
 
 Ped* net::engine::ViewedPed(Player* p)
 {
-    return p->mCameraMode == 2 && p->mAuxPed ? p->mAuxPed : p->mPlayerPed;
+    return p->mCameraMode == 2 && p->mAuxPed ? DeathViewPed(p, p->mAuxPed) : p->mPlayerPed;
+}
+
+s32 net::engine::KillCamTicks(Player* p, Player* killer)
+{
+    const bool cam = killer && killer != p && p->get_idx() < MAX_PLAYERS && killer->get_idx() < MAX_PLAYERS;
+    if (p->get_idx() < MAX_PLAYERS)
+    {
+        gKillCamKiller[p->get_idx()] = cam ? (uint8_t)(killer->get_idx() + 1) : 0;
+    }
+    return cam ? kKillCamTicks : 0;
+}
+
+// The killer's own view, not its kill cam: its corpse when it died meanwhile
+Ped* net::engine::DeathViewPed(Player* p, Ped* auxPed, bool coming)
+{
+    const int killer = p->get_idx() < MAX_PLAYERS ? gKillCamKiller[p->get_idx()] : 0;
+    const bool on = !p->mBusted && p->mWastedOrBusted && (coming || p->mDeathCountdown <= kKillCamTicks);
+    Player* k = killer && on ? GetPlayer(killer - 1) : NULL;
+    Ped* ped = k ? (k->mCameraMode == 2 && k->mAuxPed ? k->mAuxPed : k->mPlayerPed) : NULL;
+    return ped && PedSprite(ped) ? ped : auxPed;
+}
+
+// The kill cam's start cuts to a killer out of the view: the camera's own follow would cross the map slowly, through
+// what no snapshot carries
+Ped* net::engine::DeathCamera(Player* p, Ped* auxPed)
+{
+    Ped* ped = DeathViewPed(p, auxPed);
+    Camera& c = p->mAuxGameCamera;
+    if (ped != auxPed && p->mDeathCountdown == kKillCamTicks)
+    {
+        const Sprite* s = PedSprite(ped);
+        const float dx = s->mXy.x.ToFloat() - c.mCurPos.mX.ToFloat(), dy = s->mXy.y.ToFloat() - c.mCurPos.mY.ToFloat();
+        if (dx * dx + dy * dy > kKillCamCutBlocks * kKillCamCutBlocks)
+        {
+            c.UpdateFollowPedCamera(ped);
+            c.CommitPendingTarget();
+            c.ResetCameraSmoothing();
+        }
+    }
+    return ped;
+}
+
+void net::engine::KillCam_Memory(unsigned char** ppAddr, size_t* pSize)
+{
+    *ppAddr = (unsigned char*)gKillCamKiller;
+    *pSize = sizeof(gKillCamKiller);
 }
 
 net::engine::Foci net::engine::PlayerFoci(int player)
 {
     Foci f;
     Player* p = GetPlayer(player);
-    Ped* const peds[2] = {p ? ViewedPed(p) : NULL, p ? p->mPlayerPed : NULL};
-    for (int k = 0; k < 2; k++)
+    Ped* const viewed = p ? ViewedPed(p) : NULL;
+    Ped* const peds[3] = {viewed, viewed && p->mCameraMode == 2 ? DeathViewPed(p, NULL, true) : NULL, p ? p->mPlayerPed : NULL};
+    for (int k = 0; k < 3; k++)
     {
-        Sprite* s = peds[k] && (k == 0 || peds[1] != peds[0]) ? PedSprite(peds[k]) : NULL;
+        Sprite* s = peds[k] && (k == 0 || (peds[k] != peds[0] && (k < 2 || peds[k] != peds[1]))) ? PedSprite(peds[k]) : NULL;
         if (s)
         {
             f.x[f.count] = s->mXy.x.ToFloat();
