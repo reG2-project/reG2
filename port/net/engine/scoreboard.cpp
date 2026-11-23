@@ -31,6 +31,8 @@ const u32 kPanelColour = 0xB0000000, kYouColour = 0x30FFFFFF;
 const s32 kHalfAlpha = 16; // of 31 (CalcQuadFlags)
 // The text font's '2' has blank columns on its left: drawn this much further left, it is spaced as the other digits
 const s32 kTwoTrim = 4;
+// A line's capitals span y + 6 to y + 17 (the font's glyphs have blank rows on top); its descenders reach y + 22
+const s32 kTextMiddle = 12;
 // The HUD's top left, where the original listed every other player
 const s32 kStandingsX = 8, kStandingsY = 6, kStandingsStep = 18, kLeaderNameWidth = 100;
 
@@ -254,7 +256,7 @@ bool net::engine::DrawScoreboard()
         const s32 y = rowsY + (s32)i * kRowStep;
         if (row.you)
         {
-            Fill(kLeft + 4, y - 1, kRight - 4, y + kRowStep - 1, kYouColour);
+            Fill(kLeft + 4, y + kTextMiddle - kRowStep / 2, kRight - 4, y + kTextMiddle + kRowStep / 2, kYouColour);
         }
         const s32 nameRight = Name(row, y);
         Text(Status(row), nameRight + 10, y);
