@@ -3,9 +3,21 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <random>
 
 const char* const net::kWarmupNotice = "Warmup: F1 ready, F10 chat, Esc menu";
+const char* const net::kVoteKeys = " (Y / N)";
+
+std::string net::PadNotice(const std::string& text)
+{
+    const size_t n = strlen(kVoteKeys);
+    if (text == kWarmupNotice)
+    {
+        return "Warmup: ready in the Start menu";
+    }
+    return text.size() > n && text.compare(text.size() - n, n, kVoteKeys) == 0 ? text.substr(0, text.size() - n) + " (Start menu)" : text;
+}
 
 namespace
 {
@@ -512,7 +524,7 @@ void net::RoundFlow::OpenVote(uint32_t tick, int slot, VoteKind kind, int arg, c
     mVoteEnd = tick + (uint32_t)(mRules.voteSec * tps);
     mState.voteLeft = (uint8_t)mRules.voteSec;
     const std::string what = kind == kVoteStart ? "start the round" : kind == kVoteMap ? "change to " + Title(arg) : "kick " + players[arg].name;
-    out.notices.push_back({-1, players[slot].name + " calls a vote: " + what + " (Y / N)"});
+    out.notices.push_back({-1, players[slot].name + " calls a vote: " + what + kVoteKeys});
     printf("net: round flow: vote %d (%d) by player %d\n", (int)kind, arg, slot);
     DecideVote(tick, players, out);
 }

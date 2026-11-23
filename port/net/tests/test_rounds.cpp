@@ -325,6 +325,17 @@ int main()
         CHECK(net::CompleteCommand("hello", maps, names, options) == "hello");
         CHECK(net::CompleteCommand("/ready now", maps, names, options) == "/ready now");
     }
+    // The notices naming keys, for a player on the gamepad: the warmup's, a vote's; the others as they are
+    {
+        net::RoundFlow f;
+        f.Start(rules, maps, 0);
+        auto players = Players(2);
+        net::RoundActions a;
+        f.Command(1, 0, "/start", players, a);
+        CHECK(net::PadNotice(a.notices.back().second) == "P0 calls a vote: start the round (Start menu)");
+        CHECK(net::PadNotice(net::kWarmupNotice) == "Warmup: ready in the Start menu");
+        CHECK(net::PadNotice("Round 2: go") == "Round 2: go");
+    }
     printf("round flow tests passed\n");
     return 0;
 }

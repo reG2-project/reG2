@@ -926,8 +926,7 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
                 std::string text;
                 if (ReadText(r, text))
                 {
-                    const bool padWarmup = text == kWarmupNotice && engine::PadMode();
-                    engine::ShowHudMessage(padWarmup ? "Warmup: ready in the Start menu" : text.c_str());
+                    engine::ShowHudMessage(engine::PadMode() ? PadNotice(text).c_str() : text.c_str());
                     printf("net: frame %u, notice: %s\n", mFrame, Printable(text).c_str());
                 }
             }
@@ -1725,7 +1724,7 @@ void net::Client::ShowRound()
         {
             lines.push_back("You are ready");
         }
-        lines.push_back(pad ? "Start menu: ready   Back: scores" : "F1 ready   F10 chat   Esc menu");
+        lines.push_back(pad ? "Start: ready   Back: scores" : "F1 ready   F10 chat   Esc menu");
     }
     else if (r.phase == kPhaseResults)
     {
@@ -1791,7 +1790,7 @@ void net::Client::ShowRound()
     {
         lines.push_back("");
         lines.push_back("Vote: " + what + "   " + std::to_string(bits(r.voteYes)) + " yes, " + std::to_string(bits(r.voteNo)) + " no   " +
-                        std::to_string(r.voteLeft) + " s" + (mine ? "" : pad ? "   Start menu: vote" : "   Y / N"));
+                        std::to_string(r.voteLeft) + " s" + (mine ? "" : pad ? "   Start: vote" : "   Y / N"));
     }
     engine::SetNetPanel(lines);
 }
