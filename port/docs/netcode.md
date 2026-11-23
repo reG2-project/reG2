@@ -39,7 +39,7 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 | Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players N` (1-10, 10: every map's slots), `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
 | Round flow | `--minplayers N` (2), `--warmup s` (60), `--results s` (15), `--votes start,map,kick` (or `none`), `--rounds on\|off` |
 | Arena | `--arena brain,...` (bots on the server itself), `--ticks N` (the result printed and the server ended at tick N), `--seed N` |
-| Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` |
+| Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` (a client's recording, or a server's: that server again, "Recordings") |
 | Either end | `--lag ms`, `--jitter ms`, `--loss %`, `--lossburst N`, `--spike ms:on:every`: a link conditioner on this end's sends (losses in bursts of N on average; ms more delay for `on` s every `every` s); `--mtu N`: the link's MTU (IP packets, 1280 by default, which fits the VPNs people play over: Tailscale 1280, WireGuard 1420, Hamachi 1404; 1428 the most) |
 | Any | `--data <folder>` (the game folder, or its `data/`: else `GTA2_DIR`...), `--help` |
 
@@ -554,6 +554,21 @@ about 2 s, the same every time. **F12, or the key under Esc, marks a moment** in
 `net: mark <n> at frame <f>`, so a bug seen in play is "the last session, mark 2". A recording replays only on a build
 of the same protocol (its welcome's version): another one's is refused with both numbers.
 
+**A server records its session too** (`session/recording.cpp`, `ServerRecorder`), to `recordings/server-<n>.rec` next to
+its data (the newest 10, each stopped at 200 MB; `GTA2_NET_RECORD=<file>` elsewhere, `off` none; a server that only
+plays its own bots, `--arena`, records only with `GTA2_NET_RECORD`). Its world is a function of what it takes in, so the
+recording is that: its command line, its `GTA2_NET_*` switches and the secret its session number and tokens are drawn
+from, then per frame the transport events it took (hellos, commands, chat and votes, connects and disconnects; the
+pings answered between frames are left out) and a checksum of its world after the frame (every entity's fields, as the
+snapshots have them). About 115 KB a minute with two players (12 bytes a tick, and some 50 KB a minute per player: a command packet a tick), 0.5 MB with ten, so 200 MB is six hours of a full server. `--replay <file>` sees a server's
+recording and plays that server again without the network, headless and as fast as it runs (two minutes in 4 s), with its command line and
+its switches (a switch set where it replays wins, so a log or a dump can be added after the fact); the stretches the
+server stood still with nobody connected aren't in it. It checks the world against the recording's at every tick and
+ends with `net: replayed <n> ticks: the world matches the recording's at every tick`, or the first tick that differs
+(exit code 1). `GTA2_NET_DUMPWORLD=<tick>[,<tick>...]` prints the server's world at those ticks (each entity's type,
+id and fields, by the snapshots' ids), live or in a replay, to set beside a client's replay by hand. The recording holds
+the secret the reconnect tokens come from: keep it as private as the server.
+
 ## Security
 
 What a network game trusts, and what it doesn't:
@@ -726,7 +741,8 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
 
 - **arena**: 24 bot matches of 5 minutes on the server alone (three maps, every brain, random seeds): none may crash.
 - **live**: a server and two bot clients at 100 ms, jitter and 2% loss, police on, with the grid check: no crash and
-  no `net: CHECK` line. Prints the corrections and the comparison check's worst fields.
+  no `net: CHECK` line, and the server's recording replays to the same world at every tick. Prints the corrections and
+  the comparison check's worst fields.
 - **churn**: two bot clients stay while two others join and leave four times (stopped by SIGTERM and Ctrl-C): no
   crash, no `CHECK` line, nobody turned away as the server being full.
 - **maps**: a three-map rotation, 15 s rounds at 4 times the clock: both clients follow every change.
@@ -776,7 +792,8 @@ off by default:
 
 | Variable | Where | Effect |
 |---|---|---|
-| `GTA2_NET_RECORD=<file>\|off` | client | the recording's file (default `recordings/session-<n>.rec`) |
+| `GTA2_NET_RECORD=<file>\|off` | both | the recording's file (default `recordings/session-<n>.rec`, a server's `recordings/server-<n>.rec`) |
+| `GTA2_NET_DUMPWORLD=<tick>[,<tick>...]` | server | every entity of the world at those ticks, with its fields (live or in a replay) |
 | `GTA2_NET_REPLAYON=<frames>` | replay | the game runs on that many frames after the recording ends, nothing arriving |
 | `GTA2_NET_STATS=1` | client | the connection beside the ping, over the last second: the snapshots lost (the server sends one a tick), received per second, the ticks the game runs ahead of the newest, and the ticks resimulated per rollback |
 | `GTA2_NET_NOFORWARD=1` | client | other players predicted by their repeated input only, not the forwarded controls |
