@@ -22,11 +22,13 @@ std::unique_ptr<net::engine::Scoreboard> gBoard;
 // In the HUD's 640x480 layout, centred on wide screens as one group (PortUiCentred)
 const s32 kLeft = 40, kRight = 600, kTop = 96;
 const s32 kRowStep = 18;
-const s32 kHeadX = 58, kNameX = 70, kNameRight = 226, kStatusX = 232;
+const s32 kHeadX = kLeft + 22, kNameX = kLeft + 34, kNameWidth = 150;
 // The score's right edge, or the frags' when a points or tag game shows them after its score
 const s32 kScoreRight = 450, kPointsRight = 370, kDeathsRight = 530, kPingRight = 588;
 const u32 kPanelColour = 0xB0000000, kYouColour = 0x30FFFFFF;
 const s32 kHalfAlpha = 16; // of 31 (CalcQuadFlags)
+// The text font's '2' has blank columns on its left: drawn this much further left, it is spaced as the other digits
+const s32 kTwoTrim = 4;
 
 void Widen(const std::string& text, wchar_t* out, size_t size)
 {
@@ -38,9 +40,14 @@ void Widen(const std::string& text, wchar_t* out, size_t size)
     out[n] = 0;
 }
 
-s32 Width(wchar_t* text)
+s32 Width(const wchar_t* text)
 {
-    return Frontend::GetMaxTextWidth(text, gStyleTextFont);
+    s32 twos = 0;
+    for (size_t i = 0; text[i]; i++)
+    {
+        twos += text[i] == L'2';
+    }
+    return Frontend::GetMaxTextWidth(const_cast<wchar_t*>(text), gStyleTextFont) - twos * kTwoTrim;
 }
 
 // <text> cut until it fits <w> (no wcslen: the port has -fshort-wchar)
@@ -55,6 +62,59 @@ void Fit(wchar_t* text, s32 w)
     {
         text[n - 1] = 0;
     }
+}
+
+// <text> at x, y of the layout, placed as the layout's <anchor> x is (PortUiX: the whole line keeps one anchor), in a
+// font remap (-1: none), each '2' pulled left by kTwoTrim
+void Draw(const wchar_t* text, s32 anchor, s32 x, s32 y, s32 remap = -1, s32 alpha = 0)
+{
+    const Fix16 scale = gViewCamera->mUiScale;
+    const Fix16 left = PortUiX(Fix16(anchor)) + Fix16(x - anchor) * scale;
+    const Fix16 top = PortUiY(Fix16(y));
+    const s32 type = remap >= 0 ? palette_types_enum::font_remaps_8 : palette_types_enum::sprites_2;
+    wchar_t piece[96];
+    size_t n = 0;
+    s32 pieceX = 0;
+    for (size_t i = 0;; i++)
+    {
+        if (n && (!text[i] || text[i] == L'2' || n + 1 == sizeof(piece) / sizeof(piece[0])))
+        {
+            piece[n] = 0;
+            DrawString(piece, left + Fix16(pieceX) * scale, top, gStyleTextFont, scale, type, remap >= 0 ? (u16)remap : 0, alpha ? 1 : 0,
+                       (u8)alpha);
+            pieceX += Width(piece) + (piece[0] == L'2' ? kTwoTrim : 0);
+            n = 0;
+        }
+        if (!text[i])
+        {
+            break;
+        }
+        pieceX -= n == 0 && text[i] == L'2' ? kTwoTrim : 0;
+        piece[n++] = text[i];
+    }
+}
+
+void Text(const std::string& text, s32 x, s32 y)
+{
+    wchar_t w[96];
+    Widen(text, w, sizeof(w) / sizeof(w[0]));
+    Draw(w, x, x, y);
+}
+
+void RightText(const std::string& text, s32 right, s32 y)
+{
+    wchar_t w[32];
+    Widen(text, w, sizeof(w) / sizeof(w[0]));
+    Draw(w, right, right - Width(w), y);
+}
+
+void CentredText(const std::string& text, s32 y)
+{
+    wchar_t w[96];
+    Widen(text, w, sizeof(w) / sizeof(w[0]));
+    Fit(w, kRight - kLeft - 16);
+    const s32 x = (kLeft + kRight - Width(w)) / 2;
+    Draw(w, x, x, y);
 }
 
 // A translucent rectangle of the layout
@@ -76,44 +136,28 @@ void Fill(s32 left, s32 top, s32 right, s32 bottom, u32 colour)
     pgbh_DrawQuad(kBlendAlpha | kVertexDiffuse, NULL, verts, 255);
 }
 
-void Text(const std::string& text, s32 x, s32 y)
+// A player's name colour: its HUD colour's font remap, but white for the purple one, too dark to read on the panel
+s32 NameRemap(int slot)
 {
-    wchar_t w[96];
-    Widen(text, w, sizeof(w) / sizeof(w[0]));
-    DrawStringScaled(w, x, y, gStyleTextFont);
+    Player* p = net::engine::GetPlayer(slot);
+    const s32 remap = p ? PortFontRemap(p->mHudPaletteType, p->mHudPalette) : -1;
+    const s32 kDarkPurple = 1;
+    return remap == kDarkPurple ? -1 : remap;
 }
 
-void RightText(const std::string& text, s32 right, s32 y)
-{
-    wchar_t w[32];
-    Widen(text, w, sizeof(w) / sizeof(w[0]));
-    DrawStringScaled(w, right - Width(w), y, gStyleTextFont);
-}
-
-void CentredText(const std::string& text, s32 y)
-{
-    wchar_t w[96];
-    Widen(text, w, sizeof(w) / sizeof(w[0]));
-    Fit(w, kRight - kLeft - 16);
-    DrawStringScaled(w, (kLeft + kRight - Width(w)) / 2, y, gStyleTextFont);
-}
-
-// The player's $ sign and name in its HUD colour, half transparent while dead
-void Name(const net::engine::PlayerRow& row, s32 y)
+// The player's $ sign in its HUD colour and its name, half transparent while dead; the name's right end
+s32 Name(const net::engine::PlayerRow& row, s32 y)
 {
     wchar_t w[24];
     Widen(row.name, w, sizeof(w) / sizeof(w[0]));
-    Fit(w, kNameRight - kNameX);
-    Player* p = net::engine::GetPlayer(row.slot);
-    const s32 remap = p ? PortFontRemap(p->mHudPaletteType, p->mHudPalette) : -1;
-    const s32 type = remap >= 0 ? palette_types_enum::font_remaps_8 : palette_types_enum::sprites_2;
-    const u16 palette = remap >= 0 ? (u16)remap : 0;
-    DrawStringScaledPalette(w, kNameX, y, gStyleTextFont, type, palette, row.dead ? 1 : 0, row.dead ? kHalfAlpha : 0);
-    if (p)
+    Fit(w, kNameWidth);
+    Draw(w, kNameX, kNameX, y, NameRemap(row.slot), row.dead ? kHalfAlpha : 0);
+    if (Player* p = net::engine::GetPlayer(row.slot))
     {
         DrawFigureScaled(sprite_types_enum::user_6, 16, kHeadX, y + 9, Ang16(0), p->mHudPaletteType, p->mHudPalette, row.dead ? 1 : 0,
                          row.dead ? kHalfAlpha : 0);
     }
+    return kNameX + Width(w);
 }
 
 const char* Status(const net::engine::PlayerRow& row)
@@ -182,8 +226,8 @@ bool net::engine::DrawScoreboard()
         {
             Fill(kLeft + 4, y - 1, kRight - 4, y + kRowStep - 1, kYouColour);
         }
-        Name(row, y);
-        Text(Status(row), kStatusX, y);
+        const s32 nameRight = Name(row, y);
+        Text(Status(row), nameRight + 10, y);
         RightText(std::to_string(row.score), scoreRight, y);
         if (b.frags)
         {
