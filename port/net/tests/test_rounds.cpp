@@ -287,7 +287,7 @@ int main()
         f.Renumber({0, 1, -1});
         CHECK(f.State().voteKind == net::kVoteNone && !f.State().ready && !f.State().voteYes && !f.State().voteNo);
     }
-    // Off (an arena): the round from the start, the frag limit starts the next at once
+    // Off (an arena): the round from the start, the frag limit starts the next at once with bots only
     {
         net::RoundRules off = rules;
         off.enabled = false;
@@ -295,10 +295,40 @@ int main()
         f.Start(off, maps, 0);
         auto players = Players(2);
         players[0].alwaysReady = players[1].alwaysReady = true;
+        players[0].voter = players[1].voter = false;
         CHECK(f.State().phase == net::kPhasePlaying);
         players[0].score = 3;
         net::RoundActions a = f.Tick(1, players);
         CHECK(a.newRound && f.State().phase == net::kPhasePlaying && f.State().number == 2);
+    }
+    // Off with a person in (bots beside a player): the full results, its map vote, then a fresh game and its countdown
+    {
+        net::RoundRules off = rules;
+        off.enabled = false;
+        off.resultsSec = 15;
+        net::RoundFlow f;
+        f.Start(off, maps, 0);
+        auto players = Players(3);
+        players[1].alwaysReady = players[2].alwaysReady = true;
+        players[1].voter = players[2].voter = false;
+        players[1].score = 3;
+        uint32_t tick = 1;
+        net::RoundActions a = f.Tick(tick, players);
+        CHECK(!a.newRound && a.changeMap < 0 && f.State().phase == net::kPhaseResults && f.State().winner == 2);
+        f.Command(++tick, 0, "/map 2", players, a);
+        CHECK(f.State().mapChoice[0] == 2);
+        players[1].score = 0;
+        const uint32_t end = 1 + 15 * kTps; // the results came at tick 1
+        for (; tick < end; tick++)
+        {
+            a = f.Tick(tick, players);
+            CHECK(a.changeMap < 0 && f.State().phase == net::kPhaseResults);
+        }
+        a = f.Tick(end, players);
+        CHECK(a.changeMap == 1 && f.State().phase == net::kPhaseCountdown);
+        f.NewGame(tick = end + 1, 1, players);
+        tick = RunTo(f, tick, net::kPhasePlaying, players, 10 * kTps);
+        CHECK(f.State().number == 2);
     }
     // Votes off on the server
     {

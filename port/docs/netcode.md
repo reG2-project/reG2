@@ -250,8 +250,10 @@ voting counts as no; the caller votes yes); Y or N while it shows (the keys that
 yes, or the pause menu's VOTE YES and VOTE NO. On a gamepad the warmup's and the vote's hints and notices point to the
 Start menu (`PadNotice`). `--votes` sets which are allowed.
 
-With `--rounds off` (the default with `--arena`) the round starts at once and the next follows its end directly, in
-the same game (everyone respawned with no score: `engine::NewRound`).
+With `--rounds off` (the default with `--arena`) the round starts at once, with no warmup. With bots only, the next
+follows its end directly, in the same game (everyone respawned with no score: `engine::NewRound`) or on the rotation's
+next map; with a person in, a round's end is the round flow's: the results, then the next round's fresh game and its
+countdown.
 The game's own end of a network game (its frag and time limits) can't be come back from on a dedicated server, so the
 game gets neither and the server ends rounds itself. A map change ends the game on the server and every client and
 starts the next at once: `winmain.cpp` asks the netcode (`gPortNextNetworkGame`) instead of going to the frontend.

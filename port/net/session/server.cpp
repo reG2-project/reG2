@@ -1208,9 +1208,9 @@ void net::Server::ChangeToMap(int map)
             mTransport->Send(mSlots[i].peer, kChannelReliable, w.Data().data(), w.ByteCount(), true);
         }
     }
-    // The round flow showed the results already: half a second for the clients to hear of it. Without it (an arena's
-    // rotation) the pause shows the winner
-    engine::ChangeMap(m.gmp, m.sty, m.scr, (int)mSlots.size(), 0, mConfig.rules.enabled ? 15 : 90);
+    // A fresh game of the round flow's (its countdown next) comes after its results: half a second for the clients to
+    // hear of it. Else (an arena's rotation, bots only) the pause shows the winner
+    engine::ChangeMap(m.gmp, m.sty, m.scr, (int)mSlots.size(), 0, mRounds.State().phase == kPhaseCountdown ? 15 : 90);
 }
 
 void net::Server::Shutdown()

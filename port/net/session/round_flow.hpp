@@ -13,7 +13,8 @@ namespace net
 {
 struct RoundRules
 {
-    bool enabled = true; // off (an arena of bots): the round from the start, the next one at once after it
+    bool enabled = true; // off (an arena of bots): the round from the start, the next one at once after it unless a
+                         // person is in, who gets the results (and the next round's fresh game and countdown)
     int minPlayers = 2; // in the game for a round to start (--minplayers)
     int warmupSec = 60; // after the minimum is in, the warmup ends anyway (--warmup; 0: only when everyone is ready)
     int countdownSec = 5;
