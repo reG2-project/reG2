@@ -1159,9 +1159,11 @@ void net::Client::PrintStats(const Snapshot& snap)
     float drift = 0;
     engine::ReplicaStats(snap, &cars, &peds, &drift);
     const Stats& st = mStats;
-    printf("net: frame %u, tick %u (server %u, our commands %d ticks early), %zu entities (%d cars, %d peds), %u rollbacks, "
+    // Until the server answers our commands for the ticks since the sync, its slack is about older ones (none at a join)
+    const std::string slack = mSlackKnown ? std::to_string(mSlack) + " ticks early" : "not answered yet";
+    printf("net: frame %u, tick %u (server %u, our commands %s), %zu entities (%d cars, %d peds), %u rollbacks, "
            "%.1f ticks resimulated each, prediction error up to %.2f blocks, cars and peds shown %.2f blocks off (up to %.2f)\n",
-           mFrame, mTick, mLatestTick, mSlack, snap.entities.size(), cars, peds, st.rollbacks, st.rollbacks ? (float)st.resimTicks / st.rollbacks : 0.0f,
+           mFrame, mTick, mLatestTick, slack.c_str(), snap.entities.size(), cars, peds, st.rollbacks, st.rollbacks ? (float)st.resimTicks / st.rollbacks : 0.0f,
            st.maxError, st.shownErrorCount ? (float)(st.shownErrorSum / st.shownErrorCount) : 0.0f, st.shownErrorMax);
     printf("net: frame %u, players shown off the server's: the others %.3f blocks on average (up to %.2f), ourselves %.3f (up to %.2f)\n",
            mFrame, st.others.Mean(), st.others.max, st.self.Mean(), st.self.max);
