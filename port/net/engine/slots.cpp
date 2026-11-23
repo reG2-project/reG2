@@ -9,6 +9,7 @@
 #include "Source/GameSession.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
+#include "Source/TagGame.hpp"
 #include "Source/Weapon.hpp"
 #include "Source/sprite.hpp"
 #include "Source/Car.hpp"
@@ -133,11 +134,11 @@ void net::engine::PutInGame(int slot, bool freshScore)
     {
         return;
     }
-    if (freshScore && slot < MAX_PLAYERS)
+    if (freshScore)
     {
-        gGameSession.mFragsList[slot] = 0;
-        gGameSession.mPointsList[slot] = 0;
-        ResetHudScores(p);
+        // A new player: nothing of the slot's last one, who may have left with a score, deaths, "it" time or armour
+        FreshScores(slot);
+        p->ClearPowerUps(); // the timers only: a fresh ped, or one the respawn's reset made plain
     }
     if (p->mInUse && p->mPlayerPed)
     {
@@ -228,6 +229,8 @@ void net::engine::FreshScores(int slot)
     {
         gGameSession.mFragsList[slot] = 0;
         gGameSession.mPointsList[slot] = 0;
+        gTagGame.mItTimeSecs[slot] = 0; // a tag game's score
+        ResetDeaths(slot);
     }
     if (Player* p = GetPlayer(slot))
     {

@@ -8,6 +8,7 @@
 #include "Source/GameSession.hpp"
 #include "Source/Hud.hpp"
 #include "Source/Player.hpp"
+#include "Source/TagGame.hpp"
 #include "Source/hud_message_priority.hpp"
 #include <stdio.h>
 #include <string.h>
@@ -23,20 +24,19 @@ void net::engine::NewRound()
 {
     for (int i = 0; i < PlayerCount() && i < MAX_PLAYERS; i++)
     {
-        // Every slot's score (a new map's game starts before the map script made the players' peds)
-        gGameSession.mFragsList[i] = 0;
-        gGameSession.mPointsList[i] = 0;
-        ResetDeaths(i);
+        FreshScores(i); // every slot's (a new map's game starts before the map script made the players' peds)
         Player* p = InGamePed(i) ? GetPlayer(i) : NULL;
         if (p)
         {
             p->UnloadCarWeapons();
             p->RemovePlayerWeapons();
             p->ClearPowerUpsExceptJailCard();
-            ResetHudScores(p);
             PutInGame(i, true); // at the next restart zone
         }
     }
+    // A tag game's "it" again as at a game's start: the first player's, at the next tick (TagGame::ExecuteGamemodeTick)
+    gTagGame.mFugitive = NULL;
+    gTagGame.mTickTimer = 0;
 }
 
 namespace

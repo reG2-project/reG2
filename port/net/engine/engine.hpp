@@ -184,7 +184,7 @@ bool PlayerChat(const EntityState& e, std::string* pLine);
 typedef RoundState Round; // the round's phase, votes and limits (session/round_flow.cpp keeps a server's)
 Round& CurrentRound();
 void NewRound(); // every slot in the game respawned with no score, weapons or power-ups
-void FreshScores(int slot); // its frags, points and HUD (money, frags, multiplier) as at a game's start (a new game's players)
+void FreshScores(int slot); // its frags, points, deaths, tag time and HUD (money, frags, multiplier) as at a game's start
 void ShowHudMessage(const char* text); // a line over the frame for a few seconds (overlay.cpp, with the status lines)
 // A chat line someone sent, over the frame above the lines being typed: the last 5, each for 10 s (overlay.cpp)
 void AddChatLine(const std::string& line);
