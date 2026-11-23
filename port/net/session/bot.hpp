@@ -67,6 +67,9 @@ class BotBrain
     {
     }
     virtual uint32_t Think(const BotView& view) = 0;
+    virtual void Seed(uint32_t) // a brain that draws: its draws from <seed> (a server's: so that a replay draws the same)
+    {
+    }
     virtual std::string Describe() const // a line for the client's log
     {
         return std::string();

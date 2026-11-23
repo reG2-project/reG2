@@ -199,7 +199,7 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
         *error = "more arena bots than player slots (" + std::to_string(mSlots.size()) + ")";
         return false;
     }
-    if (!mArena.Start(config.arena, error))
+    if (!mArena.Start(config.arena, start.secret[1], error))
     {
         return false;
     }

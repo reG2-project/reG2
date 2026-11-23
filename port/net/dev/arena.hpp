@@ -14,7 +14,7 @@ namespace net
 class Arena
 {
   public:
-    bool Start(const std::vector<std::string>& brains, std::string* error);
+    bool Start(const std::vector<std::string>& brains, uint32_t seed, std::string* error); // <seed>: the brains' draws
     int Count() const
     {
         return (int)mBots.size();
