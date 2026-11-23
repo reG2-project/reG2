@@ -685,6 +685,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`), `gPortChatChar` | the chat types the keyboard layout's characters; a server, those its clients typed |
 | `Hud.cpp` | `gPortServerKillNotices` | a client's kill notices are the server's deaths only |
 | `Hud.cpp` | `gPortDrawNetStandings` | a client's rank and score at the top left, in place of the list of the other players and the game's frags or tag time counter |
+| `Hud.cpp` | `PortDrawPlayerNames` (`port/src/player_names.cpp`) | the names over the other players: centred over the ped (its car in one) where the frame draws it, by the drawn camera, at three quarters of the HUD's text size. The original's are placed by the game camera, which the frame doesn't draw between steps, and by the HUD's layout, whose edge anchors move them on wide screens |
 | `Hud.cpp` | `PortHudTextPalette` (`port/src/player_looks.hpp`) | the names over the players and the tag times in the port's looks' colours (the fonts have 9 remaps) |
 | `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |

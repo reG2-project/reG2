@@ -38,6 +38,7 @@
 #if defined(GTA2_PORT)
 #include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
 #include "../port/src/player_looks.hpp"
+#include "../port/src/player_names.hpp"
 #endif
 
 #if defined(GTA2_PORT_SDL)
@@ -452,6 +453,13 @@ void Hud_GangRespectBars::InitGangRespectBars()
 MATCH_FUNC(0x5cfe40)
 void Hud_PlayerNames::DrawPlayerNames()
 {
+#if defined(GTA2_PORT)
+    // Port: over each ped where the frame draws it, in screen pixels (port/src/player_names.cpp)
+    if (bStartNetworkGame && bShow_player_names)
+    {
+        PortDrawPlayerNames(sPlayerNameFont);
+    }
+#else
     if (bStartNetworkGame && bShow_player_names)
     {
         Camera* pCam = gGame_0x40->mLocalPlayer->get_camera();
@@ -473,13 +481,6 @@ void Hud_PlayerNames::DrawPlayerNames()
                         Fix16 yCalc;
                         WorldToScreen_Hud_40CFC0(pCam, x, y, z, &xCalc, &yCalc);
 
-#if defined(GTA2_PORT)
-                        // Port: the port's looks' colours have other font remaps (player_looks.hpp)
-                        s32 name_palette_type;
-                        u16 name_palette;
-                        PortHudTextPalette(pIter->mHudPaletteType, pIter->mHudPalette, &name_palette_type, &name_palette);
-                        DrawTextScaled_4C7280(pIter->mPlayerName, xCalc, yCalc, sPlayerNameFont, name_palette_type, name_palette, 0, 0);
-#else
                         DrawTextScaled_4C7280(pIter->mPlayerName,
                                               xCalc,
                                               yCalc,
@@ -488,12 +489,12 @@ void Hud_PlayerNames::DrawPlayerNames()
                                               pIter->mHudPalette - 1,
                                               0,
                                               0);
-#endif
                     }
                 }
             }
         }
     }
+#endif
 }
 
 // ----------------------------------------------------
