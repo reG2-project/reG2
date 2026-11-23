@@ -575,7 +575,7 @@ void net::engine::KillNow(Ped* ped)
     ped->Kill();
     // Knocked down (a blast threw it), the game keeps the ped's state until it gets up (Ped::ChangeNextPedState1), so
     // the server's death didn't take and the next snapshot carried it out again: its cry, its killer's points. A
-    // player's throw is the server's (throws.cpp), so its death takes when it lands, as there
+    // thrown player's death takes when it lands: the landing restores the dead_9 Ped::Kill stored
     if (!ped->isDead() && !(ped->mPlayer && ThrowOf(ped)))
     {
         ped->mPedState1 = ped_state_1::dead_9;

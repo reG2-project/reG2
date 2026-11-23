@@ -278,6 +278,7 @@ Object* ThrowOf(Ped* ped);
 void CaptureThrow(Ped* ped, EntityState& e);
 void ApplyThrow(Ped* ped, const EntityState& e);
 void MoveThrow(Ped* ped, int32_t dx, int32_t dy); // raw Fix16
+void GuardThrow(int i, Ped* ped); // before each tick on a client: its players' throws land fatally only by KillNow
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there
 void EndDeath(Player* p); // a death's or an arrest's countdown over at once, the player's part (slots.cpp)
 void InstallStarts(bool on); // the players' peds past the script's and their start blocks (starts.cpp)

@@ -1,13 +1,13 @@
 // port/net (port/docs/netcode.md, "Entities"): a player thrown by a blast, a car or a door, as the server has it. The
 // game throws a ped by a moving object (Ped::mpObj2C, ped_pushed_110) that its char follows until it stops, then lands
-// it by the throw's outcome (Char::UpdateImmobilized). A client's players are thrown by its snapshots only.
+// it by the throw's outcome (Char::UpdateImmobilized). A client predicts its players' throws; its snapshots correct them.
 #include "internal.hpp"
 #include "Source/Object_3C.hpp"
 #include "Source/Object_5C.hpp"
-#include "Source/ParticleManager.hpp"
 #include "Source/Ped.hpp"
 #include "Source/PedRefTable.hpp"
 #include "Source/char.hpp"
+#include "Source/rng.hpp"
 #include "Source/sprite.hpp"
 
 namespace
@@ -19,6 +19,20 @@ using net::EntityState;
 // object's collision mode (Object_3C::mSpriteCollideMode) << 3
 const int32_t kThrowAirborne = 4;
 const int kThrowCollideShift = 3;
+// A throw the client landed this many ticks before the server's ends isn't started again
+const uint32_t kLandedGrace = 10;
+uint32_t gThrownTick[MAX_PLAYERS]; // the last tick each player was thrown here (GuardThrow)
+
+uint32_t Tick()
+{
+    return gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+}
+
+// Only the server's death is fatal here (KillNow): its Ped::Kill leaves dead_9 for any landing to restore
+s32 ClientOutcome(s32 state2)
+{
+    return state2 == ped_state_2::knocked_fatal_26 ? ped_state_2::knocked_down_25 : state2;
+}
 
 int32_t OutcomeCode(s32 state2)
 {
@@ -27,7 +41,7 @@ int32_t OutcomeCode(s32 state2)
 
 s32 OutcomeState(int32_t code)
 {
-    return ped_state_2::knocked_recover_24 + (code & 3) - 1;
+    return ClientOutcome(ped_state_2::knocked_recover_24 + (code & 3) - 1);
 }
 
 void PlaceObject(Object* o, const EntityState& e)
@@ -66,12 +80,7 @@ Object* StartThrow(Ped* ped, Char* c, const EntityState& e)
     ped->ChangeNextPedState1(ped_state_1::immobilized_8);
     ped->ChangeNextPedState2(outcome);
     c->mPedState2 = ped_state_2::knocked_recover_24;
-    // A push (no height, back on its feet) doesn't bleed; a blow does
-    if (outcome != ped_state_2::knocked_recover_24 || e.f[kPlayerThrowZSpeed])
-    {
-        gParticle_8->EmitBloodBurst(c->mSpritePtr->mXy.x, c->mSpritePtr->mXy.y, c->mSpritePtr->mZpos, Angle(e.f[kPlayerThrowAngle]));
-    }
-    return o;
+    return o; // its blood is the server's hit's (ShowServerHit)
 }
 } // namespace
 
@@ -117,16 +126,24 @@ void net::engine::ApplyThrow(Ped* ped, const EntityState& e)
     {
         if (o)
         {
-            // Stopped where it is: its char lands it in its next update by its outcome (peds update before objects)
+            // Not thrown on the server: stopped at its place, its char lands it in its next update (peds update first)
+            o->RemoveFromCollisionBuckets();
+            o->mSprite->set_xyz_lazy(Raw(e.f[kPlayerX]), Raw(e.f[kPlayerY]), Raw(e.f[kPlayerZ]));
+            o->AssignToBucket();
             o->mObj3c->mSpeed = Fix16(0);
             o->mObj3c->mZSpeed = Fix16(0);
             o->mObj3c->mbAirborne = 0;
+            ped->mPedState2 = ped_state_2::knocked_recover_24;
         }
         return;
     }
     if (!o)
     {
-        if (ped->mpObj2C || ped->mPedState1 == ped_state_1::immobilized_8 || InCarTransition(ped) || !c->mSpritePtr)
+        const int i = (int)e.id - 1;
+        const uint32_t since = i >= 0 && i < MAX_PLAYERS ? Tick() - gThrownTick[i] : kLandedGrace + 1;
+        // Knocked down and lying (no object), a new throw takes; one the client just landed stays landed
+        const bool held = ped->mPedState1 == ped_state_1::immobilized_8 && ped->mPedState2 != ped_state_2::lying_on_floor_22;
+        if (ped->mpObj2C || held || since <= kLandedGrace || InCarTransition(ped) || !c->mSpritePtr)
         {
             return;
         }
@@ -162,5 +179,14 @@ void net::engine::MoveThrow(Ped* ped, int32_t dx, int32_t dy)
         o->RemoveFromCollisionBuckets();
         s->set_xyz_lazy(Raw(s->mXy.x.mValue + dx), Raw(s->mXy.y.mValue + dy), s->mZpos);
         o->AssignToBucket();
+    }
+}
+
+void net::engine::GuardThrow(int i, Ped* ped)
+{
+    if (ped && i >= 0 && i < MAX_PLAYERS && ThrowOf(ped))
+    {
+        gThrownTick[i] = Tick();
+        ped->mPedState2 = ClientOutcome(ped->mPedState2);
     }
 }
