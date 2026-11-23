@@ -1017,6 +1017,12 @@ void net::Client::StartOver()
     mSynced = false;
     mNewSnapshot = false;
     mTakenTick = 0;
+    // The old game ran on through the map change's pause into the new one's first ticks: its inputs (sent as commands
+    // again), predicted positions and shown entities are not this game's
+    for (TickRecord& rec : mHist)
+    {
+        rec = TickRecord();
+    }
     for (Snapshot& s : mReceived)
     {
         s = Snapshot();
