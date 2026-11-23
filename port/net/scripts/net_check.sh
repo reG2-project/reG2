@@ -1,7 +1,8 @@
 #!/bin/bash
 # The netcode's checks in one go (port/docs/netcode.md, "Checks"), on the macOS build (port/README.md):
 #   arena   bot matches on the server alone, several maps, brains and seeds: none may crash
-#   live    a server and two bot clients over a bad link (100 ms, jitter, loss): no crash, no CHECK line
+#   live    a server and two bot clients over a bad link (100 ms, jitter, loss): no crash, no CHECK line, and the
+#           server's recording replays to the same world
 #   churn   two bot clients staying while two others join and leave, four times (stopped: SIGTERM, Ctrl-C): no
 #           crash, no CHECK line, nobody turned away as the server being full
 #   rounds  the round flow: two bot clients ready up, play a round, vote for the next map and follow; a third joins late
@@ -69,7 +70,8 @@ live() {
   local secs=45 p=$((BASE + 200))
   [ -n "$QUICK" ] && secs=20
   rm -f "$OUT"/live_*.log
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 exec "$BIN" --server --port $p --map mp1-6p --players 6 --police \
+  rm -f "$OUT/live_server.rec"
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 GTA2_NET_RECORD="$OUT/live_server.rec" exec "$BIN" --server --port $p --map mp1-6p --players 6 --police \
     --arena hunter,soldier,rammer,simple > "$OUT/live_server.log" 2>&1) &
   sleep 3
   for b in rammer soldier; do
@@ -85,10 +87,17 @@ live() {
   joined=$(grep -c "joined as player" "$OUT/live_server.log")
   echo "  $(grep "players' corrections" "$OUT/live_rammer.log" | tail -1 | sed 's/^net: //')"
   echo "  $(grep "prediction against the server" "$OUT/live_rammer.log" | tail -1 | sed 's/^net: //' | cut -d';' -f1-4)"
+  # The server's recording replays to the same world at every tick
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 exec "$BIN" --replay "$OUT/live_server.rec" > "$OUT/live_server_replay.log" 2>&1)
+  local replayed
+  replayed=$(grep "^net: replayed" "$OUT/live_server_replay.log" | sed 's/^net: //')
+  echo "  server replay: ${replayed:-none}"
   if [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ "$joined" != 2 ]; then
     fail "live: $joined of 2 clients joined, $crashes crashed, $checks CHECK lines ($BUILD/net_check/live_*.log)"
+  elif ! grep -q "matches the recording's" "$OUT/live_server_replay.log"; then
+    fail "live: the server's replay differs ($BUILD/net_check/live_server_replay.log)"
   else
-    pass "live: 2 bot clients for ${secs} s at 100 ms, 2% loss, police on"
+    pass "live: 2 bot clients for ${secs} s at 100 ms, 2% loss, police on; the server's replay matches"
   fi
 }
 
