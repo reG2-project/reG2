@@ -19,8 +19,8 @@ uint8_t net::FreeLook(uint32_t* used)
 namespace
 {
 // <zone>'s blocks ring by ring from its centre, each ring row by row, its top and bottom rows whole and the others'
-// two ends; within the zone only
-bool InZone(const net::SpawnZone& zone, const net::SpawnWorld& world, int* x, int* y, int* z)
+// two ends; within the zone only. The one after *skip others at the zone's level, else false with *skip less them
+bool InZone(const net::SpawnZone& zone, const net::SpawnWorld& world, int* skip, int* x, int* y, int* z)
 {
     const int cx = zone.x + (zone.w >> 1), cy = zone.y + (zone.h >> 1);
     const int rings = zone.w > zone.h ? zone.w : zone.h;
@@ -38,7 +38,7 @@ bool InZone(const net::SpawnZone& zone, const net::SpawnWorld& world, int* x, in
             level = true;
             base = bz;
         }
-        if (bz != base || world.Occupied(bx, by))
+        if (bz != base || (*skip)-- > 0)
         {
             return false;
         }
@@ -74,16 +74,26 @@ bool InZone(const net::SpawnZone& zone, const net::SpawnWorld& world, int* x, in
 }
 } // namespace
 
-bool net::SpawnBlock(const std::vector<SpawnZone>& zones, int first, const SpawnWorld& world, int* x, int* y, int* z)
+bool net::SpawnBlock(const std::vector<SpawnZone>& zones, int first, int slot, const SpawnWorld& world, int* x, int* y, int* z)
 {
     const int n = (int)zones.size();
     const int start = first >= 0 && first < n ? first : 0;
-    for (int k = 0; k < n; k++)
+    const int nth = slot > 0 ? slot : 0;
+    for (int pass = 0, skip = nth; pass < 2; pass++)
     {
-        if (InZone(zones[(start + k) % n], world, x, y, z))
+        for (int k = 0; k < n; k++)
         {
-            return true;
+            if (InZone(zones[(start + k) % n], world, &skip, x, y, z))
+            {
+                return true;
+            }
         }
+        const int blocks = nth - skip;
+        if (blocks <= 0)
+        {
+            return false;
+        }
+        skip = nth % blocks;
     }
     return false;
 }

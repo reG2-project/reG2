@@ -53,10 +53,10 @@ at start about the maps it plays that were made for fewer players than its slots
 The players past the script's get a ped at boot (`Game::BootGame`, `engine/starts.cpp`), the k-th at the k-th restart
 zone in the map's order (the restart zones' turn stays the script's), in the first of the 10 looks below the map's
 players don't have. A ped starting at a restart zone (those, a join, a respawn: `Ped::SpawnCharInZone`) takes the
-first block from the zone's centre, at the level of its first block with ground, that no other player's ped stands
-on, else one in the next zone (`core/spawn_spots.cpp`). Both read only the game's state, so the server and its clients
-place them alike; a client's prediction of its own respawn can still pick another block when it sees the others
-elsewhere, and the server's snapshot corrects it.
+block its slot picks: of the zone's blocks in turn from its centre, at the level of its first block with ground, slot
+N takes the N-th, counting on into the next zones once a zone has fewer, and round again past the last
+(`core/spawn_spots.cpp`). Slot 0 starts at the centre, the game's own spot. The choice reads only the map, not where the
+other players are, so a client predicting its own respawn picks the server's block whatever it sees of the others.
 
 A map without a restart zone isn't playable (the game ends at its start with "No Restart Zone"): the server leaves
 it out of its rotation and votes with a warning, refuses to start if no map is left, checks a map again before it

@@ -555,10 +555,10 @@ void TestMapPlayers()
     printf("map players ok\n");
 }
 
-// A test world: ground at level 2 but for the blocks in <holes> (none) and <roofs> (level 5), peds on <taken>
+// A test world: ground at level 2 but for the blocks in <holes> (none) and <roofs> (level 5)
 struct TestWorld : net::SpawnWorld
 {
-    std::vector<std::pair<int, int>> holes, roofs, taken;
+    std::vector<std::pair<int, int>> holes, roofs;
     static bool In(const std::vector<std::pair<int, int>>& v, int x, int y)
     {
         for (const auto& b : v)
@@ -574,10 +574,6 @@ struct TestWorld : net::SpawnWorld
     {
         *z = In(roofs, x, y) ? 5 : 2;
         return !In(holes, x, y);
-    }
-    bool Occupied(int x, int y) const override
-    {
-        return In(taken, x, y);
     }
 };
 
@@ -624,32 +620,37 @@ void TestSpawnSpots()
     const std::vector<net::SpawnZone> zones = {{10, 20, 3, 3}, {50, 60, 1, 1}};
     TestWorld w;
     int x = 0, y = 0, z = 0;
-    CHECK(net::SpawnBlock(zones, 0, w, &x, &y, &z) && x == 11 && y == 21 && z == 2); // the centre, as the game's
-    // Each ped taken in turn: 9 distinct blocks of the zone, the nearest first, then the next zone
+    CHECK(net::SpawnBlock(zones, 0, 0, w, &x, &y, &z) && x == 11 && y == 21 && z == 2); // slot 0: the centre, as the game's
+    // Slots 0-9: the zone's 9 blocks, the nearest first, then the next zone; slot 10 round again from the first
     std::vector<std::pair<int, int>> got;
-    for (int i = 0; i < 10; i++)
+    for (int slot = 0; slot < 10; slot++)
     {
-        CHECK(net::SpawnBlock(zones, 0, w, &x, &y, &z));
-        CHECK(!TestWorld::In(w.taken, x, y));
+        CHECK(net::SpawnBlock(zones, 0, slot, w, &x, &y, &z));
+        CHECK(!TestWorld::In(got, x, y));
         const bool first = x >= 10 && x < 13 && y >= 20 && y < 23;
-        CHECK(i < 9 ? first : x == 50 && y == 60);
-        CHECK(i == 0 || i >= 9 || (x - 11) * (x - 11) + (y - 21) * (y - 21) >= 1);
-        w.taken.push_back({x, y});
+        CHECK(slot < 9 ? first : x == 50 && y == 60);
+        CHECK(slot == 0 || slot >= 9 || (x - 11) * (x - 11) + (y - 21) * (y - 21) >= 1);
+        got.push_back({x, y});
     }
-    CHECK(!net::SpawnBlock(zones, 0, w, &x, &y, &z) && !net::SpawnBlock(zones, 1, w, &x, &y, &z)); // all full
+    CHECK(net::SpawnBlock(zones, 0, 10, w, &x, &y, &z) && x == 11 && y == 21);
+    CHECK(net::SpawnBlock(zones, 0, 13, w, &x, &y, &z) && x == got[3].first && y == got[3].second);
+    CHECK(net::SpawnBlock(zones, 1, 1, w, &x, &y, &z) && x == 11 && y == 21); // from the second zone, wrapping
+    CHECK(net::SpawnBlock(zones, 0, -1, w, &x, &y, &z) && x == 11 && y == 21);
     // A hole at the centre: the level of the first block with ground; a roof in the zone is skipped
     TestWorld w2;
     w2.holes = {{11, 21}};
-    CHECK(net::SpawnBlock(zones, 0, w2, &x, &y, &z) && x == 10 && y == 20 && z == 2);
+    CHECK(net::SpawnBlock(zones, 0, 0, w2, &x, &y, &z) && x == 10 && y == 20 && z == 2);
     TestWorld w3;
     w3.roofs = {{10, 20}};
-    w3.taken = {{11, 21}};
-    CHECK(net::SpawnBlock(zones, 0, w3, &x, &y, &z) && x == 11 && y == 20 && z == 2);
+    CHECK(net::SpawnBlock(zones, 0, 1, w3, &x, &y, &z) && x == 11 && y == 20 && z == 2);
     // The next zone first, wrapping; out of range: the first
-    CHECK(net::SpawnBlock(zones, 1, w2, &x, &y, &z) && x == 50 && y == 60);
-    CHECK(net::SpawnBlock(zones, 7, w2, &x, &y, &z) && x == 10 && y == 20);
-    CHECK(!net::SpawnBlock(std::vector<net::SpawnZone>(), 0, w2, &x, &y, &z));
-    // Odd, even, flat and one-block zones, with holes and roofs: the blocks in ring order, each once
+    CHECK(net::SpawnBlock(zones, 1, 0, w2, &x, &y, &z) && x == 50 && y == 60);
+    CHECK(net::SpawnBlock(zones, 7, 0, w2, &x, &y, &z) && x == 10 && y == 20);
+    CHECK(!net::SpawnBlock(std::vector<net::SpawnZone>(), 0, 0, w2, &x, &y, &z));
+    TestWorld bare;
+    bare.holes = {{50, 60}};
+    CHECK(!net::SpawnBlock({{50, 60, 1, 1}}, 0, 3, bare, &x, &y, &z));
+    // Odd, even, flat and one-block zones, with holes and roofs: slot i on the i-th block in ring order
     const std::vector<net::SpawnZone> shapes = {{3, 4, 1, 1}, {3, 4, 2, 2}, {3, 4, 5, 5}, {3, 4, 6, 3}, {3, 4, 1, 7}, {3, 4, 8, 2}, {0, 0, 4, 9}};
     for (const net::SpawnZone& shape : shapes)
     {
@@ -672,11 +673,9 @@ void TestSpawnSpots()
                 }
             }
             const std::vector<std::pair<int, int>> want = RingOrder(shape, t);
-            for (size_t i = 0; i <= want.size(); i++)
+            for (size_t i = 0; i < want.size() * 2; i++)
             {
-                const bool found = net::SpawnBlock({shape}, 0, t, &x, &y, &z);
-                CHECK(i < want.size() ? found && x == want[i].first && y == want[i].second : !found);
-                t.taken.push_back({x, y});
+                CHECK(net::SpawnBlock({shape}, 0, (int)i, t, &x, &y, &z) && x == want[i % want.size()].first && y == want[i % want.size()].second);
             }
         }
     }

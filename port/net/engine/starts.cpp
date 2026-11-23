@@ -1,8 +1,8 @@
 // port/net (port/docs/netcode.md, "Maps and players"): where a network game's players start. The map's script gives
 // as many peds as it has PLAYER_PEDs; the players past them get one at the restart zones, as Handle_PLAYER_PED and
 // Player::InitPlayerPed make one, in a look of their own. A ped starting at a restart zone (those, a join, a respawn)
-// takes a block of it no other player stands on (core/spawn_spots.hpp). Both read the game's state only, so the server
-// and its clients place them alike.
+// takes the block of it its slot picks (core/spawn_spots.hpp), from the map only, so the server and its clients place
+// them alike at any tick.
 #include "internal.hpp"
 #include "../core/spawn_spots.hpp"
 #include "Source/Char_Pool.hpp"
@@ -39,12 +39,8 @@ std::vector<gmp_map_zone*> RestartZones()
     return zones;
 }
 
-struct GameWorld : net::SpawnWorld
+struct MapGround : net::SpawnWorld
 {
-    const Ped* self;
-    explicit GameWorld(const Ped* s) : self(s)
-    {
-    }
     bool Ground(int x, int y, int* z) const override
     {
         s32 found = 0;
@@ -55,29 +51,9 @@ struct GameWorld : net::SpawnWorld
         *z = found;
         return true;
     }
-    // Another player's ped less than a block from the block's centre
-    bool Occupied(int x, int y) const override
-    {
-        const s32 cx = (x << 14) + (1 << 13), cy = (y << 14) + (1 << 13), kBlock = 1 << 14;
-        for (s32 i = 0; i < gGame_0x40->mNumPlayers; i++)
-        {
-            Player* p = gGame_0x40->mPlayers[i];
-            const Ped* ped = p && p->mInUse ? p->mPlayerPed : NULL;
-            if (!ped || ped == self)
-            {
-                continue;
-            }
-            const s32 dx = ped->get_cam_x().mValue - cx, dy = ped->get_cam_y().mValue - cy;
-            if (dx < kBlock && dx > -kBlock && dy < kBlock && dy > -kBlock)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
 };
 
-bool FreeBlock(const std::vector<gmp_map_zone*>& zones, int first, const Ped* self, s32* x, s32* y, s32* z)
+bool SlotBlock(const std::vector<gmp_map_zone*>& zones, int first, int slot, s32* x, s32* y, s32* z)
 {
     std::vector<net::SpawnZone> rects;
     for (gmp_map_zone* zone : zones)
@@ -85,7 +61,7 @@ bool FreeBlock(const std::vector<gmp_map_zone*>& zones, int first, const Ped* se
         rects.push_back(net::SpawnZone{zone->mX, zone->mY, zone->mW, zone->mH});
     }
     int bx = 0, by = 0, bz = 0;
-    if (!gGame_0x40 || !net::SpawnBlock(rects, first, GameWorld(self), &bx, &by, &bz))
+    if (!net::SpawnBlock(rects, first, slot, MapGround(), &bx, &by, &bz))
     {
         return false;
     }
@@ -95,18 +71,32 @@ bool FreeBlock(const std::vector<gmp_map_zone*>& zones, int first, const Ped* se
     return true;
 }
 
-// Ped::SpawnCharInZone: a block of <zone> nobody stands on, else of the next restart zones
+int SlotOf(const Player* player, const Ped* ped)
+{
+    for (s32 i = 0; gGame_0x40 && i < gGame_0x40->mNumPlayers; i++)
+    {
+        const Player* p = gGame_0x40->mPlayers[i];
+        if (p && (p == player || (ped && p->mPlayerPed == ped)))
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Ped::SpawnCharInZone: the player's block of <zone> (or of the next restart zones)
 bool StartBlock(Ped* ped, gmp_map_zone* zone, s32* x, s32* y, s32* z)
 {
+    const int slot = SlotOf(NULL, ped);
     const std::vector<gmp_map_zone*> zones = RestartZones();
-    for (size_t i = 0; i < zones.size(); i++)
+    for (size_t i = 0; slot >= 0 && i < zones.size(); i++)
     {
         if (zones[i] == zone)
         {
-            return FreeBlock(zones, (int)i, ped, x, y, z);
+            return SlotBlock(zones, (int)i, slot, x, y, z);
         }
     }
-    return false; // not a restart zone: the game's own spot
+    return false; // not a player's, or not a restart zone: the game's own spot
 }
 
 // Game::BootGame, after the script's PLAYER_PEDs: the k-th player without a ped at the k-th restart zone
@@ -131,9 +121,9 @@ void ExtraPlayerPeds()
         if (!zones.empty())
         {
             gmp_map_zone* zone = zones[k % zones.size()];
-            if (!FreeBlock(zones, k % (int)zones.size(), NULL, &x, &y, &z))
+            if (!SlotBlock(zones, k % (int)zones.size(), SlotOf(p, NULL), &x, &y, &z))
             {
-                x = zone->mX + (zone->mW >> 1); // all taken: the zone's centre, where the game would start it
+                x = zone->mX + (zone->mW >> 1); // no ground: the zone's centre, where the game would start it
                 y = zone->mY + (zone->mH >> 1);
             }
             const Fix16 fx = Fix16(x) + net::engine::Raw(1 << 13), fy = Fix16(y) + net::engine::Raw(1 << 13); // the block's centre
