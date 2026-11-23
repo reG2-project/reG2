@@ -1664,7 +1664,7 @@ void net::Client::ShowRound()
         uint32_t b = 0;
         if (engine::PlayerOf(e, &p, &b))
         {
-            rows.push_back(ScoreRow{p, engine::PlayerFrags(e), engine::PlayerDeaths(e), engine::TagSeconds(p), engine::PlayerPoints(e)});
+            rows.push_back(ScoreRow{p, engine::PlayerFrags(e), engine::PlayerDeaths(e), engine::TagSeconds(p), engine::PlayerPoints(e), engine::PlayerMoney(e)});
         }
     }
     // The results show the scores the round ended with: the game goes on meanwhile, and so do the frags
@@ -1772,7 +1772,7 @@ void net::Client::ShowRound()
         const int score = mGameType == 3 ? row.tag : mGameType == 2 ? row.points : row.frags;
         const bool you = row.slot == mSlot;
         const bool ready = r.phase == kPhaseWarmup && r.minPlayers && row.slot < kRoundSlots && (r.ready >> row.slot & 1);
-        players.push_back({row.slot, engine::PlayerName(row.slot), score, row.frags, row.deaths,
+        players.push_back({row.slot, engine::PlayerName(row.slot), score, row.money, row.frags, row.deaths,
                            you && mConnected && mPingShown ? (int)mPingShown : -1, you, engine::PlayerWasted(row.slot),
                            row.slot < 32 && (mChatting >> row.slot & 1), ready});
     }
@@ -1847,6 +1847,7 @@ void net::Client::ShowScoreboard(const std::vector<engine::PlayerRow>& players, 
                  : unready ? (pad ? "Ready in the Start menu" : "F1: ready")
                            : "";
     board.scoreHeading = mGameType == 3 ? "It (s)" : mGameType == 2 ? "Points" : "Frags";
+    board.money = mGameType != 2;
     board.frags = mGameType != 1;
     board.rows = players;
     engine::SetScoreboard(&board);

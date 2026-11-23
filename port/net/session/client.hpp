@@ -237,7 +237,7 @@ class Client
     std::string mMapTitle; // the map being played's (MapTitle)
     struct ScoreRow
     {
-        int slot, frags, deaths, tag, points; // tag: the seconds "it" in a tag game
+        int slot, frags, deaths, tag, points, money; // tag: the seconds "it" in a tag game
     };
     std::vector<ScoreRow> mResultsRows; // the scores as the results began
     bool mWasChatting = false;

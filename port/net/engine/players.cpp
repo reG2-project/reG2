@@ -609,6 +609,11 @@ int net::engine::PlayerPoints(const EntityState& e)
     return e.type == kEntityPlayer ? e.f[kPlayerPoints] : 0;
 }
 
+int net::engine::PlayerMoney(const EntityState& e)
+{
+    return e.type == kEntityPlayer ? e.f[kPlayerMoney] : 0;
+}
+
 int net::engine::PlayerFrags(const EntityState& e)
 {
     return e.type == kEntityPlayer ? e.f[kPlayerFrags] : 0;

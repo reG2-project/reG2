@@ -58,7 +58,7 @@ struct PlayerRow
 {
     int slot;
     std::string name;
-    int score, frags, deaths, ping; // score: the game type's (frags, points, seconds "it"); ping: -1 unknown
+    int score, money, frags, deaths, ping; // score: the game type's (frags, points, seconds "it"); ping: -1 unknown
     bool you, dead, chatting, ready; // ready: in a warmup
 };
 // What it shows while open: READY (1) or NOT READY (2) or neither (0), an open vote's question ("": none)
@@ -140,6 +140,7 @@ bool PlayerOf(const EntityState& e, int* pPlayer, uint32_t* pButtons);
 int PlayerHealth(const EntityState& e); // a player entity's health
 int PlayerFrags(const EntityState& e);
 int PlayerPoints(const EntityState& e);
+int PlayerMoney(const EntityState& e); // the money on its HUD (Player::mScores), what the original listed for the others
 int TagSeconds(int slot); // a tag game's: the seconds the slot was "it" (the game's tag winner has the most)
 int PlayerDeaths(const EntityState& e);
 uint32_t PlayerCarId(const EntityState& e); // the NetId of the car it drives, 0 on foot
@@ -302,13 +303,14 @@ void DrawOverlay(); // the game calls it while drawing (Game::Draw, gPortDrawOve
 // (an outage); empty: nothing
 void SetNetStatus(const std::string& corner, const std::string& centre);
 // The scoreboard, over the middle of the frame instead of the round's panel while shown (scoreboard.cpp): the map's title,
-// two lines under it, the players by score (their $ sign and name in their HUD colour, the local one marked)
+// two lines under it, the players by score (their name in their HUD colour, the local one marked)
 struct Scoreboard
 {
     std::string title;
     std::string lines[2];
     std::string hint; // under the rows ("": none)
     const char* scoreHeading; // the game type's score
+    bool money; // a money column after the score; without it the score is the money (a points game)
     bool frags; // a frags column after the score (a points or tag game's)
     std::vector<PlayerRow> rows;
 };

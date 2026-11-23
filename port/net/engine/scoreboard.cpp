@@ -11,6 +11,7 @@
 #include "Source/enums.hpp"
 #include "Source/gbh_graphics.hpp"
 #include "port/src/player_looks.hpp"
+#include <algorithm>
 #include <memory>
 
 bool port_ScoresHeld(); // compat/src/pad.cpp
@@ -25,8 +26,8 @@ int gStandingsType;
 const s32 kLeft = 40, kRight = 600, kTop = 96;
 const s32 kRowStep = 18;
 const s32 kNameX = kLeft + 12, kNameWidth = 150;
-// The score's right edge, or the frags' when a points or tag game shows them after its score
-const s32 kScoreRight = 450, kPointsRight = 370, kDeathsRight = 530, kPingRight = 588;
+// The columns, right aligned, laid out from the ping's right edge leftwards; the names get what is left of them
+const s32 kPingRight = 588, kColumnGap = 14;
 const u32 kPanelColour = 0xB0000000, kYouColour = 0x30FFFFFF;
 const s32 kHalfAlpha = 16; // of 31 (CalcQuadFlags)
 // The text font's '2' has blank columns on its left: drawn this much further left, it is spaced as the other digits
@@ -156,20 +157,28 @@ s32 NameRemap(int slot)
     return p ? PortFontRemap(p->mHudPaletteType, p->mHudPalette) : -1;
 }
 
-// The player's name in its HUD colour, half transparent while dead, then a square in its colour when no font remap has
-// it (the port's cyan); where the name's line goes on
-s32 Name(const net::engine::PlayerRow& row, s32 y)
+const s32 kSquareGap = 6, kSquareSize = 8;
+
+// The port's cyan look, which no font remap has
+bool Cyan(int slot)
+{
+    Player* p = net::engine::GetPlayer(slot);
+    const s16 kCyan = 9; // PortLookOf's Elvis
+    return p && p->mHudPaletteType == palette_types_enum::user_remaps_7 && p->mHudPalette == kCyan;
+}
+
+// The player's name in its HUD colour, cut to <width>, half transparent while dead, then a square in its colour when no
+// font remap has it; where the name's line goes on
+s32 Name(const net::engine::PlayerRow& row, s32 y, s32 width)
 {
     wchar_t w[24];
     Widen(row.name, w, sizeof(w) / sizeof(w[0]));
-    Fit(w, kNameWidth);
+    Fit(w, width);
     Draw(w, kNameX, kNameX, y, NameRemap(row.slot), row.dead ? kHalfAlpha : 0);
     const s32 right = kNameX + Width(w);
-    Player* p = net::engine::GetPlayer(row.slot);
-    const s16 kCyan = 9; // PortLookOf's Elvis
-    if (p && p->mHudPaletteType == palette_types_enum::user_remaps_7 && p->mHudPalette == kCyan)
+    if (Cyan(row.slot))
     {
-        const s32 x = right + 6, size = 8;
+        const s32 x = right + kSquareGap, size = kSquareSize;
         Fill(x, y + kTextMiddle - size / 2, x + size, y + kTextMiddle + size / 2, row.dead ? 0x808CFFFF : 0xFF8CFFFF);
         return x + size;
     }
@@ -208,6 +217,20 @@ std::string Score(int score, int gameType)
     }
     return std::to_string(score) + (score == 1 ? " frag" : " frags");
 }
+
+std::string Money(int money)
+{
+    return "$" + std::to_string(money);
+}
+
+// A right aligned column of the board: its heading, a cell per row, its right edge
+struct Column
+{
+    std::string heading;
+    bool money; // "$" sums
+    std::vector<std::string> cells;
+    s32 right;
+};
 } // namespace
 
 void net::engine::SetScoreboard(const Scoreboard* pBoard)
@@ -244,15 +267,57 @@ bool net::engine::DrawScoreboard()
     CentredText(b.title, kTop + 6);
     CentredText(b.lines[0], kTop + 24);
     CentredText(b.lines[1], kTop + 40);
-    const s32 scoreRight = b.frags ? kPointsRight : kScoreRight;
-    Text("Player", kNameX, headingsY);
-    RightText(b.scoreHeading, scoreRight, headingsY);
+    // Without a money column, the score is the money (a points game: client.cpp)
+    std::vector<Column> columns(1, Column{b.scoreHeading, !b.money, {}, 0});
+    if (b.money)
+    {
+        columns.push_back(Column{"Money", true, {}, 0});
+    }
     if (b.frags)
     {
-        RightText("Frags", kScoreRight, headingsY);
+        columns.push_back(Column{"Frags", false, {}, 0});
     }
-    RightText("Deaths", kDeathsRight, headingsY);
-    RightText("Ping", kPingRight, headingsY);
+    columns.push_back(Column{"Deaths", false, {}, 0});
+    columns.push_back(Column{"Ping", false, {}, 0});
+    for (const PlayerRow& row : b.rows)
+    {
+        size_t c = 0;
+        columns[c++].cells.push_back(!b.money ? Money(row.score) : std::to_string(row.score));
+        if (b.money)
+        {
+            columns[c++].cells.push_back(Money(row.money));
+        }
+        if (b.frags)
+        {
+            columns[c++].cells.push_back(std::to_string(row.frags));
+        }
+        columns[c++].cells.push_back(std::to_string(row.deaths));
+        columns[c++].cells.push_back(row.ping >= 0 ? std::to_string(row.ping) : std::string("-"));
+    }
+    // Wide enough for $99999 and the like: a column only moves for bigger sums
+    const s32 minMoney = Width(std::string("$99999"));
+    s32 right = kPingRight;
+    for (size_t c = columns.size(); c-- > 0;)
+    {
+        Column& col = columns[c];
+        s32 w = Width(col.heading);
+        if (col.money)
+        {
+            w = std::max(w, minMoney);
+        }
+        for (const std::string& cell : col.cells)
+        {
+            w = std::max(w, Width(cell));
+        }
+        col.right = right;
+        right -= w + kColumnGap;
+    }
+    const s32 nameSpace = right - kNameX;
+    Text("Player", kNameX, headingsY);
+    for (const Column& col : columns)
+    {
+        RightText(col.heading, col.right, headingsY);
+    }
     for (size_t i = 0; i < b.rows.size(); i++)
     {
         const PlayerRow& row = b.rows[i];
@@ -261,15 +326,14 @@ bool net::engine::DrawScoreboard()
         {
             Fill(kLeft + 4, y + kTextMiddle - kRowStep / 2, kRight - 4, y + kTextMiddle + kRowStep / 2, kYouColour);
         }
-        const s32 nameRight = Name(row, y);
-        Text(Status(row), nameRight + 10, y);
-        RightText(std::to_string(row.score), scoreRight, y);
-        if (b.frags)
+        const std::string status = Status(row);
+        const s32 after = (status.empty() ? 0 : 10 + Width(status)) + (Cyan(row.slot) ? kSquareGap + kSquareSize : 0);
+        const s32 nameRight = Name(row, y, std::min(kNameWidth, nameSpace - after));
+        Text(status, nameRight + 10, y);
+        for (const Column& col : columns)
         {
-            RightText(std::to_string(row.frags), kScoreRight, y);
+            RightText(col.cells[i], col.right, y);
         }
-        RightText(std::to_string(row.deaths), kDeathsRight, y);
-        RightText(row.ping >= 0 ? std::to_string(row.ping) : std::string("-"), kPingRight, y);
     }
     if (!b.hint.empty())
     {
