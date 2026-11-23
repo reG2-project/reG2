@@ -44,6 +44,16 @@ net::Schema BuildSchema()
     player.fields.push_back(FieldDesc{"multiplier", 8, false}); // kPlayerMultiplier
     player.fields.push_back(FieldDesc{"death_events", 8, false}); // kPlayerDeathEvents
     player.fields.push_back(FieldDesc{"bonus", 12, false}); // kPlayerBonus
+    player.fields.push_back(FieldDesc{"throw", 5, false}); // kPlayerThrow
+    player.fields.push_back(FieldDesc{"throw_x", 22, false});
+    player.fields.push_back(FieldDesc{"throw_y", 22, false});
+    player.fields.push_back(FieldDesc{"throw_z", 17, false});
+    player.fields.push_back(FieldDesc{"throw_rot", 11, false});
+    player.fields.push_back(FieldDesc{"throw_angle", 11, false});
+    player.fields.push_back(FieldDesc{"throw_speed", 18, true}); // Fix16 raw: up to 8 blocks a tick either way
+    player.fields.push_back(FieldDesc{"throw_zspeed", 18, true});
+    player.fields.push_back(FieldDesc{"throw_zaccel", 18, true});
+    player.fields.push_back(FieldDesc{"throw_friction", 18, true});
     net::EntityType car = {"car", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"model", 8, false},
                                    {"driver", 2, false}, {"damage", 16, false}, {"areas", 32, false}, {"wrecked", 2, false},
                                    {"lights", 8, false}, {"flash", 8, false}, {"horn", 8, false}, {"horn_cooldown", 8, false}, {"remap", 16, true},

@@ -53,6 +53,16 @@ enum PlayerField
     kPlayerMultiplier, // and its multiplier (Player::mMultipliers)
     kPlayerDeathEvents, // how often it died this game (wraps at 256): what a client carries out (kPlayerDeaths: the round's)
     kPlayerBonus, // its scoring bonuses this game (wraps at 256) << 4 | the last one's voice line (ScoreBonus)
+    kPlayerThrow, // thrown (throws.cpp): its outcome, airborne and collision mode, 0 not thrown; then the throw's object:
+    kPlayerThrowX, // its place
+    kPlayerThrowY,
+    kPlayerThrowZ,
+    kPlayerThrowRot,
+    kPlayerThrowAngle, // and its motion (Object_3C): the way it goes, its speed, its height's speed and gain, its friction
+    kPlayerThrowSpeed,
+    kPlayerThrowZSpeed,
+    kPlayerThrowZAccel,
+    kPlayerThrowFriction,
 };
 enum PlayerState
 {
@@ -260,8 +270,14 @@ void ApplyWorld(const EntityState& w);
 void ApplySlots(const Snapshot& snap); // the slots in the game: the snapshot's
 void ApplyPlayer(const EntityState& e);
 void KillCredited(Ped* ped, int killerSlot); // the game's own death, credited to a player (-1: nobody)
-void KillNow(Ped* ped);
-void ApplyFire(Ped* p, bool onFire); // on fire or not as the server has it, the game's own way // the game's own death (Ped::Kill), dead at once even when knocked down
+void KillNow(Ped* ped); // the game's own death (Ped::Kill), dead at once even when knocked down, at its landing when thrown
+void ApplyFire(Ped* p, bool onFire); // on fire or not as the server has it, the game's own way
+// A player's throw (throws.cpp): its object while thrown (NULL: not thrown), sent, applied as the server's, and moved
+// across by as much as the ped's shown place (the blend; not in height: below its floor it would fall through)
+Object* ThrowOf(Ped* ped);
+void CaptureThrow(Ped* ped, EntityState& e);
+void ApplyThrow(Ped* ped, const EntityState& e);
+void MoveThrow(Ped* ped, int32_t dx, int32_t dy); // raw Fix16
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there
 void EndDeath(Player* p); // a death's or an arrest's countdown over at once, the player's part (slots.cpp)
 void InstallStarts(bool on); // the players' peds past the script's and their start blocks (starts.cpp)

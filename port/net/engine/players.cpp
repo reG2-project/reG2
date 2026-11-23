@@ -439,6 +439,7 @@ void net::engine::CapturePlayer(int i, Snapshot& out)
     {
         e.f[kPlayerPowerUp + k] = p->mPowerUpTimers[k];
     }
+    CaptureThrow(ped, e);
     out.entities.push_back(e);
 }
 
@@ -504,6 +505,7 @@ void net::engine::ApplyPlayer(const EntityState& e)
         }
     }
     ShowServerHit(i, ped, e);
+    ApplyThrow(ped, e); // first: a death carried out on a thrown ped takes at its landing, as the server's
     if (CarryOutDeath(i, p, ped, e))
     {
         return;
@@ -562,8 +564,9 @@ void net::engine::KillNow(Ped* ped)
 {
     ped->Kill();
     // Knocked down (a blast threw it), the game keeps the ped's state until it gets up (Ped::ChangeNextPedState1), so
-    // the server's death didn't take and the next snapshot carried it out again: its cry, its killer's points
-    if (!ped->isDead())
+    // the server's death didn't take and the next snapshot carried it out again: its cry, its killer's points. A
+    // player's throw is the server's (throws.cpp), so its death takes when it lands, as there
+    if (!ped->isDead() && !(ped->mPlayer && ThrowOf(ped)))
     {
         ped->mPedState1 = ped_state_1::dead_9;
         ped->mPedState2 = ped_state_2::ped2_dead_15;

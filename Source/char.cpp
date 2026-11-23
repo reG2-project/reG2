@@ -6597,7 +6597,7 @@ void Char::HandleCarImpact(Car* pCar, u8 not_used, Fix16 x, Fix16 y)
     impact_angle = p.GetAngle();
 
 #if defined(GTA2_PORT)
-    // Port: a network client's players are knocked down as on the server; their health is the server's.
+    // Port: a network client's players jump aside by the invulnerability the server gives them.
     if (PortReactsInvulnerable(mpPed->mInvulnerability, mpPed->mPlayer != NULL))
 #else
     if (this->mpPed->mInvulnerability > 0)
@@ -6607,6 +6607,13 @@ void Char::HandleCarImpact(Car* pCar, u8 not_used, Fix16 x, Fix16 y)
     }
     else
     {
+#if defined(GTA2_PORT)
+        // Port: a network client's players are knocked down or killed as its snapshots have them.
+        if (PortThrownByServer(mpPed->mPlayer != NULL))
+        {
+            return;
+        }
+#endif
         if (vecLen < sRunOrJumpSpeed)
         {
             vecLen = sRunOrJumpSpeed;
@@ -6756,11 +6763,13 @@ void Char::HandleGenericImpact(Ang16 ang, Fix16 impact_x, Fix16 impact_z, char_t
 {
 
 #if defined(GTA2_PORT)
-    // Port: a network client's players are thrown by a blast as on the server; their health is the server's.
-    if (PortReactsInvulnerable(mpPed->mInvulnerability, mpPed->mPlayer != NULL))
-#else
-    if (mpPed->mInvulnerability > 0)
+    // Port: a network client's players are thrown as its snapshots have them (net/engine/throws.cpp).
+    if (PortThrownByServer(mpPed->mPlayer != NULL))
+    {
+        return;
+    }
 #endif
+    if (mpPed->mInvulnerability > 0)
     {
         impact_type = 0;
     }

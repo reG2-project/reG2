@@ -367,6 +367,14 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   Player peds take no damage on a client, and everything counts as seen there, so nothing is removed off screen. A
   player's health that drops in a snapshot shows the server's hit: the game's blood burst at its ped and the grunt of a
   punch (`ShowServerHit`, `engine/players.cpp`), which the client's own hits on an invulnerable ped don't give.
+- **Throws** (`engine/throws.cpp`): the game throws a ped (a blast, a car, a door) on a moving object its char follows
+  until the object stops, then lands it by the throw's outcome: back on its feet, knocked down, or dead (a blast at its
+  feet: the flying death). A client's players are thrown only as the snapshots have them (`PortThrownByServer` in
+  `Char::HandleGenericImpact` and `HandleCarImpact`): the player entity carries the object's place and motion and the
+  outcome, a client starts the throw the server has, puts its object where the server's is each snapshot and stops
+  one the server's has ended, and the resimulated ticks fly it on. The client's own blasts and cars are predictions
+  (explosions aren't synced) and its players invulnerable, which gave throws the server never had, a flight that no
+  snapshot moved (the char follows its object, not the place applied), and always the outcome of getting up.
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
   server's world. It carries every player, the car each sits in and every train wherever they are, and everything
   within the reach (the interest area, 24 blocks around the client's player's foci as the server has them), each entity the
@@ -417,14 +425,15 @@ the original's.
 | Entity | Carries |
 |---|---|
 | World (one per snapshot, `engine/world_entity.cpp`) | the game's tick counter (timers are stamped with it), the random seed and stream, the restart zones' turn, the round's state (`core/round_state.hpp`), the game's generation (a map change), the traffic lights, the tag game's fugitive and times, the map's light level (its script sets it: `MapRenderer`'s ambient, its target and step), the police's state that a client's cops, cop cars and HUD read (the highest wanted level, the strongest crew, a crew on screen, the last cop whose shot hit, and each pursuit's criminal, level, state, timer and crews) |
-| Player (`engine/players.cpp`) | place, input, health, death count and last killer, weapons and the ammo of all 28 (a car weapon the car here lacks is added to it), frags and points, the HUD's money and multiplier, power-up timers, its car, the chat line |
+| Player (`engine/players.cpp`) | place, input, health, death count and last killer, weapons and the ammo of all 28 (a car weapon the car here lacks is added to it), frags and points, the HUD's money and multiplier, power-up timers, its car, the chat line, its throw (`engine/throws.cpp`: the object it flies on, its motion and the outcome) |
 | Car (`engine/cars.cpp`, `car_ai.cpp`) | place, its whole `CarPhysics` (but its two pointers), damage, its wreck's fire, lights, horn, colour, its roof turret's angle, the trailer it tows (towed trailers sent too), its proofs and alarm (`Car::mFlags`), its driver, and its AI (`CarAI`: route, speed, the cars it chases) |
 | Ped (`engine/ped_state.cpp`) | place, and the plain values its AI runs on (objectives, targets, speeds, timers, occupation, flags, health, death cause), its references (targets, group) and its car and seat |
 | Pickup (`engine/pickups.cpp`) | model and place; roadblock barriers too (they are off the object pool's list), and the car weapons' mines and oil |
 | Train (`engine/trains.cpp`, every train in every snapshot) | its lead's place, speed and driver (none, the traffic driver, a ped, a player), its carriages' car ids (the client's train of the same index takes them), which end leads (`Train::ReassignTrainHead`), its state, stop phase and timers, the station it heads for and that station's state, each carriage's damage and explosion timer |
 
 Health, deaths, weapons and scores are the server's. A death the server had is carried out on the client with the
-game's own `Ped::Kill` (dead at once, also when a blast has the ped knocked down), credited to the killer, and the deaths carried out are part of the rollback set, so a
+game's own `Ped::Kill` (dead at once, also when a blast has the ped knocked down; a thrown player when it lands, as on
+the server), credited to the killer, and the deaths carried out are part of the rollback set, so a
 resimulation never repeats one. Its respawn takes the server's restart zone: the snapshot's zone turn is already past the
 server's respawn, so it goes back one first (`ZoneTurnBack`), and the slot picks the same block. The HUD's kill notices come from these deaths only, with the server's killer (none for
 the police's), not from the deaths the client's prediction starts. A client goes by the game's death count, which only counts up (the round's, in the
@@ -456,8 +465,8 @@ or killed it, the car it stole) stay the client's when missing. Groups are rebui
 the client from each ped's leader, keeping only members that are present (the game walks a group's list up to its
 count).
 
-Not synced: objects other than pickups (fires, explosions, projectiles); the client's own simulation makes them, and
-rolls them back with the world, but nothing corrects them.
+Not synced: objects other than pickups (fires, explosions, projectiles) and the players' throws; the client's own
+simulation makes them, and rolls them back with the world, but nothing corrects them.
 
 ### Random draws
 
@@ -717,6 +726,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Ped.cpp` | `gPortKeepWantedPoints` | a client keeps the server's wanted points with its police off |
 | `ScriptThread.cpp` | `gPortScriptCommandRuns` | a client runs the level start's look and sound commands, and steps over the rest |
 | `Car.cpp` | `gPortCarMayExplode` | a client's car the server sends blows up when a snapshot says the server's did, not on its own prediction |
+| `char.cpp` | `PortThrownByServer()` | a client's players are thrown, knocked down or run over only as its snapshots have them (`engine/throws.cpp`) |
 | `Car.cpp` | `Car::TryHonkHorn` | a train's lead without a driver (a player got out of a carriage that stood still) doesn't read it |
 | `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`), `gPortChatChar` | the chat types the keyboard layout's characters; a server, those its clients typed |
 | `Hud.cpp` | `gPortServerKillNotices` | a client's kill notices are the server's deaths only |

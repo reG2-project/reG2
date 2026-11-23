@@ -435,6 +435,11 @@ void net::engine::SetPose(const Pose& pose)
     Ped* ped = InGamePed((int)pose.id - 1);
     if (ped && !ped->mCar && !AtCarDoor(ped) && !ped->isDead())
     {
+        // Thrown, its char follows the throw's object: the object goes the same way
+        if (const Sprite* s = CharSprite(ped))
+        {
+            MoveThrow(ped, pose.x - s->mXy.x.mValue, pose.y - s->mXy.y.mValue);
+        }
         MovePed(ped, Raw(pose.x), Raw(pose.y), Raw(pose.z), Angle(pose.rot));
     }
 }
