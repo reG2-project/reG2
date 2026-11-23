@@ -171,21 +171,28 @@ conditioner's options apply to a join from the page too.
 (`port/src/pause_menu.cpp`, not while a chat line is typed) over the game going on. Nothing is paused: the client keeps
 receiving and simulating, and sends no controls while the menu shows, so its player stands still. Its keys reach neither
 the game nor the server. It has RESUME, READY or NOT READY in a warmup (`/ready`), VOTE YES and VOTE NO under an open
-vote's question (`/yes`, `/no`), PLAYERS (each player's name, score and deaths by score, and the client's own ping: the
-others' isn't sent), GRAPHICS, DISPLAY, SOUND and CONTROLS (TWIN STICK with its settings and ZOOM greyed: they are off in
+vote's question (`/yes`, `/no`), PLAYERS (the scoreboard, below, with "Esc: back"), GRAPHICS, DISPLAY, SOUND and CONTROLS (TWIN STICK with its settings and ZOOM greyed: they are off in
 a network game), and LEAVE GAME, whose question LEAVE (Enter, Y, a pad's A) or CANCEL (N, Escape) answers. A round's
 fresh game closes it. Leaving leaves the server and goes back to the network page
 as a single player again. So does a client that lost the server for good, was kicked, or hasn't the next map's files,
 with why on the page; without the map's files a join fails the same way.
 
 **The scoreboard** (`engine/scoreboard.cpp`) shows over the middle of the frame while SCORES is held (a control of its
-own on the CONTROLS page, Q by default: `kScoresKey` in `compat/src/pad.cpp`; the game never sees it) or a gamepad's
-Back is held for 250 ms; a shorter press of Back is F1 as it is let go. On a translucent panel: the map's title, the game
+own on the CONTROLS page, Tab by default: `kScoresKey` in `compat/src/pad.cpp`; the game never sees it) or a gamepad's
+Back is held (a pad's ready and votes are the pause menu's), and as the pause menu's PLAYERS. SPECIAL 1 has Tab by
+default too: in a network game's round the SCORES key's presses don't reach the game (`port_ScoresKeyInGame`), so Tab
+shows the board without the horn; saved bindings are never changed. On a translucent panel: the map's title, the game
 type and its limit, the round and its time left, the players in the game and the server's address (until servers have a
-name); then a row per player by score, from the same rows as the pause menu's PLAYERS: its $ sign and name in its HUD
-colour, chat, IT, dead or ready, its score (and frags in a points or tag game), deaths, and the ping for the local
-player only (the others' isn't sent). The local row is marked. Not over the pause menu, nor while typing a chat line.
-`GTA2_NET_SCOREBOARD=1` shows it all the time.
+name); then a row per player by score: its $ sign and name in its HUD colour (the dark purple's name white), then chat,
+IT, dead or ready, its score (and frags in a points or tag game), deaths, and the ping for the local player only (the
+others' isn't sent). The local row is marked. Under the rows, what the round panel it hides would ask (ready, a vote:
+F1, Y / N, or the Start menu on a pad). Not over the pause menu, nor while typing a chat line. `GTA2_NET_SCOREBOARD=1`
+shows it all the time.
+
+**The HUD's standings.** Instead of the original's list of every other player's money and frags (or tag time) down the
+left side, a client shows two lines at the top left: its rank and score in the game's terms ("2nd / 10  7 frags",
+points, or the time as IT), then the leader's name in its colour and score, "You lead by N" or "Tied for 1st". The
+ranks are the scoreboard's, by the same score (`gPortDrawNetStandings`). A replay keeps the original's list.
 
 **Connection.** The ping shows at the bottom right: the network's round trip alone (`kMsgPing`, answered at once,
 both polled between frames). With no snapshot for 0.7 s it shows **Connection interrupted** and plays on, the others'
@@ -213,7 +220,7 @@ player's name, as far as all that fit agree; when several fit they show over the
 
 **Rounds** (`session/round_flow.cpp`): a match is rounds in phases, run by the server and shown on every client:
 
-1. **Warmup**: the map is played as usual. It ends when `--minplayers` are in and all are ready (F1, a gamepad's Back pressed briefly, or `/ready`), or
+1. **Warmup**: the map is played as usual. It ends when `--minplayers` are in and all are ready (F1, the pause menu's READY, or `/ready`), or
    `--warmup` seconds after the minimum was reached (0: only when all are ready).
 2. **Countdown**, 5 s, large in the middle of the frame, in **a fresh game**: every round is a game of its own, started
    on the server and every client the way a map change starts one (on the same map, or the voted one), so scores,
@@ -236,8 +243,9 @@ player's name, as far as all that fit agree; when several fit they show over the
 
 **Votes**: `/start` (end the warmup), `/map N` (change now; a round ends without a winner), `/kick NAME` (out, and the
 name turned away for 10 minutes). One at a time, open 20 s, decided by a majority of the people in the game (not
-voting counts as no; the caller votes yes); Y or N while it shows (the keys that type them, so QWERTZ works), F1 or a
-gamepad's Back for yes. `--votes` sets which are allowed.
+voting counts as no; the caller votes yes); Y or N while it shows (the keys that type them, so QWERTZ works), F1 for
+yes, or the pause menu's VOTE YES and VOTE NO. On a gamepad the warmup's and the vote's hints and notices point to the
+Start menu (`PadNotice`). `--votes` sets which are allowed.
 
 With `--rounds off` (the default with `--arena`) the round starts at once and the next follows its end directly, in
 the same game (everyone respawned with no score: `engine::NewRound`).
@@ -671,6 +679,8 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Car.cpp` | `Car::TryHonkHorn` | a train's lead without a driver (a player got out of a carriage that stood still) doesn't read it |
 | `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`), `gPortChatChar` | the chat types the keyboard layout's characters; a server, those its clients typed |
 | `Hud.cpp` | `gPortServerKillNotices` | a client's kill notices are the server's deaths only |
+| `Hud.cpp` | `gPortDrawNetStandings` | a client's rank and the leader at the top left, in place of the list of the other players |
+| `Hud.cpp` | `PortHudTextPalette` (`port/src/player_looks.hpp`) | the names over the players and the tag times in the port's looks' colours (the fonts have 9 remaps) |
 | `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
 | `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
