@@ -302,6 +302,11 @@ void net::engine::SetTickMs(int ms)
     }
 }
 
+void net::engine::SetPaceMs(int ms)
+{
+    gPortNetPaceMs = ms;
+}
+
 void net::engine::SeedRandom(uint32_t seed)
 {
     PortRand::SetState(seed);

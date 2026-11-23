@@ -6,6 +6,7 @@ void (*gPortCrashHook)();
 void (*gPortSpriteMovedHook)(Sprite*);
 void (*gPortIdleHook)();
 bool gPortNetFrameLoop;
+s32 gPortNetPaceMs = -1;
 bool gPortNoDraw;
 
 bool gPortNoAudio;

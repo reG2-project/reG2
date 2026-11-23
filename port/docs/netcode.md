@@ -300,7 +300,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   buffers them per tick and repeats a player's last input when one is late (its controls only: a repeated key would
   type twice), for 6 ticks at most: a client silent longer plays nothing, its player stands until it is back. It
   reports the newest command tick it has, and the client keeps its commands about two ticks early. The client paces
-  its ticks to keep them there (a quarter faster when late, a tenth or a fifth slower when early); commands a few
+  its ticks to keep them there (a quarter faster when late, a tenth or a fifth slower when early: only the wait between
+  them, the game's timers still count the server's tick length); commands a few
   ticks late are caught up by running the missing ticks at once, saved, and only more than 8 late or 20 early make it
   jump (its saves lost until snapshots of the new ticks come).
 - **Snapshots**, per client, every tick (`Server::SendSnapshot`): every player and the car each sits in, wherever they
@@ -551,7 +552,8 @@ round trip rose) and a flush after every tick.
 Every client session is recorded (`session/recording.cpp`): the welcome, then per frame the packets, the round trip and
 the input, to `recordings/session-<n>.rec` (the newest 10, each stopped at 200 MB: one to a few hours;
 `GTA2_NET_RECORD=<file>` elsewhere, `off` none). A client does nothing but react to what arrives and to its own input,
-so `--replay <file>` plays the session again without a server, tick for tick, as fast as the game runs: a minute in
+so `--replay <file>` plays the session again without a server, tick for tick, as fast as the game runs (no wait between
+the ticks, each of the server's length for the game's timers): a minute in
 about 2 s, the same every time. **F12, or the key under Esc, marks a moment** in play: the client and its replay print
 `net: mark <n> at frame <f>`, so a bug seen in play is "the last session, mark 2". A recording replays only on a build
 of the same protocol (its welcome's version): another one's is refused with both numbers.

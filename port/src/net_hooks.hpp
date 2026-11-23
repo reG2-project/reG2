@@ -24,6 +24,9 @@ extern void (*gPortIdleHook)();
 // A network client's: reG2's frame loop runs its game (winmain.cpp), the netcode's frame hook after each step and
 // frames drawn in between; a server and a replay run the original's, a step then a frame
 extern bool gPortNetFrameLoop;
+// A network game's time between two steps in ms, apart from the step's game length (GetFrameDurationMs): a client's
+// pacing, 0 for a replay (no waiting); negative: the step's length
+extern s32 gPortNetPaceMs;
 // A headless dedicated server's: the original's frame path (winmain.cpp) runs no Game::Draw after a step, as nobody
 // sees it and the steps don't depend on it (port/docs/netcode.md, "The game loop")
 extern bool gPortNoDraw;

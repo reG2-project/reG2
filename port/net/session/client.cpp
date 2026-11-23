@@ -1515,7 +1515,8 @@ void net::Client::Step()
         RecordShown();
     }
     mProbe.Jerk(mFrame, mSlot, mSynced, mReceived[mLatestTick % kRing], mReceived[(mLatestTick - 1) % kRing]);
-    engine::SetTickMs(mReplay ? 1 : PacedTickMs()); // every frame: a restore brings back the game's tick length too (a replay: no waiting)
+    engine::SetTickMs(mTickMs); // every frame: a restore brings back the game's tick length too
+    engine::SetPaceMs(mReplay ? 0 : PacedTickMs()); // the server's tick length in the game, only the wait paced
     SetNextInputs(local);
     if (mSynced)
     {
