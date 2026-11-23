@@ -384,8 +384,7 @@ int net::RoundFlow::NextMap() const
     }
     if (!tied.empty())
     {
-        static std::mt19937 sRandom{std::random_device{}()}; // not the game's random: that one is part of its state
-        return tied[sRandom() % tied.size()];
+        return tied[mRandom() % tied.size()];
     }
     return RotationNext();
 }

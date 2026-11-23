@@ -217,6 +217,7 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
     }
     mMap = (size_t)(mConfig.currentMap >= 0 ? mConfig.currentMap : 0);
     mRounds.Start(mConfig.rules, mapNames, mConfig.currentMap);
+    mRounds.Seed(start.secret[0]);
     mRounds.SetMapTitles(titles);
     engine::CurrentRound() = mRounds.State();
     mProbe.Start();

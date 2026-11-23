@@ -4,6 +4,7 @@
 // turns the actions into engine calls), so it is tested on its own (port/net/tests/test_rounds.cpp).
 #pragma once
 #include "../core/round_state.hpp"
+#include <random>
 #include <stdint.h>
 #include <string>
 #include <utility>
@@ -89,6 +90,10 @@ class RoundFlow
     }
     // A map change's new slot numbers (<to>[old], -1: gone): the ready flags, votes and map choices follow
     void Renumber(const std::vector<int>& to);
+    void Seed(uint32_t seed) // the tied votes' draw: from the server's recorded secret, so that a replay draws the same
+    {
+        mRandom.seed(seed);
+    }
 
   private:
     void Enter(uint32_t tick, RoundPhase phase, RoundActions& out);
@@ -114,5 +119,6 @@ class RoundFlow
     uint32_t mLoadWaitEnd = 0; // the countdown waits for everyone to load the map, this long at most
     uint32_t mVoteEnd = 0;
     bool mWaitingForMap = false; // a map change asked for: the countdown starts with the new game
+    mutable std::mt19937 mRandom; // not the game's random: that one is part of its state
 };
 } // namespace net
