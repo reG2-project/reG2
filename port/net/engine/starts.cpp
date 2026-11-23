@@ -11,6 +11,7 @@
 #include "Source/Player.hpp"
 #include "Source/map_0x370.hpp"
 #include "Source/ped_graphic_type.hpp"
+#include "Source/sprite.hpp"
 #include "port/src/net_hooks.hpp"
 #include <stdio.h>
 #include <string>
@@ -139,6 +140,7 @@ void ExtraPlayerPeds()
         ped->set_health(100);
         p->InitPlayerPed(ped);
         ped->mGraphicType = ped_graphic_type::character_1;
+        ped->GetSprite()->ResolveCollisionWithCarPedOrObject();
         k++;
     }
     if (k)
