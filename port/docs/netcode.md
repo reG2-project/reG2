@@ -190,9 +190,10 @@ F1, Y / N, or the Start menu on a pad). Not over the pause menu, nor while typin
 shows it all the time.
 
 **The HUD's standings.** Instead of the original's list of every other player's money and frags (or tag time) down the
-left side, a client shows two lines at the top left: its rank and score in the game's terms ("2nd / 10  7 frags",
-points, or the time as IT), then the leader's name in its colour and score, "You lead by N" or "Tied for 1st". The
-ranks are the scoreboard's, by the same score (`gPortDrawNetStandings`). A replay keeps the original's list.
+left side, a client shows its rank and score at the top left ("2nd / 10  7 frags", "1st / 10  1:23 it"), in place of
+the game's own counter at the top (the frags, or the tag time); in a points game the rank only, the score being the
+game's money at the top right. The others' scores and money are the scoreboard's, whose ranks these are, by the same
+score (`gPortDrawNetStandings`). A replay keeps the original's list and counter.
 
 **Connection.** The ping shows at the bottom right: the network's round trip alone (`kMsgPing`, answered at once,
 both polled between frames). With no snapshot for 0.7 s it shows **Connection interrupted** and plays on, the others'
@@ -679,7 +680,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Car.cpp` | `Car::TryHonkHorn` | a train's lead without a driver (a player got out of a carriage that stood still) doesn't read it |
 | `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`), `gPortChatChar` | the chat types the keyboard layout's characters; a server, those its clients typed |
 | `Hud.cpp` | `gPortServerKillNotices` | a client's kill notices are the server's deaths only |
-| `Hud.cpp` | `gPortDrawNetStandings` | a client's rank and the leader at the top left, in place of the list of the other players |
+| `Hud.cpp` | `gPortDrawNetStandings` | a client's rank and score at the top left, in place of the list of the other players and the game's frags or tag time counter |
 | `Hud.cpp` | `PortHudTextPalette` (`port/src/player_looks.hpp`) | the names over the players and the tag times in the port's looks' colours (the fonts have 9 remaps) |
 | `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |

@@ -34,7 +34,7 @@ const s32 kTwoTrim = 4;
 // A line's capitals span y + 6 to y + 17 (the font's glyphs have blank rows on top); its descenders reach y + 22
 const s32 kTextMiddle = 12;
 // The HUD's top left, where the original listed every other player
-const s32 kStandingsX = 8, kStandingsY = 6, kStandingsStep = 18, kLeaderNameWidth = 100;
+const s32 kStandingsX = 8, kStandingsY = 6;
 
 void Widen(const std::string& text, wchar_t* out, size_t size)
 {
@@ -197,16 +197,16 @@ std::string Ordinal(int n)
     return std::to_string(n) + suffix;
 }
 
-// A score as the game type counts it: frags, points, or the time "it"; <unit>: with what it counts
-std::string Score(int score, int gameType, bool unit)
+// The local player's score on the HUD's line: its frags or the time "it" (a points game's is the game's money)
+std::string Score(int score, int gameType)
 {
     if (gameType == 3)
     {
         char clock[16];
-        snprintf(clock, sizeof(clock), "%d:%02d", score / 60, score % 60);
-        return clock + std::string(unit ? " it" : "");
+        snprintf(clock, sizeof(clock), "%d:%02d it", score / 60, score % 60);
+        return clock;
     }
-    return std::to_string(score) + (!unit ? "" : gameType == 2 ? " points" : score == 1 ? " frag" : " frags");
+    return std::to_string(score) + (score == 1 ? " frag" : " frags");
 }
 } // namespace
 
@@ -284,7 +284,7 @@ void net::engine::SetStandings(const std::vector<PlayerRow>& rows, int gameType)
     gStandingsType = gameType;
 }
 
-bool net::engine::DrawStandings()
+int net::engine::DrawStandings()
 {
     size_t you = 0;
     while (you < gStandings.size() && !gStandings[you].you)
@@ -293,49 +293,20 @@ bool net::engine::DrawStandings()
     }
     if (you == gStandings.size())
     {
-        return false; // not in the game yet: the original's list
+        return 0; // not in the game yet: the original's list
     }
-    const PlayerRow& me = gStandings[you];
-    int rank = 1, tied = 0;
+    int rank = 1;
     for (const PlayerRow& row : gStandings)
     {
-        rank += row.score > me.score;
-        tied += !row.you && row.score == me.score;
+        rank += row.score > gStandings[you].score;
     }
-    const int type = gStandingsType;
-    const s32 x = kStandingsX, y = kStandingsY;
-    // Short: a kill's notice shows in the middle of the same lines
-    Text(Ordinal(rank) + " / " + std::to_string(gStandings.size()) + "  " + Score(me.score, type, true), x, y);
-    const s32 y2 = y + kStandingsStep;
-    if (gStandings.size() < 2)
+    const std::string line = Ordinal(rank) + " / " + std::to_string(gStandings.size());
+    if (gStandingsType == 2)
     {
-        return true;
+        Text(line, kStandingsX, kStandingsY);
+        return 1; // the game's money top right is the score
     }
-    if (rank == 1 && tied)
-    {
-        Text("Tied for 1st", x, y2);
-    }
-    else if (rank == 1)
-    {
-        const int lead = me.score - gStandings[you == 0 ? 1 : 0].score;
-        Text("You lead by " + Score(lead, type, false), x, y2);
-    }
-    else
-    {
-        // gStandings are by score: the first is a leader
-        const PlayerRow& leader = gStandings[0];
-        const std::string label = "Leader ";
-        wchar_t w[24];
-        Widen(leader.name, w, sizeof(w) / sizeof(w[0]));
-        Fit(w, kLeaderNameWidth);
-        const s32 nameX = x + Width(label);
-        Draw(w, x, nameX, y2, NameRemap(leader.slot));
-        wchar_t rest[32];
-        Widen("  " + Score(leader.score, type, false), rest, sizeof(rest) / sizeof(rest[0]));
-        Draw(rest, x, nameX + Width(w), y2);
-        wchar_t lw[16];
-        Widen(label, lw, sizeof(lw) / sizeof(lw[0]));
-        Draw(lw, x, x, y2);
-    }
-    return true;
+    // Short: a kill's notice shows in the middle of the same line
+    Text(line + "  " + Score(gStandings[you].score, gStandingsType), kStandingsX, kStandingsY);
+    return 2;
 }

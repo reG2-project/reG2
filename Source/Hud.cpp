@@ -3041,6 +3041,12 @@ void Hud_PlayerStats::DrawPlayerStats()
 
     if (bStartNetworkGame)
     {
+#if defined(GTA2_PORT)
+        // Port: a network client's line shows its frags or tag time in place of the game's counter
+        const int standings = gPortDrawNetStandings ? gPortDrawNetStandings() : 0;
+        if (standings != 2)
+        {
+#endif
         if (IsTagGame())
         {
             swprintf(buffer,
@@ -3066,8 +3072,9 @@ void Hud_PlayerStats::DrawPlayerStats()
         }
 
 #if defined(GTA2_PORT)
-        // Port: a network client shows its rank and the leader (net/engine/scoreboard.cpp) instead of a row per player
-        if (gPortDrawNetStandings && gPortDrawNetStandings())
+        }
+        // Port: a network client's rank and score (net/engine/scoreboard.cpp) instead of a row per player
+        if (standings)
         {
             return;
         }
