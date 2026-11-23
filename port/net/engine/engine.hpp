@@ -310,7 +310,7 @@ struct Scoreboard
     std::vector<PlayerRow> rows;
 };
 void SetScoreboard(const Scoreboard* pBoard); // NULL: hidden
-bool ScoresHeld(); // SCORES held (compat/src/pad.cpp)
+bool ScoresHeld(); // SCORES, or the gamepad's Back, held (compat/src/pad.cpp)
 
 // The checks, logs and test cheats are engine/dev/dev.hpp's.
 } // namespace engine

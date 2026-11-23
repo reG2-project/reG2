@@ -1,6 +1,6 @@
-// port/net engine (port/docs/netcode.md, "Playing"): a client's scoreboard, drawn over the frame while SCORES is held:
-// the match on a translucent panel, then a row per player with its $ sign, its name in its HUD colour, its scores, the
-// local player's ping and what it is doing.
+// port/net engine (port/docs/netcode.md, "Playing"): a client's scoreboard, over the frame while SCORES or the gamepad's
+// Back is held: the match on a translucent panel, then a row per player with its $ sign, its name in its HUD colour, its
+// scores, the local player's ping and what it is doing.
 #include "internal.hpp"
 #include "Source/Camera.hpp"
 #include "Source/Draw.hpp"
