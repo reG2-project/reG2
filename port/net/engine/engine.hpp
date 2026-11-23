@@ -62,7 +62,8 @@ struct PlayerRow
 };
 // What it shows while open: PLAYERS, READY (1) or NOT READY (2) or neither (0), an open vote's question ("": none)
 void OfferMenu(const std::vector<PlayerRow>& players, const char* scoreHeading, int ready, const std::string& vote);
-// The client's round keys on the gamepad: Back as F1, and in the results the d-pad and A as the arrows and Enter
+// The client's round keys on the gamepad: Back held for the scoreboard, and in the results the d-pad and A as the
+// arrows and Enter
 void SetRoundPad(bool results);
 bool PadMode(); // the gamepad gave the last input: the hints name its buttons
 void IdleWait(); // while the game waits for its next step: a millisecond's sleep when that is more than 1 ms away

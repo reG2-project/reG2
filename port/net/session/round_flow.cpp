@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <random>
 
+const char* const net::kWarmupNotice = "Warmup: F1 ready, F10 chat, Esc menu";
+
 namespace
 {
 std::string Lower(std::string s)
@@ -87,7 +89,7 @@ void net::RoundFlow::Enter(uint32_t tick, RoundPhase phase, RoundActions& out)
     else
     {
         mPhaseEnd = 0; // the warmup's clock starts once the minimum is in
-        out.notices.push_back({-1, "Warmup: F1 ready, F10 chat, Esc menu"});
+        out.notices.push_back({-1, kWarmupNotice});
     }
     printf("net: round flow: %s (round %d)\n", PhaseName(phase), mState.number);
 }

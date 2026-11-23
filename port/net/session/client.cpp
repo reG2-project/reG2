@@ -926,7 +926,8 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
                 std::string text;
                 if (ReadText(r, text))
                 {
-                    engine::ShowHudMessage(text.c_str());
+                    const bool padWarmup = text == kWarmupNotice && engine::PadMode();
+                    engine::ShowHudMessage(padWarmup ? "Warmup: ready in the Start menu" : text.c_str());
                     printf("net: frame %u, notice: %s\n", mFrame, Printable(text).c_str());
                 }
             }
@@ -1525,9 +1526,9 @@ void net::Client::SendCommand(const std::string& text)
 }
 
 // F1 in the warmup (ready), else while a vote is open (yes); Y or N, as the keyboard's layout types them, while a vote
-// is open; in the results, the number keys, or Up, Down and Enter, choose the next map. A gamepad's Back is F1, its
-// d-pad and A in the results the arrows and Enter (SetRoundPad). Not while typing a chat line, whose keys they are
-// then. The keys go to neither the game here nor the server
+// is open; in the results, the number keys, or Up, Down and Enter, choose the next map. A gamepad's d-pad and A in the
+// results are the arrows and Enter (SetRoundPad); its ready and votes are the pause menu's. Not while typing a chat
+// line, whose keys they are then. The keys go to neither the game here nor the server
 void net::Client::RoundKeys(uint32_t& local, uint32_t key)
 {
     const uint32_t kKeyDown = 0x200000, kKeyBits = 0x1FF000, kF1 = 0x3B; // DIK_F1
@@ -1724,7 +1725,7 @@ void net::Client::ShowRound()
         {
             lines.push_back("You are ready");
         }
-        lines.push_back(pad ? "Back ready   Start menu" : "F1 ready   F10 chat   Esc menu");
+        lines.push_back(pad ? "Start menu: ready   Back: scores" : "F1 ready   F10 chat   Esc menu");
     }
     else if (r.phase == kPhaseResults)
     {
@@ -1789,7 +1790,7 @@ void net::Client::ShowRound()
     {
         lines.push_back("");
         lines.push_back("Vote: " + what + "   " + std::to_string(bits(r.voteYes)) + " yes, " + std::to_string(bits(r.voteNo)) + " no   " +
-                        std::to_string(r.voteLeft) + " s" + (mine ? "" : pad ? "   Back: yes" : "   Y / N"));
+                        std::to_string(r.voteLeft) + " s" + (mine ? "" : pad ? "   Start menu: vote" : "   Y / N"));
     }
     engine::SetNetPanel(lines);
 }

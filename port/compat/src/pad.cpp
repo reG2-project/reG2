@@ -5,8 +5,8 @@
 // d-pad, A and B drive, as they answer the quit message. In the frontend it drives the menus as the
 // arrows, Enter and Escape. With TWIN STICK on foot, the sticks move and aim (port_TwinStickInput) and RT
 // attacks. Each control's second key (alt_<n>), a key, mouse button or wheel notch, presses it the same way.
-// A network game's round: Back is F1 (ready, or yes to a vote) when let go, the scoreboard while held, and the results'
-// map list takes the d-pad and A. SCORES, a 13th binding the game never sees, holds the scoreboard too.
+// A network game's round: Back held shows the scoreboard (ready and votes are in the Start menu), and the results' map
+// list takes the d-pad and A. SCORES, a 13th binding the game never sees, holds the scoreboard too.
 #define DIRECTINPUT_VERSION 0x0700
 #include <windows.h>
 #include <dinput.h>
@@ -32,8 +32,6 @@ const int kDefaultPad[kNumBindings] = {kPadUp, kPadDown, kPadLeft, kPadRight, 0,
 // W, S, A, D, F and E by position.
 const int kDefaultAlt[kNumBindings] = {DIK_W, DIK_S, DIK_A, DIK_D, kMouseCode + SDL_BUTTON_LEFT, DIK_F, 0,
                                        kWheelUpCode, kWheelDownCode, DIK_E, 0, 0, 0};
-// Back held this long shows the scoreboard instead of tapping F1 when let go.
-const Uint64 kScoresHoldMs = 250;
 const Sint16 kThreshold = 24000;
 
 const int kMaxGamepads = 8;
@@ -59,7 +57,7 @@ bool sMigrated;
 bool sMenuBlocked; // back from a game with a button or W, A, S or D still down: the menus wait for its release
 bool sAccelHeld; // RT held since the player drove or was getting into a vehicle: it attacks once pressed again
 bool sMouseAims; // the mouse was used in game after the pad
-bool sBackScores; // Back held past kScoresHoldMs in a network game
+bool sBackScores; // Back held in a network game's round
 bool sKeyDown[256]; // by DIK code
 unsigned sButtonsDown; // bit n: SDL mouse button n
 int sAlt[kNumBindings];
@@ -827,22 +825,8 @@ void port_UpdatePad()
         {
             backFree = backFree && port_GetPadBinding(i) != 6;
         }
-        static Uint64 sBackDownMs;
-        static bool sBackArmed; // pressed in a network game's round: F1 when let go, unless held for the scoreboard
-        const Uint64 now = SDL_GetTicks();
-        if (back && !sPrevBack)
-        {
-            sBackArmed = roundPad && backFree;
-            sBackDownMs = now;
-        }
-        sBackArmed = sBackArmed && roundPad && backFree;
-        const bool shown = sBackScores;
-        sBackScores = sBackArmed && back && (shown || now - sBackDownMs >= kScoresHoldMs);
-        if (sBackArmed && !back && sPrevBack && !shown)
-        {
-            Tap(DIK_F1);
-        }
-        sBackArmed = sBackArmed && back;
+        // From a press in a network game's round, not one in a menu or a chat line
+        sBackScores = (sBackScores || !sPrevBack) && back && roundPad && backFree;
         if (quitShown && b && !sPrevB)
         {
             Tap(DIK_ESCAPE);

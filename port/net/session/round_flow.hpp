@@ -47,6 +47,9 @@ struct RoundActions
     std::vector<std::pair<int, std::string>> notices; // (slot, line), slot -1: everyone
 };
 
+// The notice a warmup starts with; a client in gamepad mode shows its own (the pad has neither F1 nor F10)
+extern const char* const kWarmupNotice;
+
 // Tab in a chat line starting with '/': the line with its last word completed as far as all that fit agree, among the
 // commands, then a /map's maps or a /kick's players (any case); <options>: those that fit, when more than one does
 std::string CompleteCommand(const std::string& line, const std::vector<std::string>& maps, const std::vector<std::string>& names,
