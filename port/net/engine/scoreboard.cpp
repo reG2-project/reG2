@@ -348,7 +348,7 @@ void net::engine::SetStandings(const std::vector<PlayerRow>& rows, int gameType)
     gStandingsType = gameType;
 }
 
-int net::engine::DrawStandings()
+bool net::engine::DrawStandings()
 {
     size_t you = 0;
     while (you < gStandings.size() && !gStandings[you].you)
@@ -357,7 +357,7 @@ int net::engine::DrawStandings()
     }
     if (you == gStandings.size())
     {
-        return 0; // not in the game yet: the original's list
+        return false; // not in the game yet: the original's list
     }
     int rank = 1;
     for (const PlayerRow& row : gStandings)
@@ -365,12 +365,7 @@ int net::engine::DrawStandings()
         rank += row.score > gStandings[you].score;
     }
     const std::string line = Ordinal(rank) + " / " + std::to_string(gStandings.size());
-    if (gStandingsType == 2)
-    {
-        Text(line, kStandingsX, kStandingsY);
-        return 1; // the game's money top right is the score
-    }
-    // Short: a kill's notice shows in the middle of the same line
-    Text(line + "  " + Score(gStandings[you].score, gStandingsType), kStandingsX, kStandingsY);
-    return 2;
+    // Short: a kill's notice shows in the middle of the same line. A points game's score is the game's money top right
+    Text(gStandingsType == 2 ? line : line + "  " + Score(gStandings[you].score, gStandingsType), kStandingsX, kStandingsY);
+    return true;
 }

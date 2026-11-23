@@ -194,7 +194,7 @@ shows it all the time.
 **The HUD's standings.** Instead of the original's list of every other player's money and frags (or tag time) down the
 left side, a client shows its rank and score at the top left ("2nd / 10  7 frags", "1st / 10  1:23 it"), in place of
 the game's own counter at the top (the frags, or the tag time); in a points game the rank only, the score being the
-game's money at the top right. The others' scores and money are the scoreboard's, whose ranks these are, by the same
+game's money at the top right, and no frags counter either. The others' scores and money are the scoreboard's, whose ranks these are, by the same
 score (`gPortDrawNetStandings`). A replay keeps the original's list and counter.
 
 **Connection.** The ping shows at the bottom right: the network's round trip alone (`kMsgPing`, answered at once,

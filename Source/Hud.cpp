@@ -3042,9 +3042,9 @@ void Hud_PlayerStats::DrawPlayerStats()
     if (bStartNetworkGame)
     {
 #if defined(GTA2_PORT)
-        // Port: a network client's line shows its frags or tag time in place of the game's counter
-        const int standings = gPortDrawNetStandings ? gPortDrawNetStandings() : 0;
-        if (standings != 2)
+        // Port: a network client's line shows its standing in place of the game's frags or tag time counter
+        const bool standings = gPortDrawNetStandings && gPortDrawNetStandings();
+        if (!standings)
         {
 #endif
         if (IsTagGame())
