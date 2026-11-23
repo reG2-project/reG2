@@ -200,7 +200,12 @@ void net::engine::PutInGame(int slot, bool freshScore)
     p->mTrafficSpawnThreshold = 1000;
     ped->SetPlayer(p, 0);
     p->mCameraMode = 0;
-    for (int w = 0; w < kPlayerWeapons; w++)
+    p->mTurnSpeed = Ang16(0); // a jump's turn (Player::HandleControls): kAngZero_6FE754 and kJumpTurnAccel * 2 + kAng3
+    p->mTurnAccel = Ang16(20);
+    p->mMoveDirection = Fix16(0);
+    p->mJumping = false; // as Player::InitializePlayerState: else a ped that left in the air turns as if jumping
+    // Its own weapons; its car's weapons stay its car's, which may be gone by now (one that left getting out kept them)
+    for (int w = 0; w < weapon_type::car_bomb; w++)
     {
         if (Weapon* weapon = p->mWeapons[w])
         {
@@ -208,8 +213,10 @@ void net::engine::PutInGame(int slot, bool freshScore)
             weapon->mAmmo = freshScore ? 0 : weapon->mAmmo; // a player back after a drop keeps its ammo
         }
     }
+    p->ClearCarWeapons();
     p->mCurrWeaponIdx = -1;
     p->mSavedPedWeaponIdx = -1;
+    p->mSavedCarWeaponIdx = 27;
     ped->mGraphicType = ped_graphic_type::character_1;
     p->set_in_use(1);
     ped->RespawnPed(zone); // a free spot in the zone, health, a moment of invulnerability
