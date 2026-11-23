@@ -983,8 +983,9 @@ void net::Server::ChangeToMap(int map)
         if (pick == (size_t)map)
         {
             fprintf(stderr, "net: no map here is playable any more: the server ends\n");
-            Shutdown();
-            _Exit(1);
+            Shutdown(); // LeaveServer's work for a server (atexit, skipped by _Exit): the clients hear of it
+            fflush(NULL);
+            _Exit(1); // not exit(): the game's destructors would run under its threads still going (as in Client)
         }
     }
     mMap = pick;
