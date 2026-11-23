@@ -11,6 +11,9 @@
 #include "Source/Weapon.hpp"
 #include "Source/WeaponManager.hpp"
 #include "Source/map_0x370.hpp"
+#include "Source/Object_5C.hpp"
+#include "Source/explosion_type.hpp"
+#include "Source/sprite.hpp"
 #include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
@@ -175,6 +178,17 @@ void net::engine::DebugStreak(int player)
     if (p && InGamePed(player))
     {
         p->mScores.mExecutionCount = 20; // its next PlayerScoreTracker::Service gives the bonus
+    }
+}
+
+void net::engine::DebugBlast(int player, int tenths)
+{
+    Ped* ped = InGamePed(player);
+    Sprite* s = ped ? PedSprite(ped) : NULL;
+    if (s)
+    {
+        const Fix16 x = s->mXy.x + Fix16(tenths * 16384 / 10, 0);
+        gObject_5C->CreateExplosion(x, s->mXy.y, s->mZpos, Ang16((s16)0, (u8)0), explosion_type::small_18, 0);
     }
 }
 

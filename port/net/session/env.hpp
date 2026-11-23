@@ -31,6 +31,7 @@ struct SessionEnv
     const char* testPowerUp; // <tick>:<player>:<power-up>[,...]: server test power-ups
     const char* testStreak; // <tick>:<player>[,...]: server test kill streaks
     const char* testFire; // <tick>:<player>[,...]: server test players set on fire
+    const char* testBlast; // <tick>:<player>:<tenths of a block>[,...]: an explosion that far east of a server test player
     const char* testPatients; // <tick>:<player>:<n>[:<blocks>][,...]: the n ambient peds nearest the player (that far at least) set on fire
     const char* testCar; // <tick>:<player>:<model>[,...]: server test cars beside players (11: a bus)
     const char* testTrain; // <tick>:<player>:<train>[,...]: server players put at the wheel of a train (train + 10: it reverses)

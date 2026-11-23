@@ -1134,3 +1134,50 @@ void net::engine::FireLog(bool server)
     printf("net: FIRE %s tick %u: peds burning %d, the local player at (%.1f, %.1f)\n", end, tick, burning, me ? me->get_cam_x().ToFloat() : -1.0f,
            me ? me->get_cam_y().ToFloat() : -1.0f);
 }
+
+void net::engine::ThrowLog(bool server)
+{
+    static const bool on = getenv("GTA2_NET_THROWLOG") != NULL;
+    static uint32_t sLast;
+    const uint32_t tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+    if (!on || !gExplosionPool_7A8 || tick == sLast)
+    {
+        return;
+    }
+    sLast = tick;
+    const char* end = server ? "server" : "client";
+    for (int i = 0; i < PlayerCount(); i++)
+    {
+        Ped* ped = InGamePed(i);
+        Char* c = ped ? ped->mGameObject : NULL;
+        Sprite* s = ped ? PedSprite(ped) : NULL;
+        if (!ped || !s || (!ped->mpObj2C && ped->mPedState1 != ped_state_1::immobilized_8 && !ped->isDead() && !ped->mBf21C.bOnFire))
+        {
+            continue;
+        }
+        const Object* o = ped->mpObj2C;
+        printf("net: THROW %s tick %u: p%d at (%.2f, %.2f, %.2f) ped %d/%d stored %d/%d char %d/%d anim %d health %d inv %d fire %d "
+               "cause %d obj %s(%.2f, %.2f, %.2f) speed %.3f z %.3f\n",
+               end, tick, i, s->mXy.x.ToFloat(), s->mXy.y.ToFloat(), s->mZpos.ToFloat(), (int)ped->mPedState1, (int)ped->mPedState2,
+               (int)ped->mStoredPedState1, (int)ped->mStoredPedState2, c ? (int)c->mPedState1 : -1, c ? (int)c->mPedState2 : -1,
+               c ? (int)c->mAnimationState : -1, (int)ped->mHealth, (int)ped->mInvulnerability, (int)ped->mBf21C.bOnFire,
+               (int)ped->mDeathCause, o ? "" : "none ", o && o->mSprite ? o->mSprite->mXy.x.ToFloat() : 0.0f,
+               o && o->mSprite ? o->mSprite->mXy.y.ToFloat() : 0.0f, o && o->mSprite ? o->mSprite->mZpos.ToFloat() : 0.0f,
+               o && o->mObj3c ? o->mObj3c->mSpeed.ToFloat() : 0.0f, o && o->mObj3c ? o->mObj3c->mZSpeed.ToFloat() : 0.0f);
+    }
+    for (int pool = 0; pool < 2; pool++)
+    {
+        const int n = pool ? 20 : 40;
+        for (int k = 0; k < n; k++)
+        {
+            const bool used = pool ? (gExplosionPool_3D4 && gExplosionPool_3D4->mbUsed[k]) : gExplosionPool_7A8->mbUsed[k];
+            const Explosion& x = pool ? gExplosionPool_3D4->mExplosions[k] : gExplosionPool_7A8->mExplosions[k];
+            if (used && x.mpObj2C && x.mpObj2C->mSprite && x.mTimer >= 97 && x.mTimer <= 100)
+            {
+                printf("net: THROW %s tick %u: explosion type %d timer %d owner %d at (%.2f, %.2f, %.2f)\n", end, tick, (int)x.mType,
+                       (int)x.mTimer, (int)x.mOwnerPedId, x.mpObj2C->mSprite->mXy.x.ToFloat(), x.mpObj2C->mSprite->mXy.y.ToFloat(),
+                       x.mpObj2C->mSprite->mZpos.ToFloat());
+            }
+        }
+    }
+}
