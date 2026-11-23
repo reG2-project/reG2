@@ -71,6 +71,7 @@ and the wheel to change weapons; Delete clears it) and a gamepad input. F1 to F1
 own uses (F7 the brief, F9 the zone name, F10 the network chat).
 The original's SPECIAL 1 is HORN OR TAUNT (C by default), SPECIAL 2 is LOOK AROUND, and SPECIAL 3,
 which the game never reads, is not listed but keeps its bindings. Saved bindings keep their keys.
+SCORES, after LOOK AROUND, shows a network game's scoreboard while held (Q by default; on a gamepad, Back held).
 CONTROLS on the controls page chooses how the player walks on foot: CLASSIC, the original's tank
 controls, or TWIN STICK, which moves and aims apart, both relative to the screen.
 The left stick, the d-pad or the movement keys walk; the right stick aims (its reticle

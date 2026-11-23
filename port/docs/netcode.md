@@ -178,6 +178,15 @@ fresh game closes it. Leaving leaves the server and goes back to the network pag
 as a single player again. So does a client that lost the server for good, was kicked, or hasn't the next map's files,
 with why on the page; without the map's files a join fails the same way.
 
+**The scoreboard** (`engine/scoreboard.cpp`) shows over the middle of the frame while SCORES is held (a control of its
+own on the CONTROLS page, Q by default: `kScoresKey` in `compat/src/pad.cpp`; the game never sees it) or a gamepad's
+Back is held for 250 ms; a shorter press of Back is F1 as it is let go. On a translucent panel: the map's title, the game
+type and its limit, the round and its time left, the players in the game and the server's address (until servers have a
+name); then a row per player by score, from the same rows as the pause menu's PLAYERS: its $ sign and name in its HUD
+colour, chat, IT, dead or ready, its score (and frags in a points or tag game), deaths, and the ping for the local
+player only (the others' isn't sent). The local row is marked. Not over the pause menu, nor while typing a chat line.
+`GTA2_NET_SCOREBOARD=1` shows it all the time.
+
 **Connection.** The ping shows at the bottom right: the network's round trip alone (`kMsgPing`, answered at once,
 both polled between frames). With no snapshot for 0.7 s it shows **Connection interrupted** and plays on, the others'
 last inputs held for 5 ticks after the last snapshot, then without fire, then from 10 ticks on none. When ENet drops
@@ -204,7 +213,7 @@ player's name, as far as all that fit agree; when several fit they show over the
 
 **Rounds** (`session/round_flow.cpp`): a match is rounds in phases, run by the server and shown on every client:
 
-1. **Warmup**: the map is played as usual. It ends when `--minplayers` are in and all are ready (F1, a gamepad's Back, or `/ready`), or
+1. **Warmup**: the map is played as usual. It ends when `--minplayers` are in and all are ready (F1, a gamepad's Back pressed briefly, or `/ready`), or
    `--warmup` seconds after the minimum was reached (0: only when all are ready).
 2. **Countdown**, 5 s, large in the middle of the frame, in **a fresh game**: every round is a game of its own, started
    on the server and every client the way a map change starts one (on the same map, or the voted one), so scores,
@@ -784,6 +793,7 @@ off by default:
 | `GTA2_NET_TESTCAR=<tick>:<player>:<model>,...` | server | a car beside the player (11: a bus; 63, 64: a truck cab with a container trailer); model + 1000 * n: damaged by n * 1000 (n = 16: on fire, 25: burning); a model the game can't wreck (24 to 26, 85: the HOTDOG_D vans; the wrecks) isn't spawned |
 | `GTA2_NET_TESTTRAIN=<tick>:<player>:<train>,...` | server | the player at the wheel of a train; train + 10: that train into reverse; train + 20: the player on the platform of the station it stops at next |
 | `GTA2_NET_TESTARM=<weapon>:<ammo>[,...]`, `GTA2_NET_TESTWANTED=<points>` | server | every player kept armed (car weapons from 15: the car it drives), or at least that wanted (600: a star) |
+| `GTA2_NET_SCOREBOARD=1` | client | the scoreboard shown all the time, as if SCORES were held (captures) |
 | `GTA2_NET_BOTMAP2=1` | client bot | it votes map 2 in the results (net_check's rounds step) |
 | `GTA2_NET_BOTCARFIRE=1` | both | bots fire their car weapons while driving (a second in three) |
 | `GTA2_NET_BOTTURRET=1` | both | bots turn their roof turret while driving (a second in three) |
