@@ -235,7 +235,7 @@ net::engine::MenuChoice net::engine::TakeMenuChoice()
     return (MenuChoice)PortPauseMenu::TakeNetworkChoice();
 }
 
-void net::engine::OfferMenu(const std::vector<MenuPlayer>& players, const char* scoreHeading, int ready, const std::string& vote)
+void net::engine::OfferMenu(const std::vector<PlayerRow>& players, const char* scoreHeading, int ready, const std::string& vote)
 {
     if (!PortPauseMenu::IsOpen())
     {

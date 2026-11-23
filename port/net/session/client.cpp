@@ -79,6 +79,7 @@ void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
     pGame->sty = welcome.sty;
     pGame->scr = welcome.scr;
     mScr = welcome.scr;
+    mMapTitle = MapTitle(welcome.map);
     mProbe.Start();
 }
 
@@ -1004,6 +1005,7 @@ bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, con
     engine::ChangeMap(gmp, sty, scr, players, slot, pauseTicks);
     mNextSlot = slot;
     mScr = scr;
+    mMapTitle = MapTitle(map);
     mServerGame = game; // from now on: the old game's snapshots would put its things into the next map's
     return true;
 }
@@ -1763,22 +1765,26 @@ void net::Client::ShowRound()
                              : r.voteKind == kVoteMap   ? "change to " + (r.voteArg < mMapTitles.size() ? mMapTitles[r.voteArg] : std::string("a map"))
                                                         : "kick " + engine::PlayerName(r.voteArg);
     const bool mine = mSlot < kRoundSlots && ((r.voteYes | r.voteNo) >> mSlot & 1);
+    // The pause menu's PLAYERS and the scoreboard, by score (the ping is only ours: the others' isn't sent)
+    std::vector<engine::PlayerRow> players;
+    for (const ScoreRow& row : rows)
+    {
+        const int score = mGameType == 3 ? row.tag : mGameType == 2 ? row.points : row.frags;
+        const bool you = row.slot == mSlot;
+        const bool ready = r.phase == kPhaseWarmup && r.minPlayers && row.slot < kRoundSlots && (r.ready >> row.slot & 1);
+        players.push_back({row.slot, engine::PlayerName(row.slot), score, row.frags, row.deaths,
+                           you && mConnected && mPingShown ? (int)mPingShown : -1, you, engine::PlayerWasted(row.slot),
+                           row.slot < 32 && (mChatting >> row.slot & 1), ready});
+    }
+    std::stable_sort(players.begin(), players.end(), [](const engine::PlayerRow& a, const engine::PlayerRow& b) { return a.score > b.score; });
     if (engine::MenuOpen())
     {
-        // The pause menu's PLAYERS, by score (the ping is only ours: the others' isn't sent), its READY and the open vote
-        std::vector<engine::MenuPlayer> players;
-        for (const ScoreRow& row : rows)
-        {
-            const int score = mGameType == 3 ? row.tag : mGameType == 2 ? row.points : row.frags;
-            const bool you = row.slot == mSlot;
-            players.push_back({engine::PlayerName(row.slot), score, row.deaths, you && mConnected && mPingShown ? (int)mPingShown : -1, you});
-        }
-        std::stable_sort(players.begin(), players.end(), [](const engine::MenuPlayer& a, const engine::MenuPlayer& b) { return a.score > b.score; });
         const bool ready = mSlot < kRoundSlots && (r.ready >> mSlot & 1);
         engine::OfferMenu(players, mGameType == 3 ? "IT" : mGameType == 2 ? "POINTS" : "FRAGS",
                           r.phase == kPhaseWarmup && r.minPlayers ? (ready ? 2 : 1) : 0,
                           r.voteKind != kVoteNone && !mine ? "Vote to " + what : std::string());
     }
+    ShowScoreboard(players, !hidden && (Env().scoreboard || engine::ScoresHeld()));
     if (r.voteKind != kVoteNone && !hidden)
     {
         lines.push_back("");
@@ -1786,6 +1792,54 @@ void net::Client::ShowRound()
                         std::to_string(r.voteLeft) + " s" + (mine ? "" : pad ? "   Back: yes" : "   Y / N"));
     }
     engine::SetNetPanel(lines);
+}
+
+void net::Client::ShowScoreboard(const std::vector<engine::PlayerRow>& players, bool shown)
+{
+    if (!shown)
+    {
+        engine::SetScoreboard(NULL);
+        return;
+    }
+    const engine::Round& r = engine::CurrentRound();
+    engine::Scoreboard board;
+    board.title = mMapTitle;
+    std::string game = mGameType == 3 ? "Tag" : mGameType == 2 ? "Points" : "Frags";
+    if (mFragLimit > 0 && mGameType != 3)
+    {
+        game += std::string(", first to ") + (mGameType == 2 ? "$" : "") + std::to_string(mFragLimit);
+    }
+    std::string round;
+    if (r.phase == kPhaseWarmup)
+    {
+        round = "warmup";
+    }
+    else if (r.phase == kPhaseCountdown)
+    {
+        round = "round " + std::to_string(r.number) + " starting";
+    }
+    else if (r.phase == kPhaseResults)
+    {
+        round = "round " + std::to_string(r.number - 1) + " over";
+    }
+    else
+    {
+        round = "round " + std::to_string(r.number);
+        if (r.secondsLeft > 0)
+        {
+            char clock[24];
+            snprintf(clock, sizeof(clock), ", %d:%02d left", r.secondsLeft / 60, r.secondsLeft % 60);
+            round += clock;
+        }
+    }
+    board.lines[0] = game + "   " + round;
+    // The server's address until servers have a name
+    board.lines[1] = std::to_string(players.size()) + " of " + std::to_string(engine::PlayerCount()) + " players   " + mConfig.host + ":" +
+                     std::to_string(mConfig.port);
+    board.scoreHeading = mGameType == 3 ? "It (s)" : mGameType == 2 ? "Points" : "Frags";
+    board.frags = mGameType != 1;
+    board.rows = players;
+    engine::SetScoreboard(&board);
 }
 
 // A bot's map in the results: one of the others, picked by its slot and the frame (a vote among bots isn't always the

@@ -52,14 +52,16 @@ enum MenuChoice
     kMenuNo,
 };
 MenuChoice TakeMenuChoice();
-struct MenuPlayer
+// A player as the pause menu's PLAYERS and the scoreboard list it
+struct PlayerRow
 {
+    int slot;
     std::string name;
-    int score, deaths, ping; // ping: -1 unknown
-    bool you;
+    int score, frags, deaths, ping; // score: the game type's (frags, points, seconds "it"); ping: -1 unknown
+    bool you, dead, chatting, ready; // ready: in a warmup
 };
 // What it shows while open: PLAYERS, READY (1) or NOT READY (2) or neither (0), an open vote's question ("": none)
-void OfferMenu(const std::vector<MenuPlayer>& players, const char* scoreHeading, int ready, const std::string& vote);
+void OfferMenu(const std::vector<PlayerRow>& players, const char* scoreHeading, int ready, const std::string& vote);
 // The client's round keys on the gamepad: Back as F1, and in the results the d-pad and A as the arrows and Enter
 void SetRoundPad(bool results);
 bool PadMode(); // the gamepad gave the last input: the hints name its buttons
@@ -297,6 +299,18 @@ void DrawOverlay(); // the game calls it while drawing (Game::Draw, gPortDrawOve
 // A client's connection, over the frame: <corner> small at the bottom right (the ping), <centre> across the middle
 // (an outage); empty: nothing
 void SetNetStatus(const std::string& corner, const std::string& centre);
+// The scoreboard, over the middle of the frame instead of the round's panel while shown (scoreboard.cpp): the map's title,
+// two lines under it, the players by score (their $ sign and name in their HUD colour, the local one marked)
+struct Scoreboard
+{
+    std::string title;
+    std::string lines[2];
+    const char* scoreHeading; // the game type's score
+    bool frags; // a frags column after the score (a points or tag game's)
+    std::vector<PlayerRow> rows;
+};
+void SetScoreboard(const Scoreboard* pBoard); // NULL: hidden
+bool ScoresHeld(); // SCORES held (compat/src/pad.cpp)
 
 // The checks, logs and test cheats are engine/dev/dev.hpp's.
 } // namespace engine

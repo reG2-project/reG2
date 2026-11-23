@@ -158,6 +158,8 @@ class Client
     void WatchChat(); // a chat line typed to its end that starts with '/' goes as a command
     void KeepChatLines(); // the lines players ended, kept over the frame for a while (the game shows them while typed)
     void ShowRound(); // the warmup, countdown, results and an open vote over the frame
+    // The scoreboard over the frame if <shown> (SCORES held, GTA2_NET_SCOREBOARD=1), else hidden
+    void ShowScoreboard(const std::vector<engine::PlayerRow>& players, bool shown);
     std::string RoundCorner() const;
     void BotRound(); // a bot readies up and votes
     uint32_t BotMapChoice() const; // the map a bot votes for in the results (1-based)
@@ -231,6 +233,7 @@ class Client
     std::vector<std::string> mMaps; // what a map vote chooses from (the welcome's)
     std::vector<std::string> mMapTitles; // their names as players know them (MapTitle)
     std::vector<int> mMapPlayers; // the players each is made for (MapOwnPlayers), shown with it
+    std::string mMapTitle; // the map being played's (MapTitle)
     struct ScoreRow
     {
         int slot, frags, deaths, tag, points; // tag: the seconds "it" in a tag game

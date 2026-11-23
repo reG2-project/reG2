@@ -259,10 +259,12 @@ void net::engine::DrawOverlay()
     {
         DrawStringScaled(gChatLines[i].text.data(), 8, chatY, gStyleTextFont);
     }
+    // The scoreboard instead of the panel, the announcement and the banner, which it would cover
+    const bool board = DrawScoreboard();
     // The panel near the top (the HUD's score and wanted level are above it), the announcement under it
     const s32 kLine = 16;
     s32 panelY = 56;
-    for (size_t i = 0; i < gPanel.size();)
+    for (size_t i = 0; i < gPanel.size() && !board;)
     {
         if (IsTableRow(gPanel[i]))
         {
@@ -278,12 +280,12 @@ void net::engine::DrawOverlay()
         panelY = gPanel[i][0] ? DrawCentredWrapped(gPanel[i].data(), w, panelY, kLine) : panelY + kLine;
         i++;
     }
-    if (gAnnouncement[0] && NowMs() < gAnnouncementUntilMs && !MenuOpen()) // the pause menu would hide it
+    if (gAnnouncement[0] && NowMs() < gAnnouncementUntilMs && !MenuOpen() && !board) // the pause menu would hide it
     {
         const s32 ay = gPanel.empty() ? h / 4 : (panelY + 8 > h / 4 ? panelY + 8 : h / 4);
         DrawCentredWrapped(gAnnouncement, w, ay, kLine);
     }
-    if (gBanner[0])
+    if (gBanner[0] && !board)
     {
         const s32 bw = Frontend::GetMaxTextWidth(gBanner, gStyleMessageFont);
         DrawStringScaled(gBanner, (w - bw) / 2, h / 2 - 24, gStyleMessageFont);

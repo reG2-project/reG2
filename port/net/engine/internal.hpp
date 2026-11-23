@@ -189,6 +189,9 @@ enum TrainField
     kTrainFieldCount = kTrainTimer0 + kTrainCarriages,
 };
 
+// SetScoreboard's, over the frame (overlay.cpp); false when hidden
+bool DrawScoreboard();
+
 // Shared helpers (snapshot.cpp)
 Player* GetPlayer(int slot); // NULL past the game's players
 Ped* InGamePed(int slot); // its ped while the slot is in the game (Player::mInUse)
