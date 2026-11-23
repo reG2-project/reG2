@@ -74,6 +74,7 @@ class Server
         uint32_t next = 0; // what the next tick runs with, as the game has it (the other clients get it forwarded)
         uint32_t late = 0; // ticks without their command (counted for the log)
         uint32_t silent = 0; // ticks in a row without their command
+        uint16_t ping = 0; // the ping its client reports in its kMsgPing (0: none yet)
         uint32_t ackTick = 0; // the newest snapshot the client has
         Snapshot sent[kRing]; // what was sent, by tick % kRing: the baselines
         std::unordered_map<uint32_t, uint32_t> lastFresh; // entity -> the tick its new state was last sent (PriceArea)
@@ -97,6 +98,8 @@ class Server
         bool hold; // far off screen and fresh lately: aged this tick even with room (PriceArea)
     };
     void OnReceive(const TransportEvent& e);
+    void AnswerPing(const TransportEvent& e); // the pong at once, and the ping it reports kept for the others
+    void SendPings();
     void OnHello(uint32_t peer, BitReader& r);
     std::string Refusal(const Hello& hello, bool read) const; // why a hello's client can't play here ("": it can)
     int FreeSlot(const std::string& name) const; // the slot a joining <name> gets (mSlots.size(): none)

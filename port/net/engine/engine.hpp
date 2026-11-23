@@ -58,7 +58,7 @@ struct PlayerRow
 {
     int slot;
     std::string name;
-    int score, money, frags, deaths, ping; // score: the game type's (frags, points, seconds "it"); ping: -1 unknown
+    int score, money, frags, deaths, ping; // score: the game type's (frags, points, seconds "it"); ping: -1 unknown, -2 an arena bot
     bool you, dead, chatting, ready; // ready: in a warmup
 };
 // What it shows while open: READY (1) or NOT READY (2) or neither (0), an open vote's question ("": none)

@@ -185,8 +185,8 @@ round the SCORES key's presses don't reach the game (`port_ScoresKeyInGame`), so
 On a translucent panel: the map's title, the game type and its limit, the round and its time left, the players in the
 game and the server's address (until servers have a name); then a row per player by score: its name in its HUD colour (a square for the cyan, which no font has), then chat,
 IT, dead or ready, its score (a tag game's time IT as 1:23), its money ("$1010": the money on its HUD, which the original's HUD listed for the other
-players; a points game's score is already the money, shown so), frags in a points or tag game, deaths, and the ping for
-the local player only (the others' isn't sent). The columns are laid out from the right by their widest entry, and the
+players; a points game's score is already the money, shown so), frags in a points or tag game, deaths, and the ping
+(each client reports its own in its pings, the server sends everyone's once a second: `kMsgPings`; BOT for an arena bot). The columns are laid out from the right by their widest entry, and the
 names cut to what is left. The local row is marked. Under the rows, what the round panel it hides would ask (ready, a vote:
 F1, Y / N, or the Start menu on a pad). Not over the pause menu, nor while typing a chat line. `GTA2_NET_SCOREBOARD=1`
 shows it all the time.
@@ -536,7 +536,8 @@ A little-endian bitstream (`core/bitstream.cpp`), never a copy of a struct: clie
 | `kMsgCommands` | unreliable | the last few commands (tick and input bits, each delta-coded against the one before; a key press with the character it typed) and the newest snapshot the client has |
 | `kMsgSnapshot`, `kMsgSnapshotPart` | unreliable | server tick, the baseline it is made against, the other players' forwarded controls, entities with field masks and changed fields (`core/snapshot.cpp`) |
 | `kMsgMapChange` | reliable | the next map, after a round, with its files' CRC-32s, the players of its game and the client's slot in it |
-| `kMsgPing`, `kMsgPong` | unreliable | the client's clock, sent back at once |
+| `kMsgPing`, `kMsgPong` | unreliable | the client's clock, sent back at once, and its ping |
+| `kMsgPings` | unreliable | once a second, every player's ping for the scoreboard: the one its client reported (ENet's round trip until it has), or a bot |
 | `kMsgCommand`, `kMsgNotice` | reliable | a player's command; a line to show (a vote, a player ready) |
 
 ENet runs with `mtu` the link's MTU less IP and UDP's 28 bytes (`--mtu`, 1280 by default), two channels (never reliable

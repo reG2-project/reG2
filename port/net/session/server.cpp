@@ -318,6 +318,48 @@ void net::Server::OnCommands(int slot, BitReader& r)
     }
 }
 
+void net::Server::AnswerPing(const TransportEvent& e)
+{
+    std::vector<uint8_t> pong = e.data;
+    pong[0] = kMsgPong;
+    mTransport->Send(e.peer, kChannelUnreliable, pong.data(), pong.size(), false);
+    BitReader r(e.data.data(), e.data.size());
+    r.Bits(8 + 32);
+    const uint32_t ping = r.Bits(16);
+    const int slot = SlotOfPeer(e.peer);
+    if (slot >= 0 && !r.Overflow())
+    {
+        mSlots[slot].ping = (uint16_t)ping;
+    }
+}
+
+// Once a second, to every client: each player's ping as its own client measures it (ENet's until it says)
+void net::Server::SendPings()
+{
+    Pings pings;
+    for (size_t i = 0; i < (size_t)kMaxPlayers; i++)
+    {
+        const Slot* s = i < mSlots.size() && mSlots[i].used ? &mSlots[i] : NULL;
+        if (s && s->peer == kArenaPeer)
+        {
+            pings.ms[i] = kPingBot;
+        }
+        else if (s)
+        {
+            pings.ms[i] = s->ping ? s->ping : (uint16_t)std::min<uint32_t>(mTransport->RoundTripMs(s->peer), kPingMax);
+        }
+    }
+    BitWriter w;
+    WritePings(w, pings);
+    for (const Slot& s : mSlots)
+    {
+        if (s.used && s.peer != kArenaPeer)
+        {
+            mTransport->Send(s.peer, kChannelUnreliable, w.Data().data(), w.ByteCount(), false);
+        }
+    }
+}
+
 void net::Server::OnReceive(const TransportEvent& e)
 {
     BitReader r(e.data.data(), e.data.size());
@@ -329,9 +371,7 @@ void net::Server::OnReceive(const TransportEvent& e)
     }
     if (type == kMsgPing) // polled in a frame, not between them (Idle): late by that much
     {
-        std::vector<uint8_t> pong = e.data;
-        pong[0] = kMsgPong;
-        mTransport->Send(e.peer, kChannelUnreliable, pong.data(), pong.size(), false);
+        AnswerPing(e);
         return;
     }
     const int slot = SlotOfPeer(e.peer);
@@ -676,8 +716,7 @@ void net::Server::Idle()
         waited = false;
         if (e.type == TransportEvent::kReceive && e.channel == kChannelUnreliable && !e.data.empty() && e.data[0] == kMsgPing)
         {
-            e.data[0] = kMsgPong;
-            mTransport->Send(e.peer, kChannelUnreliable, e.data.data(), e.data.size(), false);
+            AnswerPing(e);
             mTransport->Flush();
         }
         else
@@ -1165,6 +1204,10 @@ void net::Server::Frame()
         {
             SendSnapshot((int)i, mSlots[i], world);
         }
+    }
+    if (mTick % (1000 / (mConfig.game.tickMs > 0 ? mConfig.game.tickMs : 33)) == 0)
+    {
+        SendPings();
     }
     mTransport->Flush();
     if (mTick % 300 == 0)

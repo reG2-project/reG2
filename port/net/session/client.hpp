@@ -161,6 +161,7 @@ class Client
     // The scoreboard over the frame if <shown> (SCORES or the gamepad's Back held, the pause menu's PLAYERS <fromMenu>,
     // GTA2_NET_SCOREBOARD=1), else hidden
     void ShowScoreboard(const std::vector<engine::PlayerRow>& players, bool shown, bool fromMenu);
+    int PeerPing(int slot) const; // PlayerRow::ping's: -1 unknown, -2 an arena bot
     std::string RoundCorner() const;
     void BotRound(); // a bot readies up and votes
     uint32_t BotMapChoice() const; // the map a bot votes for in the results (1-based)
@@ -207,6 +208,7 @@ class Client
     uint32_t mRtt = 0; // the round trip as the transport sees it (or the recording says)
     uint32_t mPingMs = 0; // the network's round trip: a ping to its pong, both answered between frames (a link conditioner's delay too)
     uint32_t mPingShown = 0;
+    Pings mPings; // every player's, from the server's last kMsgPings
     // GTA2_NET_STATS: the connection over the last second, shown with the ping
     struct LinkStats
     {

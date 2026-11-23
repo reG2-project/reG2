@@ -1,6 +1,6 @@
 // port/net engine (port/docs/netcode.md, "Playing"): a client's scoreboard, over the frame while SCORES or the gamepad's
 // Back is held, or as the pause menu's PLAYERS: the match on a translucent panel, then a row per player with its name in
-// its HUD colour, its scores, the local player's ping and what it is doing.
+// its HUD colour, its scores, its ping and what it is doing.
 #include "internal.hpp"
 #include "Source/Camera.hpp"
 #include "Source/Draw.hpp"
@@ -293,7 +293,7 @@ bool net::engine::DrawScoreboard()
             columns[c++].cells.push_back(std::to_string(row.frags));
         }
         columns[c++].cells.push_back(std::to_string(row.deaths));
-        columns[c++].cells.push_back(row.ping >= 0 ? std::to_string(row.ping) : std::string("-"));
+        columns[c++].cells.push_back(row.ping >= 0 ? std::to_string(row.ping) : std::string(row.ping == -2 ? "BOT" : "-"));
     }
     // Wide enough for $99999 and the like: a column only moves for bigger sums
     const s32 minMoney = Width(std::string("$99999"));

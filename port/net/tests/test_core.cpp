@@ -311,6 +311,18 @@ void TestMessages()
     std::string longText;
     CHECK(lr.Bits(8) == net::kMsgNotice && net::ReadText(lr, longText) && longText.size() == 120);
 
+    // The pings: none, a bot, a ping, one capped at kPingMax
+    net::Pings pings;
+    pings.ms[0] = net::kPingBot;
+    pings.ms[1] = 37;
+    pings.ms[net::kMaxPlayers - 1] = 9000;
+    net::BitWriter pw;
+    net::WritePings(pw, pings);
+    net::BitReader pr(pw.Data().data(), pw.ByteCount());
+    net::Pings pgot;
+    CHECK(pr.Bits(8) == net::kMsgPings && net::ReadPings(pr, pgot) && pgot.ms[0] == net::kPingBot && pgot.ms[1] == 37 &&
+          pgot.ms[2] == net::kPingNone && pgot.ms[net::kMaxPlayers - 1] == net::kPingMax);
+
     net::MapChange mc;
     mc.gmp = "MP1-comp.gmp";
     mc.sty = "wil.sty";

@@ -754,6 +754,7 @@ void net::Client::SendPing()
     BitWriter w;
     w.Bits(kMsgPing, 8);
     w.Bits((uint32_t)now, 32);
+    w.Bits(std::min<uint32_t>(mPingMs, kPingMax), 16);
     mTransport->Send(0, kChannelUnreliable, w.Data().data(), w.ByteCount(), false);
     mTransport->Flush();
 }
@@ -905,6 +906,14 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
             else if (type == kMsgSnapshotPart)
             {
                 OnSnapshotPart(r);
+            }
+            else if (type == kMsgPings)
+            {
+                Pings pings;
+                if (ReadPings(r, pings))
+                {
+                    mPings = pings;
+                }
             }
         }
         else if (e.type == TransportEvent::kReceive)
@@ -1775,15 +1784,15 @@ void net::Client::ShowRound()
                              : r.voteKind == kVoteMap   ? "change to " + (r.voteArg < mMapTitles.size() ? mMapTitles[r.voteArg] : std::string("a map"))
                                                         : "kick " + engine::PlayerName(r.voteArg);
     const bool mine = mSlot < kRoundSlots && ((r.voteYes | r.voteNo) >> mSlot & 1);
-    // The scoreboard, by score (the ping is only ours: the others' isn't sent)
+    // The scoreboard, by score; our own ping as we measure it, the others' as the server last sent them
     std::vector<engine::PlayerRow> players;
     for (const ScoreRow& row : rows)
     {
         const int score = mGameType == 3 ? row.tag : mGameType == 2 ? row.points : row.frags;
         const bool you = row.slot == mSlot;
         const bool ready = r.phase == kPhaseWarmup && r.minPlayers && row.slot < kRoundSlots && (r.ready >> row.slot & 1);
-        players.push_back({row.slot, engine::PlayerName(row.slot), score, row.money, row.frags, row.deaths,
-                           you && mConnected && mPingShown ? (int)mPingShown : -1, you, engine::PlayerWasted(row.slot),
+        const int ping = !you ? PeerPing(row.slot) : mConnected && mPingShown ? (int)mPingShown : -1;
+        players.push_back({row.slot, engine::PlayerName(row.slot), score, row.money, row.frags, row.deaths, ping, you, engine::PlayerWasted(row.slot),
                            row.slot < 32 && (mChatting >> row.slot & 1), ready});
     }
     std::stable_sort(players.begin(), players.end(), [](const engine::PlayerRow& a, const engine::PlayerRow& b) { return a.score > b.score; });
@@ -1804,6 +1813,12 @@ void net::Client::ShowRound()
                         std::to_string(r.voteLeft) + " s" + (mine ? "" : pad ? "   Start: vote" : "   Y / N"));
     }
     engine::SetNetPanel(lines);
+}
+
+int net::Client::PeerPing(int slot) const
+{
+    const uint16_t ms = slot >= 0 && slot < kMaxPlayers ? mPings.ms[slot] : kPingNone;
+    return ms == kPingNone ? -1 : ms == kPingBot ? -2 : (int)ms;
 }
 
 void net::Client::ShowScoreboard(const std::vector<engine::PlayerRow>& players, bool shown, bool fromMenu)
