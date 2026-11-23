@@ -183,7 +183,7 @@ Back is held (a pad's ready and votes are the pause menu's), and as the pause me
 default too: in a network game's round the SCORES key's presses don't reach the game (`port_ScoresKeyInGame`), so Tab
 shows the board without the horn; saved bindings are never changed. On a translucent panel: the map's title, the game
 type and its limit, the round and its time left, the players in the game and the server's address (until servers have a
-name); then a row per player by score: its $ sign and name in its HUD colour (the dark purple's name white), then chat,
+name); then a row per player by score: its name in its HUD colour (a square for the cyan, which no font has), then chat,
 IT, dead or ready, its score (and frags in a points or tag game), deaths, and the ping for the local player only (the
 others' isn't sent). The local row is marked. Under the rows, what the round panel it hides would ask (ready, a vote:
 F1, Y / N, or the Start menu on a pad). Not over the pause menu, nor while typing a chat line. `GTA2_NET_SCOREBOARD=1`

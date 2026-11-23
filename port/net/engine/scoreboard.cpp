@@ -1,6 +1,6 @@
 // port/net engine (port/docs/netcode.md, "Playing"): a client's scoreboard, over the frame while SCORES or the gamepad's
-// Back is held, or as the pause menu's PLAYERS: the match on a translucent panel, then a row per player with its $ sign,
-// its name in its HUD colour, its scores, the local player's ping and what it is doing.
+// Back is held, or as the pause menu's PLAYERS: the match on a translucent panel, then a row per player with its name in
+// its HUD colour, its scores, the local player's ping and what it is doing.
 #include "internal.hpp"
 #include "Source/Camera.hpp"
 #include "Source/Draw.hpp"
@@ -24,7 +24,7 @@ int gStandingsType;
 // In the HUD's 640x480 layout, centred on wide screens as one group (PortUiCentred)
 const s32 kLeft = 40, kRight = 600, kTop = 96;
 const s32 kRowStep = 18;
-const s32 kHeadX = kLeft + 22, kNameX = kLeft + 34, kNameWidth = 150;
+const s32 kNameX = kLeft + 12, kNameWidth = 150;
 // The score's right edge, or the frags' when a points or tag game shows them after its score
 const s32 kScoreRight = 450, kPointsRight = 370, kDeathsRight = 530, kPingRight = 588;
 const u32 kPanelColour = 0xB0000000, kYouColour = 0x30FFFFFF;
@@ -149,28 +149,31 @@ void Fill(s32 left, s32 top, s32 right, s32 bottom, u32 colour)
     pgbh_DrawQuad(kBlendAlpha | kVertexDiffuse, NULL, verts, 255);
 }
 
-// A player's name colour: its HUD colour's font remap, but white for the purple one, too dark to read on the panel
+// A player's name colour: its HUD colour's font remap
 s32 NameRemap(int slot)
 {
     Player* p = net::engine::GetPlayer(slot);
-    const s32 remap = p ? PortFontRemap(p->mHudPaletteType, p->mHudPalette) : -1;
-    const s32 kDarkPurple = 1;
-    return remap == kDarkPurple ? -1 : remap;
+    return p ? PortFontRemap(p->mHudPaletteType, p->mHudPalette) : -1;
 }
 
-// The player's $ sign in its HUD colour and its name, half transparent while dead; the name's right end
+// The player's name in its HUD colour, half transparent while dead, then a square in its colour when no font remap has
+// it (the port's cyan); where the name's line goes on
 s32 Name(const net::engine::PlayerRow& row, s32 y)
 {
     wchar_t w[24];
     Widen(row.name, w, sizeof(w) / sizeof(w[0]));
     Fit(w, kNameWidth);
     Draw(w, kNameX, kNameX, y, NameRemap(row.slot), row.dead ? kHalfAlpha : 0);
-    if (Player* p = net::engine::GetPlayer(row.slot))
+    const s32 right = kNameX + Width(w);
+    Player* p = net::engine::GetPlayer(row.slot);
+    const s16 kCyan = 9; // PortLookOf's Elvis
+    if (p && p->mHudPaletteType == palette_types_enum::user_remaps_7 && p->mHudPalette == kCyan)
     {
-        DrawFigureScaled(sprite_types_enum::user_6, 16, kHeadX, y + 9, Ang16(0), p->mHudPaletteType, p->mHudPalette, row.dead ? 1 : 0,
-                         row.dead ? kHalfAlpha : 0);
+        const s32 x = right + 6, size = 8;
+        Fill(x, y + kTextMiddle - size / 2, x + size, y + kTextMiddle + size / 2, row.dead ? 0x808CFFFF : 0xFF8CFFFF);
+        return x + size;
     }
-    return kNameX + Width(w);
+    return right;
 }
 
 const char* Status(const net::engine::PlayerRow& row)
