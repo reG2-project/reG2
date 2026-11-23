@@ -59,6 +59,15 @@ const Rule kRules[] = {
     {kEntityPlayer, "buttons", kMask, 0x2FFFFF, 0},
     {kEntityPlayer, "money", kRange, 0, 999999999}, // the HUD's "%09d" into its 10 bytes (RollingDigitCounter)
     {kEntityPlayer, "frags", kRange, -999, 999},
+    // A throw's object (throws.cpp): made on the map, its motion within a ped's speeds, its friction a brake
+    {kEntityPlayer, "throw_x", kZeroOrRange, kMapMin, kMapMax},
+    {kEntityPlayer, "throw_y", kZeroOrRange, kMapMin, kMapMax},
+    {kEntityPlayer, "throw_rot", kAngle, 0, 0},
+    {kEntityPlayer, "throw_angle", kAngle, 0, 0},
+    {kEntityPlayer, "throw_speed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPlayer, "throw_zspeed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPlayer, "throw_zaccel", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPlayer, "throw_friction", kRange, -kSpeedMax, 0},
     {kEntityPlayer, "multiplier", kRange, 0, 99},
     {kEntityWorld, "zone_turn", kRange, -1, 39}, // Map_0x370::GetNextZoneOfTypeRoundRobin's zone_stack[40]
     {kEntityWorld, "police_level", kRange, 0, 6},
@@ -256,6 +265,11 @@ void net::engine::SanitizeSnapshot(Snapshot& snap)
         if (e.type == kEntityPed && e.f[kPedRemapField] != 0xFF && e.f[kPedRemapField] >= pedRemaps)
         {
             Set(e, kPedRemapField, 0xFF);
+        }
+        // A throw's outcome is 1..3 (0: not thrown, its other bits with it)
+        if (e.type == kEntityPlayer && (e.f[kPlayerThrow] & 3) == 0)
+        {
+            Set(e, kPlayerThrow, 0);
         }
         if (e.type == kEntityPed)
         {
