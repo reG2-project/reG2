@@ -10,6 +10,7 @@
 #include "Source/TagGame.hpp"
 #include "Source/enums.hpp"
 #include "Source/gbh_graphics.hpp"
+#include "port/src/player_looks.hpp"
 #include <memory>
 
 bool port_ScoresHeld(); // compat/src/pad.cpp
@@ -97,13 +98,6 @@ void CentredText(const std::string& text, s32 y)
     DrawStringScaled(w, (kLeft + kRight - Width(w)) / 2, y, gStyleTextFont);
 }
 
-// The font remap of a HUD colour (a user remap, port/src/player_looks.hpp), -1: white. The styles have 9 (0-8): the
-// original's colours are one below their user remap; the port's pink is 8, its cyan has none
-s32 FontRemap(s32 userRemap)
-{
-    return userRemap >= 1 && userRemap <= 8 ? userRemap - 1 : userRemap == 11 ? 8 : -1;
-}
-
 // The player's $ sign and name in its HUD colour, half transparent while dead
 void Name(const net::engine::PlayerRow& row, s32 y)
 {
@@ -111,7 +105,7 @@ void Name(const net::engine::PlayerRow& row, s32 y)
     Widen(row.name, w, sizeof(w) / sizeof(w[0]));
     Fit(w, kNameRight - kNameX);
     Player* p = net::engine::GetPlayer(row.slot);
-    const s32 remap = p && p->mHudPaletteType == palette_types_enum::user_remaps_7 ? FontRemap(p->mHudPalette) : -1;
+    const s32 remap = p ? PortFontRemap(p->mHudPaletteType, p->mHudPalette) : -1;
     const s32 type = remap >= 0 ? palette_types_enum::font_remaps_8 : palette_types_enum::sprites_2;
     const u16 palette = remap >= 0 ? (u16)remap : 0;
     DrawStringScaledPalette(w, kNameX, y, gStyleTextFont, type, palette, row.dead ? 1 : 0, row.dead ? kHalfAlpha : 0);

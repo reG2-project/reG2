@@ -473,6 +473,13 @@ void Hud_PlayerNames::DrawPlayerNames()
                         Fix16 yCalc;
                         WorldToScreen_Hud_40CFC0(pCam, x, y, z, &xCalc, &yCalc);
 
+#if defined(GTA2_PORT)
+                        // Port: the port's looks' colours have other font remaps (player_looks.hpp)
+                        s32 name_palette_type;
+                        u16 name_palette;
+                        PortHudTextPalette(pIter->mHudPaletteType, pIter->mHudPalette, &name_palette_type, &name_palette);
+                        DrawTextScaled_4C7280(pIter->mPlayerName, xCalc, yCalc, sPlayerNameFont, name_palette_type, name_palette, 0, 0);
+#else
                         DrawTextScaled_4C7280(pIter->mPlayerName,
                                               xCalc,
                                               yCalc,
@@ -481,6 +488,7 @@ void Hud_PlayerNames::DrawPlayerNames()
                                               pIter->mHudPalette - 1,
                                               0,
                                               0);
+#endif
                     }
                 }
             }
@@ -3040,8 +3048,16 @@ void Hud_PlayerStats::DrawPlayerStats()
                      gTagGame.GetPlayerTime(pPlayer) / 60,
                      gTagGame.GetPlayerTime(pPlayer) % 60);
 
+#if defined(GTA2_PORT)
+            // Port: the port's looks' colours have other font remaps (player_looks.hpp)
+            s32 text_palette_type;
+            u16 text_palette;
+            PortHudTextPalette(pPlayer->mHudPaletteType, pPlayer->mHudPalette, &text_palette_type, &text_palette);
+            DrawStringScaledPalette(buffer, 420, 4, gStyleTextFont, text_palette_type, text_palette, 0, 0);
+#else
             const s32 text_palette_type = (pPlayer->mHudPaletteType != palette_types_enum::user_remaps_7) ? palette_types_enum::sprites_2 : palette_types_enum::font_remaps_8;
             DrawStringScaledPalette(buffer, 420, 4, gStyleTextFont, text_palette_type, pPlayer->mHudPalette - 1, 0, 0);
+#endif
         }
         else
         {
@@ -3075,8 +3091,16 @@ void Hud_PlayerStats::DrawPlayerStats()
                              gTagGame.GetPlayerTime(pMultiPlayer) / 60,
                              gTagGame.GetPlayerTime(pMultiPlayer) % 60);
 
+#if defined(GTA2_PORT)
+                    // Port: the port's looks' colours have other font remaps (player_looks.hpp)
+                    s32 text_palette_type;
+                    u16 text_palette;
+                    PortHudTextPalette(pMultiPlayer->mHudPaletteType, pMultiPlayer->mHudPalette, &text_palette_type, &text_palette);
+                    DrawStringScaledPalette(buffer, score_end_xpos + 20, static_cast<u32>(ypos), gStyleTextFont, text_palette_type, text_palette, 0, 0);
+#else
                     const s32 text_palette_type = (pMultiPlayer->mHudPaletteType != palette_types_enum::user_remaps_7) ? palette_types_enum::sprites_2 : palette_types_enum::font_remaps_8;
                     DrawStringScaledPalette(buffer, score_end_xpos + 20, static_cast<u32>(ypos), gStyleTextFont, text_palette_type, pMultiPlayer->mHudPalette - 1, 0, 0);
+#endif
                 }
                 else
                 {
