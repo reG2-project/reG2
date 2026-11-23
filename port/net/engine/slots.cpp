@@ -117,7 +117,14 @@ void net::engine::PutInGame(int slot, bool freshScore)
     }
     if (p->mInUse && p->mPlayerPed)
     {
-        p->mPlayerPed->RespawnPed(zone); // still in: a fresh start where the others respawn
+        // Still in: a fresh start where the others respawn, with the reset the game's respawn ends with. Else a ped
+        // falling or knocked down stays immobilized for good, its walk and its death only stored (ChangeNextPedState1)
+        Ped* ped = p->mPlayerPed;
+        ped->RespawnPed(zone);
+        if (ped->mGameObject)
+        {
+            ped->ResetForPlayerRespawn();
+        }
         // Its camera there too, not panning over for seconds: until it sees the ped, the ped counts as off screen, and
         // a dead player ped off screen for 200 ticks is freed as a corpse (Ped::PoolUpdate), with the player still
         // pointing at it (a crash at its respawn, or once the memory is another ped)
