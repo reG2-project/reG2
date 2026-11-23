@@ -25,6 +25,7 @@ void (*gPortFrontendSetup)(Frontend* pFrontend);
 bool (*gPortFrontendInput)(Frontend* pFrontend);
 int (*gPortLeaveNetworkGame)();
 void (*gPortDrawOverlay)();
+bool (*gPortDrawNetStandings)();
 bool (*gPortNextNetworkGame)();
 bool gPortKeepWantedPoints;
 bool gPortServerKillNotices;

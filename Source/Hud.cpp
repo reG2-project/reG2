@@ -3065,6 +3065,13 @@ void Hud_PlayerStats::DrawPlayerStats()
             pFragDigits->DrawDigitsRightAligned(490, 4);
         }
 
+#if defined(GTA2_PORT)
+        // Port: a network client shows its rank and the leader (net/engine/scoreboard.cpp) instead of a row per player
+        if (gPortDrawNetStandings && gPortDrawNetStandings())
+        {
+            return;
+        }
+#endif
         s32 ypos = 8;
         for (Player* pMultiPlayer = gGame_0x40->IterateFirstPlayer(); pMultiPlayer != NULL;
              pMultiPlayer = gGame_0x40->IterateNextPlayer())

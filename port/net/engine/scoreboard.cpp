@@ -18,6 +18,8 @@ bool port_ScoresHeld(); // compat/src/pad.cpp
 namespace
 {
 std::unique_ptr<net::engine::Scoreboard> gBoard;
+std::vector<net::engine::PlayerRow> gStandings;
+int gStandingsType;
 
 // In the HUD's 640x480 layout, centred on wide screens as one group (PortUiCentred)
 const s32 kLeft = 40, kRight = 600, kTop = 96;
@@ -29,6 +31,8 @@ const u32 kPanelColour = 0xB0000000, kYouColour = 0x30FFFFFF;
 const s32 kHalfAlpha = 16; // of 31 (CalcQuadFlags)
 // The text font's '2' has blank columns on its left: drawn this much further left, it is spaced as the other digits
 const s32 kTwoTrim = 4;
+// The HUD's top left, where the original listed every other player
+const s32 kStandingsX = 8, kStandingsY = 6, kStandingsStep = 18, kLeaderNameWidth = 100;
 
 void Widen(const std::string& text, wchar_t* out, size_t size)
 {
@@ -48,6 +52,13 @@ s32 Width(const wchar_t* text)
         twos += text[i] == L'2';
     }
     return Frontend::GetMaxTextWidth(const_cast<wchar_t*>(text), gStyleTextFont) - twos * kTwoTrim;
+}
+
+s32 Width(const std::string& text)
+{
+    wchar_t w[96];
+    Widen(text, w, sizeof(w) / sizeof(w[0]));
+    return Width(w);
 }
 
 // <text> cut until it fits <w> (no wcslen: the port has -fshort-wchar)
@@ -173,6 +184,25 @@ const char* Status(const net::engine::PlayerRow& row)
     }
     return row.dead ? "dead" : row.ready ? "ready" : "";
 }
+
+std::string Ordinal(int n)
+{
+    const int tens = n % 100, units = n % 10;
+    const char* suffix = tens >= 11 && tens <= 13 ? "th" : units == 1 ? "st" : units == 2 ? "nd" : units == 3 ? "rd" : "th";
+    return std::to_string(n) + suffix;
+}
+
+// A score as the game type counts it: frags, points, or the time "it"; <unit>: with what it counts
+std::string Score(int score, int gameType, bool unit)
+{
+    if (gameType == 3)
+    {
+        char clock[16];
+        snprintf(clock, sizeof(clock), "%d:%02d", score / 60, score % 60);
+        return clock + std::string(unit ? " it" : "");
+    }
+    return std::to_string(score) + (!unit ? "" : gameType == 2 ? " points" : score == 1 ? " frag" : " frags");
+}
 } // namespace
 
 void net::engine::SetScoreboard(const Scoreboard* pBoard)
@@ -239,6 +269,68 @@ bool net::engine::DrawScoreboard()
     if (!b.hint.empty())
     {
         CentredText(b.hint, hintY);
+    }
+    return true;
+}
+
+void net::engine::SetStandings(const std::vector<PlayerRow>& rows, int gameType)
+{
+    gStandings = rows;
+    gStandingsType = gameType;
+}
+
+bool net::engine::DrawStandings()
+{
+    size_t you = 0;
+    while (you < gStandings.size() && !gStandings[you].you)
+    {
+        you++;
+    }
+    if (you == gStandings.size())
+    {
+        return false; // not in the game yet: the original's list
+    }
+    const PlayerRow& me = gStandings[you];
+    int rank = 1, tied = 0;
+    for (const PlayerRow& row : gStandings)
+    {
+        rank += row.score > me.score;
+        tied += !row.you && row.score == me.score;
+    }
+    const int type = gStandingsType;
+    const s32 x = kStandingsX, y = kStandingsY;
+    // Short: a kill's notice shows in the middle of the same lines
+    Text(Ordinal(rank) + " / " + std::to_string(gStandings.size()) + "  " + Score(me.score, type, true), x, y);
+    const s32 y2 = y + kStandingsStep;
+    if (gStandings.size() < 2)
+    {
+        return true;
+    }
+    if (rank == 1 && tied)
+    {
+        Text("Tied for 1st", x, y2);
+    }
+    else if (rank == 1)
+    {
+        const int lead = me.score - gStandings[you == 0 ? 1 : 0].score;
+        Text("You lead by " + Score(lead, type, false), x, y2);
+    }
+    else
+    {
+        // gStandings are by score: the first is a leader
+        const PlayerRow& leader = gStandings[0];
+        const std::string label = "Leader ";
+        wchar_t w[24];
+        Widen(leader.name, w, sizeof(w) / sizeof(w[0]));
+        Fit(w, kLeaderNameWidth);
+        const s32 nameX = x + Width(label);
+        Draw(w, x, nameX, y2, NameRemap(leader.slot));
+        wchar_t rest[32];
+        Widen("  " + Score(leader.score, type, false), rest, sizeof(rest) / sizeof(rest[0]));
+        Draw(rest, x, nameX + Width(w), y2);
+        wchar_t lw[16];
+        Widen(label, lw, sizeof(lw) / sizeof(lw[0]));
+        Draw(lw, x, x, y2);
     }
     return true;
 }

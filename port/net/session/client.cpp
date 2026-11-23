@@ -1777,6 +1777,7 @@ void net::Client::ShowRound()
                            row.slot < 32 && (mChatting >> row.slot & 1), ready});
     }
     std::stable_sort(players.begin(), players.end(), [](const engine::PlayerRow& a, const engine::PlayerRow& b) { return a.score > b.score; });
+    engine::SetStandings(players, mGameType);
     if (engine::MenuOpen())
     {
         const bool ready = mSlot < kRoundSlots && (r.ready >> mSlot & 1);

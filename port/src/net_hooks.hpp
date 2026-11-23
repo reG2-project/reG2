@@ -77,6 +77,9 @@ extern bool (*gPortFrontendInput)(Frontend* pFrontend);
 // winmain.cpp, a network game over: the frontend page to go back to (a client that left), or -1 (the game's own)
 extern int (*gPortLeaveNetworkGame)();
 extern void (*gPortDrawOverlay)(); // drawn last in Game::Draw; NULL unless the netcode draws over the frame
+// Called in Hud_PlayerStats::DrawPlayerStats in a network game instead of the list of the other players' scores: true,
+// it drew the local player's standing. NULL but on a network client
+extern bool (*gPortDrawNetStandings)();
 // Asked when a network game has ended (winmain.cpp): true to start the next one at once, without the frontend (a
 // dedicated server's map change)
 extern bool (*gPortNextNetworkGame)();

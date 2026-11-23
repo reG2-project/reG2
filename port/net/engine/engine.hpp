@@ -53,7 +53,7 @@ enum MenuChoice
     kMenuNo,
 };
 MenuChoice TakeMenuChoice();
-// A player as the scoreboard lists it
+// A player as the scoreboard and the HUD's standings list it
 struct PlayerRow
 {
     int slot;
@@ -314,6 +314,10 @@ struct Scoreboard
 };
 void SetScoreboard(const Scoreboard* pBoard); // NULL: hidden
 bool ScoresHeld(); // SCORES, or the gamepad's Back, held (compat/src/pad.cpp)
+// The local player's standing at the HUD's top left, in place of the original's list of the others (gPortDrawNetStandings,
+// scoreboard.cpp): its rank and score, then the leader's, from the scoreboard's rows by score; <gameType> as the welcome's
+void SetStandings(const std::vector<PlayerRow>& rows, int gameType);
+bool DrawStandings(); // false: the local player isn't in the rows, and the original's list shows
 
 // The checks, logs and test cheats are engine/dev/dev.hpp's.
 } // namespace engine

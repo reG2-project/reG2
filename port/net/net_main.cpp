@@ -103,6 +103,7 @@ void NetworkSetup(bool server)
     if (!server)
     {
         gPortDrawOverlay = net::engine::DrawOverlay; // the ping, an outage, and (GTA2_NET_MARKER) where the newest snapshot has us
+        gPortDrawNetStandings = net::engine::DrawStandings;
     }
 #if defined(_WIN32)
     setvbuf(stdout, NULL, _IONBF, 0); // the CRT has no line buffering (_IOLBF is full buffering, and a size of 0 is refused)
@@ -147,6 +148,8 @@ int LeaveNetworkGame()
     gClient = NULL;
     gPortIdleHook = NULL;
     gPortDrawOverlay = NULL;
+    gPortDrawNetStandings = NULL;
+    net::engine::SetStandings(std::vector<net::engine::PlayerRow>(), 0);
     gPortNetFrameLoop = false;
     gTickSet = false;
     PortRand::SetSoundSeparate(false);
