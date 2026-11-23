@@ -179,11 +179,11 @@ with why on the page; without the map's files a join fails the same way.
 
 **The scoreboard** (`engine/scoreboard.cpp`) shows over the middle of the frame while SCORES is held (a control of its
 own on the CONTROLS page, Tab by default: `kScoresKey` in `compat/src/pad.cpp`; the game never sees it) or a gamepad's
-Back is held (a pad's ready and votes are the pause menu's), and as the pause menu's PLAYERS. SPECIAL 1 has Tab by
-default too: in a network game's round the SCORES key's presses don't reach the game (`port_ScoresKeyInGame`), so Tab
-shows the board without the horn; saved bindings are never changed. On a translucent panel: the map's title, the game
-type and its limit, the round and its time left, the players in the game and the server's address (until servers have a
-name); then a row per player by score: its name in its HUD colour (a square for the cyan, which no font has), then chat,
+Back is held (a pad's ready and votes are the pause menu's), and as the pause menu's PLAYERS. HORN OR TAUNT (SPECIAL 1)
+defaults to C; a profile that still has it on Tab keeps it (saved bindings are never changed), and in a network game's
+round the SCORES key's presses don't reach the game (`port_ScoresKeyInGame`), so Tab shows the board without the horn.
+On a translucent panel: the map's title, the game type and its limit, the round and its time left, the players in the
+game and the server's address (until servers have a name); then a row per player by score: its name in its HUD colour (a square for the cyan, which no font has), then chat,
 IT, dead or ready, its score (and frags in a points or tag game), deaths, and the ping for the local player only (the
 others' isn't sent). The local row is marked. Under the rows, what the round panel it hides would ask (ready, a vote:
 F1, Y / N, or the Start menu on a pad). Not over the pause menu, nor while typing a chat line. `GTA2_NET_SCOREBOARD=1`
