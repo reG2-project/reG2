@@ -440,11 +440,12 @@ to them. The client's reach is the same foci of its own prediction.
 
 **The kill cam** (`engine::KillCamTicks`, `DeathCamera`; `gPortKillCamTicks`, `gPortDeathViewPed` in `Player.cpp`): a
 player wasted by another player sees its corpse zoomed in with WASTED for the original's 70 ticks, then its killer for
-90 more (the killer's own view: its corpse if it died meanwhile), then respawns. Its view cuts to a killer more than 6
-blocks off, as the camera's own follow would cross the map slowly. Both ends run it from the game's own death (the
-killer as `Player::Wasted` finds it, the client's from the credited death), so the respawn comes on the same tick; the
-killer is in the rollback set, and from the death on the interest covers it too, so its surroundings are there at the
-cut. A death by anything else (the police, a fall, its own rocket) and a busted player respawn as in the original.
+90 more (the killer's own view: its corpse if it died meanwhile), then respawns. The killer is its slot, resolved each
+tick; a slot out of the game ends the kill cams on it (the corpse again). Each change of the ped followed (the start,
+the killer's respawn, a killer gone) cuts to one more than 6 blocks off, as the camera's own follow would cross the map
+slowly. Both ends run it from the game's own death (the killer as `Player::Wasted` finds it, the client's from the
+credited death), so the respawn comes on the same tick; the killer is in the rollback set, and from the death on the
+interest covers it too, so its surroundings are there at the cut. A death by anything else (the police, a fall, its own rocket) and a busted player respawn as in the original.
 
 A ped's AI state is applied only while it is on foot on both sides (a driver in the same car gets its objectives but
 not its states), its states only when plain (walking, running, standing) on both sides, and all or nothing: if a

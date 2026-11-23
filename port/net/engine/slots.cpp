@@ -92,6 +92,7 @@ void net::engine::TakeOutOfGame(int slot)
         gTagGame.UpdateFugitive(p, NULL);
         gTagGame.mFugitive = gTagGame.mFugitive == p ? NULL : gTagGame.mFugitive;
     }
+    ForgetKillCams(slot); // a new player in the slot isn't the killer
     p->Disconnect(); // keeps its ped pointer, as the game does: the HUD and camera of a local slot use it
 }
 

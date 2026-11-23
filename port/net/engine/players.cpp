@@ -694,15 +694,16 @@ Ped* net::engine::DeathViewPed(Player* p, Ped* auxPed, bool coming)
     return ped && PedSprite(ped) ? ped : auxPed;
 }
 
-// The kill cam's start cuts to a killer out of the view: the camera's own follow would cross the map slowly, through
-// what no snapshot carries
+// In the kill cam, a change of the ped followed (its start, the killer's respawn, a killer gone) cuts to one out of the
+// view: the camera's own follow would cross the map slowly, through what no snapshot carries
 Ped* net::engine::DeathCamera(Player* p, Ped* auxPed)
 {
     Ped* ped = DeathViewPed(p, auxPed);
     Camera& c = p->mAuxGameCamera;
-    if (ped != auxPed && p->mDeathCountdown == kKillCamTicks)
+    const bool killCam = p->get_idx() < MAX_PLAYERS && gKillCamKiller[p->get_idx()] && !p->mBusted && p->mDeathCountdown <= kKillCamTicks;
+    const Sprite* s = killCam && ped != c.GetFollowedPed() ? PedSprite(ped) : NULL;
+    if (s)
     {
-        const Sprite* s = PedSprite(ped);
         const float dx = s->mXy.x.ToFloat() - c.mCurPos.mX.ToFloat(), dy = s->mXy.y.ToFloat() - c.mCurPos.mY.ToFloat();
         if (dx * dx + dy * dy > kKillCamCutBlocks * kKillCamCutBlocks)
         {
@@ -712,6 +713,14 @@ Ped* net::engine::DeathCamera(Player* p, Ped* auxPed)
         }
     }
     return ped;
+}
+
+void net::engine::ForgetKillCams(int slot)
+{
+    for (int i = 0; i < MAX_PLAYERS; i++)
+    {
+        gKillCamKiller[i] = i == slot || gKillCamKiller[i] == slot + 1 ? 0 : gKillCamKiller[i];
+    }
 }
 
 void net::engine::KillCam_Memory(unsigned char** ppAddr, size_t* pSize)

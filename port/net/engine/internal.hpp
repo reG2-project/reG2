@@ -214,6 +214,7 @@ s32 KillCamTicks(Player* p, Player* killer); // gPortKillCamTicks
 // The killer's during the kill cam (coming: from the death on, the kill cam to come), else auxPed
 Ped* DeathViewPed(Player* p, Ped* auxPed, bool coming = false);
 Ped* DeathCamera(Player* p, Ped* auxPed); // gPortDeathViewPed
+void ForgetKillCams(int slot); // a slot out of the game: its kill cam and those following it end (its corpse again)
 EntityState Entity(uint32_t id, uint8_t type);
 void PutPosition(EntityState& e, const Sprite* s); // fields 0..3
 bool Near(const Sprite* s, int32_t x, int32_t y, int32_t radius); // within <radius> (raw) on both axes
