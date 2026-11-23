@@ -1684,12 +1684,14 @@ void net::Client::ShowRound()
             rows.push_back(ScoreRow{p, engine::PlayerFrags(e), engine::PlayerDeaths(e), engine::TagSeconds(p), engine::PlayerPoints(e), engine::PlayerMoney(e)});
         }
     }
-    // The results show the scores the round ended with: the game goes on meanwhile, and so do the frags
+    // The results show the scores the round ended with: the game goes on meanwhile, and so do the frags. They stay up
+    // through the map change's pause, till the next game starts
+    const bool results = r.phase == kPhaseResults || (!mResultsRows.empty() && engine::MapChangePending());
     if (r.phase == kPhaseResults && mResultsRows.empty())
     {
         mResultsRows = rows;
     }
-    else if (r.phase != kPhaseResults)
+    else if (!results)
     {
         mResultsRows.clear();
     }
@@ -1709,7 +1711,7 @@ void net::Client::ShowRound()
     const bool pad = engine::PadMode();
     std::string banner;
     const bool hidden = !mConnected || mLeft || engine::MenuOpen(); // the pause menu alone over the frame
-    if (r.phase == kPhaseCountdown && !hidden)
+    if (r.phase == kPhaseCountdown && !hidden && !results)
     {
         // Large, in the middle; 0: the server waits for everyone to load the map
         banner = r.phaseLeft ? "Round " + std::to_string(r.number) + " in " + std::to_string(r.phaseLeft) : std::string("Waiting for players");
@@ -1743,7 +1745,7 @@ void net::Client::ShowRound()
         }
         lines.push_back(pad ? "Start: ready   Back: scores" : "F1 ready   F10 chat   Esc menu");
     }
-    else if (r.phase == kPhaseResults)
+    else if (results)
     {
         lines.push_back("Round " + std::to_string(r.number - 1) + ": " + (r.winner ? engine::PlayerName(r.winner - 1) + " wins" : std::string("a draw")));
         std::vector<ScoreRow> board = mResultsRows;
@@ -1763,7 +1765,7 @@ void net::Client::ShowRound()
             lines.push_back(engine::PlayerName(row.slot) + "\t" + first + std::to_string(row.frags) + "\t" + std::to_string(row.deaths));
         }
         lines.push_back("");
-        lines.push_back("The next round in " + std::to_string(r.phaseLeft) + " s");
+        lines.push_back(r.phase == kPhaseResults ? "The next round in " + std::to_string(r.phaseLeft) + " s" : "The next round: " + mMapTitle);
         lines.push_back("");
         lines.push_back(pad ? "\tNext map (d-pad and A)\tVotes\t" : "\tNext map (its number, or arrows and Enter)\tVotes\t");
         for (size_t m = 0; m < mMaps.size(); m++)
