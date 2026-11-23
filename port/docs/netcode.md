@@ -366,7 +366,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
 
   Player peds take no damage on a client, and everything counts as seen there, so nothing is removed off screen. A
   player's health that drops in a snapshot shows the server's hit: the game's blood burst at its ped and the grunt of a
-  punch (`ShowServerHit`, `engine/players.cpp`), which the client's own hits on an invulnerable ped don't give.
+  punch (`ShowServerHit`, `engine/players.cpp`), which the client's own hits on an invulnerable ped don't give; burning
+  takes 1 a tick without bleeding (`Ped::ManageBurning`), so only what drops beyond the burn is a hit.
 - **Throws** (`engine/throws.cpp`): the game throws a ped (a blast, a car, a door) on a moving object its char follows
   until the object stops, then lands it by the throw's outcome: back on its feet, knocked down, or dead (a blast at its
   feet: the flying death). A client's players are thrown only as the snapshots have them (`PortThrownByServer` in
@@ -765,7 +766,7 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
 | Check | | |
 |---|---|---|
 | Unit tests | `ctest --test-dir build_mac -L net`; without the game or SDL3: `cmake -S port -B build_nettests -G Ninja -DGTA2_GAME=OFF` (with UBSan: `-DCMAKE_CXX_FLAGS=-fsanitize=undefined -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=undefined`), then `ninja` and `ctest` there | the core's coding, the transport over loopback, the bots' navigation, the round flow |
-| The network check | `port/net/scripts/net_check.sh [--quick] [step...]` (`BUILD=<cmake build folder>`, `build_mac` by default; `GAME=<game folder>`, `$BUILD/game` by default), about 6 minutes | PASS or FAIL per step, below |
+| The network check | `port/net/scripts/net_check.sh [--quick] [step...]` (`BUILD=<cmake build folder>`, `build_mac` by default; `GAME=<game folder>`, `$BUILD/game` by default), about 7 minutes | PASS or FAIL per step, below |
 | The fuzz test | `port/net/scripts/fuzz.sh [-s seconds] [-r per mille] [-p map] [seed...]` (`CLIENT=<an AddressSanitizer build's reg2>`), a minute a seed | no crash with random snapshot fields ("Security") |
 | The stress run | `port/net/scripts/stress.sh [-m minutes] [-n servers] [-s speed] [-p map] [-c seconds] [-g]`, 10 minutes by default | crashes and `CHECK` lines per process, below |
 
@@ -781,6 +782,9 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
 - **rounds**: two bot clients ready up, play a round, vote for map 2 and follow the server there (a check of where
   the players stand: on the new map); a third joins during the results and plays round 2.
 - **soak**: a server and three bot clients at 10 times the clock: 10 minutes of play in 60 s, no crash.
+- **throws**: blasts at a server bot's feet and a block away (`GTA2_NET_TESTBLAST`), another bot set on fire, a bot
+  client watching with the blend off: every tick it shows a player thrown, the server had it thrown there with the
+  same outcome, flying deaths among them, and the burning player's health drops didn't bleed.
 - **replay**: recorded sessions replayed against their saved logs: the same, or nondeterministic (a second replay
   differs too), else a regression. `--record` makes new ones; `--save` takes the current build's logs as the baseline
   after an intended change.

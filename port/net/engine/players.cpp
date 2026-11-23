@@ -25,6 +25,7 @@
 #include "Source/network_data.hpp"
 #include "Source/rng.hpp"
 #include "Source/sprite.hpp"
+#include <algorithm>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,11 +64,13 @@ uint8_t gKillCamKiller[MAX_PLAYERS];
 uint8_t gBonusCount[MAX_PLAYERS];
 uint8_t gBonusVoice[MAX_PLAYERS];
 int gBonusSeen = -1;
-// Each player's health as the last snapshot had it, and its ped then: a hit is a drop on the same ped
+// Each player's health as the last snapshot had it, its ped and the game's tick then: a hit is a drop on the same ped
 struct SeenHealth
 {
     s32 mPedId = -1;
     int32_t mHealth = 0;
+    uint32_t mTick = 0;
+    bool mOnFire = false;
 };
 SeenHealth gSeenHealth[MAX_PLAYERS];
 
@@ -77,9 +80,16 @@ void ShowServerHit(int i, Ped* ped, const EntityState& e)
 {
     SeenHealth& seen = gSeenHealth[i];
     const int32_t health = e.f[net::engine::kPlayerHealth], was = seen.mHealth;
-    const bool hit = seen.mPedId == ped->mId && health < seen.mHealth && seen.mHealth > 0 && !ped->mCar && !ped->isDead();
+    const uint32_t tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0; // the snapshot's (the world entity's, applied first)
+    // Burning takes 1 a tick and doesn't bleed (Ped::ManageBurning): a hit is what dropped beyond it. Its death puts the
+    // fire out, so the burn counts when it was on fire before or now
+    const bool onFire = (e.f[net::engine::kPlayerState] & net::engine::kPlayerOnFire) != 0;
+    const int32_t burnt = onFire || seen.mOnFire ? (int32_t)std::min<uint32_t>(tick - seen.mTick, 100) : 0;
+    const bool hit = seen.mPedId == ped->mId && health < seen.mHealth - burnt && seen.mHealth > 0 && !ped->mCar && !ped->isDead();
     seen.mPedId = ped->mId;
     seen.mHealth = health;
+    seen.mTick = tick;
+    seen.mOnFire = onFire;
     Sprite* s = hit ? net::engine::CharSprite(ped) : NULL;
     if (!s)
     {
@@ -92,7 +102,7 @@ void ShowServerHit(int i, Ped* ped, const EntityState& e)
     }
     if (Debug().selfLog)
     {
-        printf("net: player %d hit on the server: health %d -> %d, its blood shown\n", i, was, health);
+        printf("net: player %d hit on the server at tick %u: health %d -> %d, its blood shown\n", i, tick, was, health);
     }
 }
 const int kBonusVoices = 12;

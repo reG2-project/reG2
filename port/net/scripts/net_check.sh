@@ -9,9 +9,11 @@
 #   maps    a map rotation, a round of 15 s each (the clock 4 times as fast): two bot clients follow every map change,
 #           no crash, no CHECK line
 #   soak    a server and three bot clients, the clock 10 times as fast: 10 minutes of play in 60 s, no crash
+#   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown only as
+#           the server has it at that tick, with its outcome (a flying death among them), and burning doesn't bleed
 #   replay  recorded client sessions replayed against their saved logs: the same, or nondeterministic (it differs
 #           from itself too), else a regression
-# usage: port/net/scripts/net_check.sh [--quick] [--record] [--save] [arena|live|churn|maps|rounds|soak|replay ...]
+# usage: port/net/scripts/net_check.sh [--quick] [--record] [--save] [arena|live|churn|maps|rounds|soak|throws|replay ...]
 #   --record  new fixtures (recorded sessions) and their logs; --save: the current build's replay logs as the baseline
 # Fixtures and logs: $BUILD/net_check/. Exit 1 if anything failed.
 for v in BUILD GAME BIN; do # given as relative paths: from here (the games run in $GAME)
@@ -35,7 +37,7 @@ for a in "$@"; do
     *) STEPS+=("$a") ;;
   esac
 done
-[ ${#STEPS[@]} -eq 0 ] && STEPS=(arena live churn maps rounds soak replay)
+[ ${#STEPS[@]} -eq 0 ] && STEPS=(arena live churn maps rounds soak throws replay)
 [ -x "$BIN" ] && [ -d "$GAME/data" ] || { echo "no build or game: the port built in $BUILD (cmake -S port -B build_mac -G Ninja), and a game folder with data/ in $GAME"; exit 1; }
 mkdir -p "$OUT"
 trap 'kill $(jobs -p) 2>/dev/null' EXIT # our games end with us (most jobs exec their game; an arena match's subshell waits for it)
@@ -227,6 +229,42 @@ soak() {
   fi
 }
 
+throws() {
+  local p=$((BASE + 207)) blasts="" t
+  for t in $(seq 300 90 1400); do # at the feet (a flying death) and a block away (knocked down), in turns
+    blasts="$blasts,$t:0:$(( (t / 90) % 2 ? 0 : 9 ))"
+  done
+  rm -f "$OUT"/throws_*.log
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_TESTBLAST=${blasts#,} GTA2_NET_TESTFIRE=1500:1 exec "$BIN" --server --port $p \
+    --map mp1-6p --players 6 --arena simple,simple > "$OUT/throws_server.log" 2>&1) &
+  sleep 2
+  # The blend off: what the client shows at a tick is its prediction of it, the server's state there to the bit
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_SELFLOG=1 GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
+    exec "$BIN" --connect 127.0.0.1:$p --name c_watch --bot carhop --lag 60 --jitter 5 > "$OUT/throws_client.log" 2>&1) &
+  sleep 60
+  kill $(jobs -p) 2>/dev/null
+  wait 2>/dev/null
+  # Per tick and player: thrown with an outcome (ped 8/24..26) or not, on fire or not
+  local result
+  result=$(awk '
+    /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) burn[$6]++ }
+    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { c[$5 $6] = $12 }
+    /hit on the server at tick/ && $3 == 1 { hits++ }
+    END {
+      for (k in s) { thrown++; if (s[k] == "8/26") fatal++ }
+      for (k in c) { shown++; if (c[k] == "8/26") shownFatal++; if (s[k] != c[k]) wrong++ }
+      printf "%d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], hits
+    }' "$OUT/throws_server.log" "$OUT/throws_client.log")
+  local thrown fatal shown shownFatal wrong burnt hits
+  read -r thrown fatal shown shownFatal wrong burnt hits <<< "$result"
+  echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's; $hits hits shown on a player burning $burnt ticks"
+  if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ $((hits * 10)) -ge "$burnt" ]; then
+    fail "throws: the client's throws or burning aren't the server's ($BUILD/net_check/throws_*.log)"
+  else
+    pass "throws: every throw the client showed was the server's at that tick, flying deaths included; burning didn't bleed"
+  fi
+}
+
 record() {
   local p=$((BASE + 201))
   rm -f "$OUT"/fixture_*.rec
@@ -284,8 +322,8 @@ replay() {
 
 for s in "${STEPS[@]}"; do
   case $s in
-    arena | live | churn | maps | rounds | soak | replay) $s ;;
-    *) echo "no step $s (arena, live, churn, maps, rounds, soak, replay)"; FAILED=1 ;;
+    arena | live | churn | maps | rounds | soak | throws | replay) $s ;;
+    *) echo "no step $s (arena, live, churn, maps, rounds, soak, throws, replay)"; FAILED=1 ;;
   esac
 done
 exit $FAILED
