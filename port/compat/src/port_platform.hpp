@@ -87,6 +87,7 @@ bool port_RumbleAllowed();
 bool port_MouseMode(); // the mouse gave the last input
 int port_GetPadBinding(int control);
 void port_SetPadBinding(int control, int code);
+int port_DefaultKey(int control); // a control's default keyboard key (DIK), SCORES' included
 int port_DefaultPadBinding(int control);
 int port_GetAltBinding(int control);
 void port_SetAltBinding(int control, int code);

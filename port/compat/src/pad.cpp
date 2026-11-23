@@ -21,8 +21,10 @@ namespace
 const int kNumControls = 12;
 const int kScoresControl = 12;
 const int kNumBindings = 13;
+// SCORES' default key, the controls menu's too (port_DefaultKey)
+const DWORD kScoresKey = DIK_Q;
 const DWORD kDefaultKeys[kNumBindings] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN,
-                                          DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT, DIK_Q};
+                                          DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT, kScoresKey};
 // Forward, backward, left, right, attack, enter/exit, jump/handbrake, previous and next weapon,
 // special 1 to 3, scores (Back, fixed: the capture takes Back as cancel).
 const int kDefaultPad[kNumBindings] = {kPadUp, kPadDown, kPadLeft, kPadRight, 0, 3, 1, 4, 5, 2, 10, 11, 6};
@@ -466,6 +468,11 @@ void port_SetPadBinding(int control, int code)
     port_GetPadBinding(control);
     sPad[control] = code;
     WriteControl("pad_%d", control, static_cast<DWORD>(code));
+}
+
+int port_DefaultKey(int control)
+{
+    return static_cast<int>(kDefaultKeys[control]);
 }
 
 int port_DefaultPadBinding(int control)

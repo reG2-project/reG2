@@ -26,6 +26,7 @@ int port_DefaultPadBinding(int control);
 int port_GetAltBinding(int control);
 void port_SetAltBinding(int control, int code);
 int port_DefaultAltBinding(int control);
+int port_DefaultKey(int control);
 int port_KeyLetter(int dik);
 void port_CaptureStart();
 int port_CapturedKey();
@@ -101,8 +102,8 @@ const s32 kNumControls = 12;
 // SPECIAL 3 does nothing in the game: it keeps its bindings but is not shown.
 const s32 kSpecial3Control = 11;
 const s32 kShownControls = kNumControls - 1;
-const s32 kDefaultControls[13] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN, DIK_SPACE,
-                                  DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT, DIK_Q};
+const s32 kDefaultControls[12] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN,
+                                  DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT};
 const wchar_t* const kControlNames[13] = {L"FORWARD", L"BACKWARD", L"LEFT", L"RIGHT", L"ATTACK",
                                           L"ENTER OR EXIT", L"JUMP OR BRAKE", L"PREVIOUS WEAPON",
                                           L"NEXT WEAPON", L"HORN OR TAUNT", L"LOOK AROUND", L"SPECIAL 3", L"SCORES"};
@@ -474,9 +475,21 @@ void AltName(s32 code, wchar_t* pOut)
     }
 }
 
+// SCORES' is compat/src/pad.cpp's
+s32 DefaultKey(s32 control)
+{
+#if defined(GTA2_PORT_SDL)
+    if (control >= 12)
+    {
+        return port_DefaultKey(control);
+    }
+#endif
+    return kDefaultControls[control];
+}
+
 s32 GetKey(s32 control)
 {
-    return gRegistry.Get_Control_Setting(control, kDefaultControls[control]) & 0xFF;
+    return gRegistry.Get_Control_Setting(control, DefaultKey(control)) & 0xFF;
 }
 
 void SetKey(s32 control, s32 key)
@@ -551,7 +564,7 @@ void DefaultKeys()
 {
     for (s32 i = 0; i < kNumControls; i++)
     {
-        SetKey(i, kDefaultControls[i]);
+        SetKey(i, DefaultKey(i));
 #if defined(GTA2_PORT_SDL)
         port_SetAltBinding(i, port_DefaultAltBinding(i));
         port_SetPadBinding(i, port_DefaultPadBinding(i));
