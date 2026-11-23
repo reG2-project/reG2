@@ -257,6 +257,7 @@ void KillCredited(Ped* ped, int killerSlot); // the game's own death, credited t
 void KillNow(Ped* ped);
 void ApplyFire(Ped* p, bool onFire); // on fire or not as the server has it, the game's own way // the game's own death (Ped::Kill), dead at once even when knocked down
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there
+void EndDeath(Player* p); // a death's or an arrest's countdown over at once, the player's part (slots.cpp)
 void InstallStarts(bool on); // the players' peds past the script's and their start blocks (starts.cpp)
 void ZoneTurnBack(); // the restart zones' turn back one, as before the last respawn (starts.cpp)
 void ResetDeaths(int slot); // the round's death count the snapshots carry (a new round)

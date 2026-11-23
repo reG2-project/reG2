@@ -101,6 +101,30 @@ void net::engine::NeverInGame(int slot)
     }
 }
 
+// A death's or an arrest's countdown over, the player's part, as Player::Wasted and Player::Busted end it: else one
+// caught counting down stays "wasted" with its ped alive (it no longer dies, so the countdown never runs): it can't
+// attack, its deaths no longer count, and its camera stays on the corpse it left
+void net::engine::EndDeath(Player* p)
+{
+    if (!p->mWastedOrBusted && !p->mAuxPed)
+    {
+        return;
+    }
+    p->ClearKFWeapon();
+    p->mCameraMode = 0;
+    p->mGameCamera.SetSmoothFollow();
+    if (p->mAuxPed)
+    {
+        p->mAuxPed->Deallocate();
+        p->mAuxPed = NULL;
+    }
+    p->mAuxCamActive = false;
+    p->mWastedOrBusted = false;
+    p->mBusted = false;
+    p->mAuxPedDying = false;
+    p->mDeathCountdown = 0;
+}
+
 void net::engine::PutInGame(int slot, bool freshScore)
 {
     Player* p = GetPlayer(slot);
@@ -117,14 +141,29 @@ void net::engine::PutInGame(int slot, bool freshScore)
     }
     if (p->mInUse && p->mPlayerPed)
     {
-        // Still in: a fresh start where the others respawn, with the reset the game's respawn ends with. Else a ped
-        // falling or knocked down stays immobilized for good, its walk and its death only stored (ChangeNextPedState1)
+        // Still in: a fresh start where the others respawn, as the game's death and respawn over at once. The game
+        // respawns a ped no car holds (a car's blast kills its driver and clears it, Car::KillContainedPeds): a car
+        // kept it as its driver. Only the car lets go: getting out already, it has its char (another would stay in
+        // the collision grid). The reset its respawn ends with: else a ped falling or knocked down stays
+        // immobilized for good, its walk and its death only stored (ChangeNextPedState1)
         Ped* ped = p->mPlayerPed;
+        if (Car* car = ped->mCar)
+        {
+            if (car->mDriver == ped)
+            {
+                car->ClearDriver(); // its car weapons unloaded too
+            }
+            if (ped->mEnterCarAsPassenger)
+            {
+                car->mPassengersList.RemovePed_471240(ped);
+            }
+        }
         ped->RespawnPed(zone);
         if (ped->mGameObject)
         {
             ped->ResetForPlayerRespawn();
         }
+        EndDeath(p);
         // Its camera there too, not panning over for seconds: until it sees the ped, the ped counts as off screen, and
         // a dead player ped off screen for 200 ticks is freed as a corpse (Ped::PoolUpdate), with the player still
         // pointing at it (a crash at its respawn, or once the memory is another ped)
