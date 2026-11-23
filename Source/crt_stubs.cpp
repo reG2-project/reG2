@@ -7,7 +7,12 @@ namespace crt
 STUB_FUNC(0x5ED3BB)
 void* __cdecl malloc(size_t Size)
 {
+#if defined(GTA2_PORT)
+    // Zeroed: a network game's server replays tick for tick, and some fields are read before they are set (CarPhysics' mCurrentTileZ)
+    return ::calloc(1, Size);
+#else
     return ::malloc(Size);
+#endif
 }
 
 STUB_FUNC(0x5ED478)
