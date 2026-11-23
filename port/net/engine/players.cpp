@@ -681,7 +681,7 @@ s32 net::engine::KillCamTicks(Player* p, Player* killer)
     {
         gKillCamKiller[p->get_idx()] = cam ? (uint8_t)(killer->get_idx() + 1) : 0;
     }
-    return cam ? kKillCamTicks : 0;
+    return kKillCamTicks;
 }
 
 // The killer's own view, not its kill cam: its corpse when it died meanwhile
@@ -700,7 +700,7 @@ Ped* net::engine::DeathCamera(Player* p, Ped* auxPed)
 {
     Ped* ped = DeathViewPed(p, auxPed);
     Camera& c = p->mAuxGameCamera;
-    const bool killCam = p->get_idx() < MAX_PLAYERS && gKillCamKiller[p->get_idx()] && !p->mBusted && p->mDeathCountdown <= kKillCamTicks;
+    const bool killCam = p->mWastedOrBusted && !p->mBusted && p->mDeathCountdown <= kKillCamTicks;
     const Sprite* s = killCam && ped != c.GetFollowedPed() ? PedSprite(ped) : NULL;
     if (s)
     {
