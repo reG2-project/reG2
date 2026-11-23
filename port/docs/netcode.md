@@ -783,7 +783,7 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
 - **soak**: a server and three bot clients at 10 times the clock: 10 minutes of play in 60 s, no crash.
 - **throws**: blasts at a server bot's feet and a block away (`GTA2_NET_TESTBLAST`), another bot set on fire, a bot
   client watching with the blend off: every tick it shows a player thrown, the server had it thrown there with the
-  same outcome, flying deaths among them, and the burning player's health drops didn't bleed.
+  same outcome (a flying death shows knocked down until the server's death), and the burning player's health drops didn't bleed.
 - **replay**: recorded sessions replayed against their saved logs: the same, or nondeterministic (a second replay
   differs too), else a regression. `--record` makes new ones; `--save` takes the current build's logs as the baseline
   after an intended change.

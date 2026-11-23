@@ -9,8 +9,8 @@
 #   maps    a map rotation, a round of 15 s each (the clock 4 times as fast): two bot clients follow every map change,
 #           no crash, no CHECK line
 #   soak    a server and three bot clients, the clock 10 times as fast: 10 minutes of play in 60 s, no crash
-#   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown only as
-#           the server has it at that tick, with its outcome (a flying death among them), and burning doesn't bleed
+#   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown as the
+#           server has it at that tick, with its outcome (a flying death knocked down), and burning doesn't bleed
 #   replay  recorded client sessions replayed against their saved logs: the same, or nondeterministic (it differs
 #           from itself too), else a regression
 # usage: port/net/scripts/net_check.sh [--quick] [--record] [--save] [arena|live|churn|maps|rounds|soak|throws|replay ...]
@@ -252,7 +252,8 @@ throws() {
     /hit on the server at tick/ && $3 == 1 { hits++ }
     END {
       for (k in s) { thrown++; if (s[k] == "8/26") fatal++ }
-      for (k in c) { shown++; if (c[k] == "8/26") shownFatal++; if (s[k] != c[k]) wrong++ }
+      # A client never lands a player fatally itself (GuardThrow): the server's flying death shows knocked down there
+      for (k in c) { shown++; if (s[k] == "8/26") shownFatal++; if ((s[k] == "8/26" ? "8/25" : s[k]) != c[k]) wrong++ }
       printf "%d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], hits
     }' "$OUT/throws_server.log" "$OUT/throws_client.log")
   local thrown fatal shown shownFatal wrong burnt hits
