@@ -2,6 +2,7 @@
 // pages, navigation, settings, key and pad bindings, and its drawing with the frontend's fonts.
 #pragma once
 
+#include "../net/core/player_limit.hpp"
 #include "prompts.hpp"
 #include "saves.hpp"
 #include "types.hpp"
@@ -68,7 +69,7 @@ struct NetworkPlayer
     s32 mPing;
     bool mYou;
 };
-const s32 kMaxNetworkPlayers = 6;
+const s32 kMaxNetworkPlayers = NET_MAX_PLAYERS;
 // After Open in a network game, again as they change: no GAME page, PLAYERS with those players and the score's heading,
 // READY (1) or NOT READY (2) giving kReadyChosen (0: no line), the open vote's title with VOTE YES and NO (NULL: none),
 // LEAVE GAME with a question giving kQuitGame, and the settings a network game turns off greyed.
