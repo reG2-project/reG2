@@ -21,8 +21,9 @@ namespace
 const int kNumControls = 12;
 const int kScoresControl = 12;
 const int kNumBindings = 13;
-// SCORES' default key, the controls menu's too (port_DefaultKey)
-const DWORD kScoresKey = DIK_Q;
+// SCORES' default key, the controls menu's too (port_DefaultKey). SPECIAL 1's too: in a network game the key shows the
+// scoreboard and the game doesn't get it (port_ScoresKeyInGame)
+const DWORD kScoresKey = DIK_TAB;
 const DWORD kDefaultKeys[kNumBindings] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN,
                                           DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT, kScoresKey};
 // Forward, backward, left, right, attack, enter/exit, jump/handbrake, previous and next weapon,
@@ -536,6 +537,16 @@ bool port_AltKeyInGame(DWORD dik)
         alt = alt || port_GetAltBinding(i) == static_cast<int>(dik);
     }
     return alt;
+}
+
+bool port_ScoresKeyInGame(DWORD dik)
+{
+    if (!port_NetRoundPad() || port_QuitMessageShown())
+    {
+        return false;
+    }
+    const int alt = port_GetAltBinding(kScoresControl);
+    return dik == KeyFor(kScoresControl) || (alt > 0 && alt < 256 && dik == static_cast<DWORD>(alt));
 }
 
 bool port_ScoresHeld()

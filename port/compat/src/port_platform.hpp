@@ -151,6 +151,8 @@ bool port_ChatTyping(); // a network game's chat line: every key types, no secon
 int port_NetRoundPad();
 // SCORES held (its key or second key) in game, or Back held a moment in a network game's round: the scoreboard shows
 bool port_ScoresHeld();
+// In a network game's round (not while a chat line is typed), SCORES' key or second key: the game doesn't get its presses
+bool port_ScoresKeyInGame(DWORD dik);
 bool port_MenuUsesMouse(); // the frontend or the pause menu
 bool port_DebugKeys(); // the game's do_debug_keys debug setting
 // TWIN STICK and the local player with the controls on: 1 on foot, 2 in a vehicle, else 0.
