@@ -1737,10 +1737,12 @@ void net::Client::ShowRound()
         });
         lines.push_back("");
         // tables: the overlay lines up rows with tabs
-        lines.push_back(tag ? "Player\tIt (s)\tFrags\tDeaths" : points ? "Player\tPoints\tFrags\tDeaths" : "Player\tFrags\tDeaths");
+        lines.push_back(tag ? "Player\tTime IT\tFrags\tDeaths" : points ? "Player\tPoints\tFrags\tDeaths" : "Player\tFrags\tDeaths");
         for (const ScoreRow& row : board)
         {
-            const std::string first = tag ? std::to_string(row.tag) + "\t" : points ? std::to_string(row.points) + "\t" : "";
+            char clock[16];
+            snprintf(clock, sizeof(clock), "%d:%02d", row.tag / 60, row.tag % 60);
+            const std::string first = tag ? std::string(clock) + "\t" : points ? "$" + std::to_string(row.points) + "\t" : "";
             lines.push_back(engine::PlayerName(row.slot) + "\t" + first + std::to_string(row.frags) + "\t" + std::to_string(row.deaths));
         }
         lines.push_back("");
