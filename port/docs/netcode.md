@@ -421,7 +421,8 @@ the original's.
 
 Health, deaths, weapons and scores are the server's. A death the server had is carried out on the client with the
 game's own `Ped::Kill` (dead at once, also when a blast has the ped knocked down), credited to the killer, and the deaths carried out are part of the rollback set, so a
-resimulation never repeats one. The HUD's kill notices come from these deaths only, with the server's killer (none for
+resimulation never repeats one. Its respawn takes the server's restart zone: the snapshot's zone turn is already past the
+server's respawn, so it goes back one first (`ZoneTurnBack`), and the slot picks the same block. The HUD's kill notices come from these deaths only, with the server's killer (none for
 the police's), not from the deaths the client's prediction starts. A client goes by the game's death count, which only counts up (the round's, in the
 results, starts again with each round), and takes a player's count as it finds it the first time it sees the player. Scores (with the money and multiplier) are set before the resimulation, so its ticks and saves carry the server's
 (the HUD's rolling digits roll towards them), and again after it with power-up timers and the tag game's "it";
