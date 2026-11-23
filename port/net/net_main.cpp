@@ -25,17 +25,15 @@ namespace
 net::Server* gServer;
 net::Client* gClient;
 int gTickMs = 33;
-bool gTickSet;
 
 void StopIfRequested();
 
 void OnFrame(void*)
 {
     StopIfRequested();
-    if (!gTickSet && net::engine::GameRunning())
+    if (net::engine::GameRunning())
     {
-        net::engine::SetTickMs(gTickMs);
-        gTickSet = true;
+        net::engine::SetTickMs(gTickMs); // every frame: a new round's or map's game starts at the default
     }
     if (gServer)
     {
@@ -151,7 +149,6 @@ int LeaveNetworkGame()
     gPortDrawNetStandings = NULL;
     net::engine::SetStandings(std::vector<net::engine::PlayerRow>(), 0);
     gPortNetFrameLoop = false;
-    gTickSet = false;
     PortRand::SetSoundSeparate(false);
     PortRand::SetParticleSeparate(false);
     net::engine::StopNetworkGame();
