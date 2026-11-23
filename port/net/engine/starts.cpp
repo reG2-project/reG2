@@ -159,6 +159,15 @@ void ExtraPlayerPeds()
 }
 } // namespace
 
+void net::engine::ZoneTurnBack()
+{
+    const int n = (int)RestartZones().size();
+    if (n)
+    {
+        ZoneTurn() = (s16)(ZoneTurn() > 0 ? ZoneTurn() - 1 : n - 1);
+    }
+}
+
 void net::engine::InstallStarts(bool on)
 {
     gPortExtraPlayerPeds = on ? ExtraPlayerPeds : NULL;
