@@ -88,7 +88,12 @@ void TagGame::ExecuteGamemodeTick()
                     mItTimeSecs[mFugitive->get_idx()]++;
                 }
             }
+#if defined(GTA2_PORT)
+            // Port: a network game can have nobody in it (a dedicated server's empty slots), and SetNewFugitive needs one
+            if (!mFugitive && gGame_0x40->IterateFirstPlayer())
+#else
             if (!mFugitive)
+#endif
             {
                 SetNewFugitive(NULL);
             }

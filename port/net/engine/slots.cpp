@@ -85,6 +85,13 @@ void net::engine::TakeOutOfGame(int slot)
             }
         }
     }
+    if (gTagGame.mFugitive == p)
+    {
+        // "It" to the nearest player, as when "it" dies with no killer (TagGame::UpdateFugitive); else nobody stays
+        // "it" for the rest of the round. Alone: the next player in the game's (TagGame::ExecuteGamemodeTick)
+        gTagGame.UpdateFugitive(p, NULL);
+        gTagGame.mFugitive = gTagGame.mFugitive == p ? NULL : gTagGame.mFugitive;
+    }
     p->Disconnect(); // keeps its ped pointer, as the game does: the HUD and camera of a local slot use it
 }
 
