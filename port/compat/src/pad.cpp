@@ -21,8 +21,7 @@ namespace
 const int kNumControls = 12;
 const int kScoresControl = 12;
 const int kNumBindings = 13;
-// SCORES' default key, the controls menu's too (port_DefaultKey). SPECIAL 1's too: in a network game the key shows the
-// scoreboard and the game doesn't get it (port_ScoresKeyInGame)
+// SCORES' default key, the controls menu's too (port_DefaultKey)
 const DWORD kScoresKey = DIK_TAB;
 const DWORD kDefaultKeys[kNumBindings] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN,
                                           DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT, kScoresKey};
@@ -235,12 +234,12 @@ void WriteControl(const char* format, int control, DWORD value)
 // Read in every message loop poll (port_UpdatePad): from the registry again only once it changed.
 DWORD KeyFor(int control)
 {
-    static DWORD sKeys[kNumControls];
+    static DWORD sKeys[kNumBindings];
     static unsigned sKeysGeneration;
     static bool sKeysRead;
     if (!sKeysRead || sKeysGeneration != port_RegistryGeneration())
     {
-        for (int i = 0; i < kNumControls; i++)
+        for (int i = 0; i < kNumBindings; i++)
         {
             sKeys[i] = ReadControl("%d", i, kDefaultKeys[i]) & 0xFF;
         }
@@ -493,9 +492,9 @@ int port_GetAltBinding(int control)
             sAlt[i] = static_cast<int>(unsaved[i] ? static_cast<DWORD>(kDefaultAlt[i]) : saved);
         }
         // A default the player already uses on another control stays unbound.
-        for (int i = 0; i < kNumControls; i++)
+        for (int i = 0; i < kNumBindings; i++)
         {
-            for (int j = 0; unsaved[i] && sAlt[i] && j < kNumControls; j++)
+            for (int j = 0; unsaved[i] && sAlt[i] && j < kNumBindings; j++)
             {
                 if (j != i && (sAlt[j] == sAlt[i] || static_cast<int>(KeyFor(j)) == sAlt[i]))
                 {
