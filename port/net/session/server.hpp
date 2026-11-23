@@ -6,10 +6,12 @@
 #include "../transport/transport.hpp"
 #include "../dev/arena.hpp"
 #include "../dev/server_probe.hpp"
+#include "recording.hpp"
 #include "round_flow.hpp"
 #include "session.hpp"
 #include <map>
 #include <memory>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -38,6 +40,8 @@ struct ServerConfig
     RoundRules rules; // the round flow (session/round_flow.cpp): warmup, countdown, results, votes
     std::vector<MapFiles> voteMaps; // what a vote chooses from: the rotation, else every multiplayer map there is
     int currentMap = 0; // the first map's number in voteMaps
+    std::vector<std::string> args; // the command line, for the recording
+    std::string replay; // a server recording played instead of the network (--replay)
 };
 
 class Server
@@ -146,5 +150,13 @@ class Server
     uint32_t mCarInfo = 0; // data/nyc.gci's CRC-32
     MapPrint mPrint; // the map being played's files
     int mGeneration = 0; // engine::GameGeneration's, of the game running
+    std::mt19937 mRandom; // the session number and the tokens, from the recording's secret
+    std::unique_ptr<ServerRecorder> mRecorder;
+    std::unique_ptr<ServerReplay> mReplay;
+    std::vector<TransportEvent> mFrameEvents; // what this frame took, for the recording
+    uint32_t mReplayCheck = 0; // the recording's checksum of this tick
+    uint32_t mFirstDiff = 0; // the first tick a replay's world differs from the recording's
+    void CheckWorld(const Snapshot& world);
+    void EndReplay(uint32_t ticks); // the replay's verdict, and the end
 };
 } // namespace net

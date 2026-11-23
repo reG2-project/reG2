@@ -3,6 +3,7 @@
 // it has acknowledged.
 #include "server.hpp"
 #include "env.hpp"
+#include "../core/crc32.hpp"
 #include "../maps.hpp"
 #include <algorithm>
 #include <chrono>
@@ -51,6 +52,76 @@ uint32_t WithoutEscape(uint32_t buttons)
     return ((buttons & kKeyBits) >> 12) == kEscape ? buttons & ~(kKeyDown | kKeyBits) : buttons;
 }
 
+// A replay's: the recording has what came in, and nothing goes out
+class NoTransport : public net::Transport
+{
+  public:
+    bool Poll(net::TransportEvent&) override
+    {
+        return false;
+    }
+    bool Send(uint32_t, uint8_t, const void*, size_t, bool) override
+    {
+        return true;
+    }
+    void Flush() override
+    {
+    }
+    void Disconnect(uint32_t) override
+    {
+    }
+    uint32_t RoundTripMs(uint32_t) const override
+    {
+        return 0;
+    }
+};
+
+// The world's checksum: every entity's id, type and fields
+uint32_t WorldCheck(const net::Snapshot& world)
+{
+    const net::Schema& schema = net::engine::NetSchema();
+    uint32_t crc = 0;
+    for (const net::EntityState& e : world.entities)
+    {
+        const uint32_t head[2] = {e.id, e.type};
+        crc = net::Crc32(head, sizeof(head), crc);
+        const size_t fields = e.type < schema.types.size() ? schema.types[e.type].fields.size() : 0;
+        crc = net::Crc32(e.f, fields * sizeof(e.f[0]), crc);
+    }
+    return crc;
+}
+
+// GTA2_NET_DUMPWORLD=<tick>[,<tick>...]: every entity of the server's world at those ticks, by the snapshots' ids
+void DumpWorld(const net::Snapshot& world)
+{
+    const char* ticks = net::Env().dumpWorld;
+    const std::string at = std::to_string(world.tick);
+    bool listed = false;
+    for (const char* p = ticks; p && *p && !listed; p = strchr(p, ',') ? strchr(p, ',') + 1 : "")
+    {
+        listed = !strncmp(p, at.c_str(), at.size()) && (p[at.size()] == ',' || !p[at.size()]);
+    }
+    if (!listed)
+    {
+        return;
+    }
+    const net::Schema& schema = net::engine::NetSchema();
+    printf("net: world at tick %u, %zu entities\n", world.tick, world.entities.size());
+    for (const net::EntityState& e : world.entities)
+    {
+        if (e.type >= schema.types.size())
+        {
+            continue;
+        }
+        const net::EntityType& type = schema.types[e.type];
+        std::string line = "net: " + std::to_string(world.tick) + " " + type.name + " " + std::to_string(e.id);
+        for (size_t i = 0; i < type.fields.size(); i++)
+        {
+            line += std::string(" ") + type.fields[i].name + "=" + std::to_string(e.f[i]);
+        }
+        puts(line.c_str());
+    }
+}
 } // namespace
 
 std::string net::Scoreboard(const Snapshot& snap)
@@ -76,12 +147,50 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
     mConfig = config;
     mConfig.packets = config.packets < 1 ? 1 : config.packets > kMaxParts ? kMaxParts : config.packets;
     mSlots.assign(config.game.players, Slot());
-    mTransport.reset(CreateServerTransport(config.port, (uint32_t)config.slots + 4, error));
+    ServerStart start;
+    start.args = config.args;
+    start.env = NetEnvironment();
+    std::random_device device;
+    for (uint32_t& word : start.secret)
+    {
+        word = device();
+    }
+    if (!config.replay.empty())
+    {
+        mReplay.reset(new ServerReplay());
+        if (!mReplay->Open(config.replay.c_str(), &start, error))
+        {
+            return false;
+        }
+        mTransport.reset(new NoTransport());
+    }
+    else
+    {
+        mTransport.reset(CreateServerTransport(config.port, (uint32_t)config.slots + 4, error));
+    }
     if (!mTransport)
     {
         return false;
     }
-    if (config.link.Any())
+    std::seed_seq seed(start.secret, start.secret + 8);
+    mRandom.seed(seed);
+    // GTA2_NET_RECORD=<file>, or off; recorded anyway unless the server only plays its own bots (tests, training)
+    const char* record = Env().record;
+    const std::string path = mReplay ? "" : record ? (strcmp(record, "off") ? record : "") : config.arena.empty() ? NextRecordingPath("server") : "";
+    if (!path.empty())
+    {
+        mRecorder.reset(new ServerRecorder());
+        if (!mRecorder->Open(path.c_str(), start))
+        {
+            printf("net: can't record to %s\n", path.c_str());
+            mRecorder.reset();
+        }
+        else
+        {
+            printf("net: recording to %s\n", path.c_str());
+        }
+    }
+    if (config.link.Any() && !mReplay)
     {
         mTransport.reset(CreateConditioner(mTransport.release(), config.link));
     }
@@ -111,7 +220,7 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
     mRounds.SetMapTitles(titles);
     engine::CurrentRound() = mRounds.State();
     mProbe.Start();
-    mSession = std::random_device{}() | 1; // never 0: a welcome's session is always set
+    mSession = mRandom() | 1; // never 0: a welcome's session is always set
     mCarInfo = engine::DataFileCrc("nyc.gci");
     mPrint.gmp = engine::DataFileCrc(mConfig.game.gmp);
     mPrint.sty = engine::DataFileCrc(mConfig.game.sty);
@@ -232,7 +341,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
             {
                 mTransport->Disconnect(s.peer);
             }
-            const uint32_t token = back >= 0 ? s.token : std::random_device{}() | 1;
+            const uint32_t token = back >= 0 ? s.token : mRandom() | 1;
             s = Slot();
             s.used = true;
             s.peer = peer;
@@ -654,13 +763,33 @@ void net::Server::StartGameOnce()
 
 void net::Server::PollTransport()
 {
-    for (const TransportEvent& e : mPending)
+    mFrameEvents.clear();
+    if (mReplay)
     {
-        OnEvent(e);
+        uint32_t tick = 0;
+        if (!mReplay->Frame(&tick, &mReplayCheck, mFrameEvents))
+        {
+            EndReplay(mTick - 1);
+        }
+        if (tick != mTick)
+        {
+            printf("net: the recording's frame is tick %u's, the replay's %u's\n", tick, mTick);
+            mFirstDiff = mFirstDiff ? mFirstDiff : mTick;
+            EndReplay(mTick - 1);
+        }
+        for (const TransportEvent& e : mFrameEvents)
+        {
+            OnEvent(e);
+        }
+        return;
     }
-    mPending.clear();
+    mFrameEvents.swap(mPending);
     TransportEvent e;
     while (mTransport->Poll(e))
+    {
+        mFrameEvents.push_back(e);
+    }
+    for (const TransportEvent& e : mFrameEvents)
     {
         OnEvent(e);
     }
@@ -1179,10 +1308,15 @@ void net::Server::Frame()
     engine::Capture(world);
     world.tick = mTick;
     mProbe.Captured(mTick, world);
+    CheckWorld(world);
     SetNextInputs(world);
     RunRounds(world);
     if (mConfig.endTick && mTick >= mConfig.endTick)
     {
+        if (mReplay)
+        {
+            EndReplay(mTick);
+        }
         mArena.Finish(world);
         fflush(stdout);
         _Exit(0); // No game shutdown; the trainer only reads the result line
@@ -1214,4 +1348,34 @@ void net::Server::Frame()
     {
         PrintStats(world);
     }
+}
+
+void net::Server::CheckWorld(const Snapshot& world)
+{
+    DumpWorld(world);
+    const uint32_t check = WorldCheck(world);
+    if (mRecorder)
+    {
+        mRecorder->Frame(mTick, check, mFrameEvents);
+    }
+    if (mReplay && check != mReplayCheck && !mFirstDiff)
+    {
+        mFirstDiff = mTick;
+        printf("net: the replay's world differs from the recording's at tick %u\n", mTick);
+    }
+}
+
+// The recording played to its end: the replay's verdict, and its exit code
+void net::Server::EndReplay(uint32_t ticks)
+{
+    if (mFirstDiff)
+    {
+        printf("net: replayed %u ticks: the world differs from tick %u on\n", ticks, mFirstDiff);
+    }
+    else
+    {
+        printf("net: replayed %u ticks: the world matches the recording's at every tick\n", ticks);
+    }
+    fflush(stdout);
+    _Exit(mFirstDiff ? 1 : 0);
 }

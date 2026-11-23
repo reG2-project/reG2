@@ -8,7 +8,8 @@ namespace net
 // The session's GTA2_NET_* switches (port/docs/netcode.md), read once
 struct SessionEnv
 {
-    const char* record; // a file to record the client's session to
+    const char* record; // a file to record the session to (a client's or a server's)
+    const char* dumpWorld; // GTA2_NET_DUMPWORLD=<tick>[,<tick>...]: a server prints its world's entities at those ticks
     bool marker; // the server's position of the local player drawn
     bool corrLog, animLog, inputLog;
     bool compare; // the comparison check: the prediction against each snapshot, field by field

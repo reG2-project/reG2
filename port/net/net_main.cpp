@@ -211,10 +211,46 @@ void NetMain_PrintUsage()
 int NetMain_Init(std::vector<std::string>& args)
 {
     gPortLeaveNetworkGame = LeaveNetworkGame;
+    const std::vector<std::string> commandLine = args;
     net::NetOptions o;
     if (!net::ParseOptions(args, o))
     {
         return -1;
+    }
+    // A server's recording replays as that server: its command line again, its switches unless set here, no network
+    const bool serverReplay = !o.replay.empty() && net::ServerReplay::IsServerRecording(o.replay.c_str());
+    if (serverReplay)
+    {
+        net::ServerStart start;
+        net::ServerReplay header;
+        std::string error;
+        if (!header.Open(o.replay.c_str(), &start, &error))
+        {
+            fprintf(stderr, "net: %s\n", error.c_str());
+            return -1;
+        }
+        for (const std::string& v : start.env)
+        {
+            const size_t eq = v.find('=');
+            const std::string name = v.substr(0, eq), value = eq == std::string::npos ? "" : v.substr(eq + 1);
+            if (!getenv(name.c_str()))
+            {
+#if defined(_WIN32)
+                _putenv_s(name.c_str(), value.c_str());
+#else
+                setenv(name.c_str(), value.c_str(), 0);
+#endif
+            }
+        }
+        const std::string path = o.replay;
+        o = net::NetOptions();
+        if (!net::ParseOptions(start.args, o))
+        {
+            return -1;
+        }
+        o.sc.replay = path;
+        o.window = false;
+        printf("net: replaying the server of %s\n", path.c_str());
     }
     net::ServerConfig& sc = o.sc;
     net::ClientConfig& cc = o.cc;
@@ -251,6 +287,7 @@ int NetMain_Init(std::vector<std::string>& args)
         sc.rules.ticksPerSecond = 1000 / (sc.game.tickMs > 0 ? sc.game.tickMs : 33);
         sc.rules.rotation = sc.maps.size() > 1;
         sc.game.localPlayer = 0; // nobody plays on the server: every slot's input comes from the network
+        sc.args = commandLine;
         gServer = new net::Server();
         if (!gServer->Start(sc, &error))
         {
@@ -259,6 +296,12 @@ int NetMain_Init(std::vector<std::string>& args)
         }
         net::engine::StartNetworkGame(sc.game);
         gTickMs = sc.game.tickMs;
+        if (serverReplay)
+        {
+            gTickMs = 1; // as fast as it runs
+            net::engine::SetFrameHook(OnFrame, NULL);
+            return 1;
+        }
         gPortIdleHook = [] { StopIfRequested(); gServer->Idle(); net::engine::IdleWait(); }; // pings answered at once
         atexit(LeaveServer);
         signal(SIGTERM, OnStopSignal);
