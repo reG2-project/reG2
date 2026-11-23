@@ -18,38 +18,55 @@ uint8_t net::FreeLook(uint32_t* used)
 
 namespace
 {
-// <zone>'s blocks ring by ring from its centre, each ring row by row
+// <zone>'s blocks ring by ring from its centre, each ring row by row, its top and bottom rows whole and the others'
+// two ends; within the zone only
 bool InZone(const net::SpawnZone& zone, const net::SpawnWorld& world, int* x, int* y, int* z)
 {
     const int cx = zone.x + (zone.w >> 1), cy = zone.y + (zone.h >> 1);
     const int rings = zone.w > zone.h ? zone.w : zone.h;
+    const int x0 = zone.x, x1 = zone.x + zone.w - 1, y0 = zone.y, y1 = zone.y + zone.h - 1;
     bool level = false;
     int base = 0;
+    auto take = [&](int bx, int by) {
+        int bz = 0;
+        if (!world.Ground(bx, by, &bz))
+        {
+            return false;
+        }
+        if (!level)
+        {
+            level = true;
+            base = bz;
+        }
+        if (bz != base || world.Occupied(bx, by))
+        {
+            return false;
+        }
+        *x = bx;
+        *y = by;
+        *z = bz;
+        return true;
+    };
     for (int r = 0; r <= rings; r++)
     {
-        for (int by = cy - r; by <= cy + r; by++)
+        const int top = cy - r > y0 ? cy - r : y0, bottom = cy + r < y1 ? cy + r : y1;
+        for (int by = top; by <= bottom; by++)
         {
-            for (int bx = cx - r; bx <= cx + r; bx++)
+            if (by == cy - r || by == cy + r)
             {
-                const bool ring = by == cy - r || by == cy + r || bx == cx - r || bx == cx + r;
-                const bool inside = bx >= zone.x && bx < zone.x + zone.w && by >= zone.y && by < zone.y + zone.h;
-                int bz = 0;
-                if (!ring || !inside || !world.Ground(bx, by, &bz))
+                const int left = cx - r > x0 ? cx - r : x0, right = cx + r < x1 ? cx + r : x1;
+                for (int bx = left; bx <= right; bx++)
                 {
-                    continue;
+                    if (take(bx, by))
+                    {
+                        return true;
+                    }
                 }
-                if (!level)
-                {
-                    level = true;
-                    base = bz;
-                }
-                if (bz == base && !world.Occupied(bx, by))
-                {
-                    *x = bx;
-                    *y = by;
-                    *z = bz;
-                    return true;
-                }
+                continue;
+            }
+            if ((cx - r >= x0 && cx - r <= x1 && take(cx - r, by)) || (r && cx + r >= x0 && cx + r <= x1 && take(cx + r, by)))
+            {
+                return true;
             }
         }
     }

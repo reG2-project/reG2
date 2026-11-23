@@ -581,6 +581,33 @@ struct TestWorld : net::SpawnWorld
     }
 };
 
+// The blocks of <zone> in the order SpawnBlock takes them: every block of each ring's square from the centre, row by row,
+// kept when on the ring, in the zone and with ground at the level of the first one
+std::vector<std::pair<int, int>> RingOrder(const net::SpawnZone& zone, const TestWorld& w)
+{
+    std::vector<std::pair<int, int>> order;
+    const int cx = zone.x + (zone.w >> 1), cy = zone.y + (zone.h >> 1);
+    const int rings = zone.w > zone.h ? zone.w : zone.h;
+    int base = -1;
+    for (int r = 0; r <= rings; r++)
+    {
+        for (int by = cy - r; by <= cy + r; by++)
+        {
+            for (int bx = cx - r; bx <= cx + r; bx++)
+            {
+                const bool ring = by == cy - r || by == cy + r || bx == cx - r || bx == cx + r;
+                const bool inside = bx >= zone.x && bx < zone.x + zone.w && by >= zone.y && by < zone.y + zone.h;
+                int bz = 0;
+                if (ring && inside && w.Ground(bx, by, &bz) && (base < 0 ? (base = bz) : base) == bz)
+                {
+                    order.push_back({bx, by});
+                }
+            }
+        }
+    }
+    return order;
+}
+
 // The extra players' looks, and their start blocks: apart, in the zone, the next zone once it is full
 void TestSpawnSpots()
 {
@@ -622,6 +649,37 @@ void TestSpawnSpots()
     CHECK(net::SpawnBlock(zones, 1, w2, &x, &y, &z) && x == 50 && y == 60);
     CHECK(net::SpawnBlock(zones, 7, w2, &x, &y, &z) && x == 10 && y == 20);
     CHECK(!net::SpawnBlock(std::vector<net::SpawnZone>(), 0, w2, &x, &y, &z));
+    // Odd, even, flat and one-block zones, with holes and roofs: the blocks in ring order, each once
+    const std::vector<net::SpawnZone> shapes = {{3, 4, 1, 1}, {3, 4, 2, 2}, {3, 4, 5, 5}, {3, 4, 6, 3}, {3, 4, 1, 7}, {3, 4, 8, 2}, {0, 0, 4, 9}};
+    for (const net::SpawnZone& shape : shapes)
+    {
+        for (int seed = 0; seed < 4; seed++)
+        {
+            TestWorld t;
+            for (int by = shape.y; by < shape.y + shape.h; by++)
+            {
+                for (int bx = shape.x; bx < shape.x + shape.w; bx++)
+                {
+                    const int k = (bx * 7 + by * 13 + seed * 5) % 9;
+                    if (seed && k == 0)
+                    {
+                        t.holes.push_back({bx, by});
+                    }
+                    else if (seed && k == 1)
+                    {
+                        t.roofs.push_back({bx, by});
+                    }
+                }
+            }
+            const std::vector<std::pair<int, int>> want = RingOrder(shape, t);
+            for (size_t i = 0; i <= want.size(); i++)
+            {
+                const bool found = net::SpawnBlock({shape}, 0, t, &x, &y, &z);
+                CHECK(i < want.size() ? found && x == want[i].first && y == want[i].second : !found);
+                t.taken.push_back({x, y});
+            }
+        }
+    }
     printf("spawn spots ok\n");
 }
 
