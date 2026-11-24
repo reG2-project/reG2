@@ -50,6 +50,55 @@ bool Inside(float x, float y)
 {
     return x >= 0 && y >= 0 && x < N && y < N;
 }
+
+// A car's box, widened by <margin>: its centre, the unit ways across and along it, and the half sizes
+struct CarBox
+{
+    float cx, cy, ax, ay, fx, fy, hw, hl;
+    CarBox(const net::BotView::Seen& s, float margin)
+    {
+        const float a = s.rot * kPi / 720.0f;
+        cx = s.x, cy = s.y, fx = sinf(a), fy = cosf(a), ax = fy, ay = -fx;
+        hw = s.width * 0.5f + margin, hl = s.length * 0.5f + margin;
+    }
+    // Where along (x0, y0) to (x1, y1) it enters the box (0..1; 0 when it starts in it); -1 if it doesn't
+    float Enters(float x0, float y0, float x1, float y1) const
+    {
+        const float p[2] = {(x0 - cx) * ax + (y0 - cy) * ay, (x0 - cx) * fx + (y0 - cy) * fy};
+        const float d[2] = {(x1 - x0) * ax + (y1 - y0) * ay, (x1 - x0) * fx + (y1 - y0) * fy};
+        const float h[2] = {hw, hl};
+        float t0 = 0, t1 = 1;
+        for (int k = 0; k < 2; k++)
+        {
+            if (fabsf(d[k]) < 1e-6f)
+            {
+                if (fabsf(p[k]) > h[k])
+                {
+                    return -1;
+                }
+                continue;
+            }
+            float a = (-h[k] - p[k]) / d[k], b = (h[k] - p[k]) / d[k];
+            if (a > b)
+            {
+                const float t = a;
+                a = b, b = t;
+            }
+            t0 = a > t0 ? a : t0, t1 = b < t1 ? b : t1;
+            if (t0 > t1)
+            {
+                return -1;
+            }
+        }
+        return t0;
+    }
+    void Corner(int k, float out, float* pX, float* pY) const // k 0..3, <out> blocks beyond the box
+    {
+        const float i = k & 1 ? 1.0f : -1.0f, j = k & 2 ? 1.0f : -1.0f;
+        *pX = cx + ax * i * (hw + out) + fx * j * (hl + out);
+        *pY = cy + ay * i * (hw + out) + fy * j * (hl + out);
+    }
+};
 } // namespace
 
 bool net::FindPath(const engine::NavMap& map, int sx, int sy, int gx, int gy, std::vector<int>& path, int maxExpand, int* pExpanded,
@@ -302,6 +351,8 @@ uint32_t net::BotWalker::Walk(const BotView& v, uint32_t id, float x, float y, f
     }
     float wx = x, wy = y;
     route.Next(v, x, y, &wx, &wy, z);
+    bool jump = false;
+    AvoidCars(v, id, x, y, &wx, &wy, &jump);
     // Progress: the route two cells shorter than its shortest yet (no route at all is none)
     const size_t left = route.none ? (size_t)-2 : route.path.size();
     if (mBest == (size_t)-1 || left + 2 <= mBest)
@@ -324,7 +375,62 @@ uint32_t net::BotWalker::Walk(const BotView& v, uint32_t id, float x, float y, f
         }
     }
     const int err = TurnTo(v.rot, wx - v.x, wy - v.y);
-    return Steer(err) | (abs(err) < 300 ? kBtnForward : 0); // walk while roughly facing the way
+    return Steer(err) | (abs(err) < 300 ? kBtnForward : 0) | (jump && abs(err) < 100 ? kBtnJump : 0); // walk while roughly facing the way
+}
+
+// A car in the way (parked, or traffic stopped) within the next 3 blocks: round it by the corner of its box that makes
+// the way shortest and is clear (the one it went by last preferred); none clear and up against it: over it, jumping
+void net::BotWalker::AvoidCars(const BotView& v, uint32_t id, float goalX, float goalY, float* pX, float* pY, bool* pJump)
+{
+    const float dx = *pX - v.x, dy = *pY - v.y, dist = hypotf(dx, dy);
+    if (dist < 0.05f || v.car)
+    {
+        return;
+    }
+    const float look = dist < 3 ? dist : 3, ex = v.x + dx / dist * look, ey = v.y + dy / dist * look;
+    const BotView::Seen* block = NULL;
+    float first = 2;
+    for (const BotView::Seen& s : v.seen)
+    {
+        if (s.kind != BotView::Seen::kCar || s.id == id || hypotf(s.x - goalX, s.y - goalY) < 1.0f || fabsf(s.z - v.z) > 1.0f ||
+            hypotf(s.x - v.x, s.y - v.y) > look + s.length)
+        {
+            continue;
+        }
+        const float t = CarBox(s, 0.3f).Enters(v.x, v.y, ex, ey);
+        if (t >= 0 && t < first)
+        {
+            first = t, block = &s;
+        }
+    }
+    if (!block)
+    {
+        return;
+    }
+    const CarBox around(*block, 0.3f), body(*block, 0.15f);
+    int best = -1;
+    float bestCost = 1e9f;
+    for (int k = 0; k < 4; k++)
+    {
+        float cx = 0, cy = 0;
+        around.Corner(k, 0.35f, &cx, &cy);
+        const float cost = hypotf(cx - v.x, cy - v.y) + hypotf(*pX - cx, *pY - cy) - (k == mAvoidCorner && block->id == mAvoidCar ? 1.0f : 0);
+        if (cost < bestCost && body.Enters(v.x, v.y, cx, cy) < 0 && (!v.map || NavClear(*v.map, v.x, v.y, cx, cy)))
+        {
+            best = k, bestCost = cost;
+        }
+    }
+    if (best >= 0)
+    {
+        mAvoidCar = block->id, mAvoidCorner = best;
+        around.Corner(best, 0.35f, pX, pY);
+        if (v.stats)
+        {
+            v.stats->avoided++;
+        }
+        return;
+    }
+    *pJump = first * look < 0.6f; // nothing clear round it: over it
 }
 
 bool net::BotWalker::Skipped(uint32_t id, uint32_t frame) const
@@ -404,10 +510,16 @@ void net::BotWalker::Recover(const BotView& v)
         v.stats->recoveries++;
     }
     mRecoverUntil = v.frame + 15;
+    bool carNear = false;
+    for (const BotView::Seen& s : v.seen)
+    {
+        carNear |= s.kind == BotView::Seen::kCar && hypotf(s.x - v.x, s.y - v.y) < 0.5f + s.length * 0.5f && fabsf(s.z - v.z) < 1.0f;
+    }
     switch (spot->level)
     {
-    case 0: // back off and turn
-        mRecoverButtons = kBtnBack | kBtnLeft;
+    case 0: // back off and turn; against a car, over it
+        mRecoverButtons = carNear ? kBtnForward | kBtnJump : kBtnBack | kBtnLeft;
+        mRecoverUntil = carNear ? v.frame + 10 : mRecoverUntil;
         break;
     case 1: // the other way, with the way it was crossing left out of its route
         if (!route.path.empty())

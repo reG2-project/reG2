@@ -29,7 +29,7 @@ enum BotButton : uint32_t
 // What a bot's navigation did (the arena's stuck meter prints it)
 struct BotNavStats
 {
-    uint32_t searches = 0, failed = 0, giveUps = 0, recoveries = 0;
+    uint32_t searches = 0, failed = 0, giveUps = 0, recoveries = 0, avoided = 0; // avoided: ticks going round a car
     uint64_t expanded = 0; // cells looked at by its searches
 };
 
@@ -147,10 +147,13 @@ class BotWalker
         uint32_t at;
     };
     void Recover(const BotView& v);
+    void AvoidCars(const BotView& v, uint32_t id, float goalX, float goalY, float* pX, float* pY, bool* pJump);
     std::vector<Skip> mSkips;
     std::vector<Spot> mSpots;
     uint32_t mGoal = 0, mGoalSince = 0, mCheckAt = 0, mRecoverUntil = 0, mRecoverButtons = 0, mLastFrame = 0;
     size_t mBest = 0; // the shortest route it had to the goal
+    uint32_t mAvoidCar = 0; // the car it last went round, and by which corner
+    int mAvoidCorner = -1;
     float mCheckX = 0, mCheckY = 0;
 };
 

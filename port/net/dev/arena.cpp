@@ -401,8 +401,8 @@ void net::Arena::Finish(const Snapshot& world)
             printf("net: arena %d %s behaviour alive %.1f s armed %.1f s fists %.1f s dealing %d in a car near one on foot %.1f s\n", p,
                    bot.kind.c_str(), bot.aliveTicks / 30.0, bot.armedTicks / 30.0, bot.fistTicks / 30.0, bot.fistDealt,
                    bot.carNearFootTicks / 30.0);
-            printf("net: arena %d %s cars punched %.1f s fists near one in a car %.1f s stuck by a car %.1f s\n", p, bot.kind.c_str(),
-                   bot.carPunchTicks / 30.0, bot.fistAtCarTicks / 30.0, bot.carStuckFootTicks / 30.0);
+            printf("net: arena %d %s cars punched %.1f s fists near one in a car %.1f s stuck by a car %.1f s round cars %.1f s\n", p, bot.kind.c_str(),
+                   bot.carPunchTicks / 30.0, bot.fistAtCarTicks / 30.0, bot.carStuckFootTicks / 30.0, bot.nav.avoided / 30.0);
             printf("net: arena %d %s throws %d nearer than 1.8 %d farther than 5 %d\n", p, bot.kind.c_str(), bot.throws, bot.closeThrows,
                    bot.farThrows);
         }

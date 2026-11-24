@@ -132,6 +132,33 @@ int main()
     CHECK(!net::FindPath(m, 60, 20, 80, 20, path));
     CHECK(net::FindPath(m, 60, 20, 70, 20, path) && path.size() == 10);
 
+    // A car parked across the way east (its length along y): the walker turns for a corner of it; walled in either side
+    // of it, it jumps
+    Open(m);
+    LabelNavParts(m);
+    net::BotView v;
+    v.map = &m;
+    v.hasBody = true;
+    v.x = 100.5f, v.y = 100.5f, v.z = 3.0f, v.rot = 360; // facing +x
+    net::BotView::Seen car = {};
+    car.kind = net::BotView::Seen::kCar, car.id = 0x01000001, car.x = 102.0f, car.y = 100.5f, car.z = 3.0f, car.rot = 0;
+    car.width = 0.8f, car.length = 1.6f;
+    v.seen.push_back(car);
+    net::BotWalker walker;
+    v.frame = 1;
+    uint32_t b = walker.Walk(v, 0x03000001, 110.5f, 100.5f, 3.0f);
+    CHECK((b & (net::kBtnLeft | net::kBtnRight)) && !(b & net::kBtnJump));
+    v.x = 101.3f;
+    WallEast(m, 101, 0, 99);
+    WallEast(m, 101, 102, N - 1);
+    for (int y = 0; y < N; y++)
+    {
+        m.ways[y * N + 101] &= ~(net::engine::NavMap::kNorth | net::engine::NavMap::kSouth);
+    }
+    v.frame = 2;
+    b = walker.Walk(v, 0x03000001, 110.5f, 100.5f, 3.0f);
+    CHECK((b & net::kBtnForward) && (b & net::kBtnJump));
+
     printf("net bot tests passed\n");
     return 0;
 }
