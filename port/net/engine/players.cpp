@@ -191,9 +191,9 @@ void ApplyWeapons(Player* p, const net::EntityState& e)
             gWeapon_8->add_car_weapon(w, 1, car);
         }
     }
-    // Only to a weapon this game has made for the player (a new map's game: not yet, and the HUD reads it,
+    // Fists (0), or only a weapon this game has made for the player (a new map's game: not yet, and the HUD reads it,
     // Hud_PlayerStats::DrawPlayerStats)
-    if (e.f[kPlayerWeapon] >= 1 && e.f[kPlayerWeapon] <= kPlayerWeapons && p->mWeapons[e.f[kPlayerWeapon] - 1])
+    if (e.f[kPlayerWeapon] == 0 || (e.f[kPlayerWeapon] >= 1 && e.f[kPlayerWeapon] <= kPlayerWeapons && p->mWeapons[e.f[kPlayerWeapon] - 1]))
     {
         p->mCurrWeaponIdx = (s16)(e.f[kPlayerWeapon] - 1);
     }
