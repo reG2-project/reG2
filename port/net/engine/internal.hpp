@@ -171,6 +171,19 @@ enum ObjectField
     kObjModel, // Object::mModel (objects::)
     kObjIdx, // Object::mPedRefIdx (what kind, for some)
 };
+enum ShotField
+{
+    kShotX, // where it was at the end of its first tick (born), as it was then
+    kShotY,
+    kShotZ,
+    kShotRot,
+    kShotModel, // Object::mModel: a rocket, grenade or molotov, or an explosion
+    kShotKind, // an explosion's type (explosion_type), 0 for the others
+    kShotTimer, // a grenade's fuse (Object_8::mTimer), an explosion's Explosion::mTimer
+    kShotOwner, // who fired it (a ped as a field, PedNetId), 0 nobody
+    kShotBorn, // the game's cycle of that first tick, low 16 bits
+    kShotMotion, // then its Object_3C's motion (shots.cpp)
+};
 const int kTrainCarriages = 11; // Train::mCarriages: the lead and up to 10 wagons
 const int kTrainDriverPlayer = 3;
 enum TrainField
@@ -244,6 +257,7 @@ class ReachArea
     bool Inside(const Sprite* s) const;
     bool Beyond(const Sprite* s) const;
     float DistanceTo(const Sprite* s) const; // to the nearer focus
+    float DistanceTo(float x, float y) const; // from a place in blocks
 
   private:
     Foci mFoci;
@@ -393,6 +407,17 @@ void ApplyPickups(const Snapshot& snap);
 std::unordered_map<uint32_t, Object*>& PickupMap(); // for the rollback (ReplicaState)
 void ClearPickups(); // a new game: none mapped
 extern int gPickupsMade, gPickupsRemoved; // for the log
+
+// Shots (shots.cpp): rockets, grenades, molotovs and blasts both ends simulate, keyed by prediction
+// (port/src/rand/owner.hpp). The server's are sent by how they started; a client makes the ones it lacks and removes
+// those the server doesn't have at the snapshot's tick
+void ShotMotionFields(std::vector<FieldDesc>& out);
+void CaptureShots(Snapshot& out);
+void ApplyShots(const Snapshot& snap);
+void InstallShots(bool on, bool client); // the game's hooks for the keys and a client's blasts
+void ShotsTickStart(); // a client's, before each tick (GTA2_NET_TESTGHOSTSHOT)
+void ClearShots(); // a new game
+extern int gShotsKept, gShotsMade, gShotsRemoved, gShotsBeyond; // for the log
 
 // This game's live cars and peds (a mapped one may have been removed by the game since; stats.cpp)
 void LiveEntities(std::set<Car*>& cars, std::set<Ped*>& peds);

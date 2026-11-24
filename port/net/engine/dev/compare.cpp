@@ -127,9 +127,9 @@ template <class Fn> void ForEachPair(const Snapshot& snap, Fn fn)
             local = p ? kPedIdBase + p->mId : 0;
             group = p && IsCop(p) ? 1 : p && IsParamedic(p) ? 2 : 0;
         }
-        else if (s.type == kEntityObject || s.type == kEntityTrain)
+        else if (s.type == kEntityObject || s.type == kEntityTrain || s.type == kEntityShot)
         {
-            continue; // Pickups are matched by place (pickups.cpp), not compared here; nor trains (their carriages go by each end's own car ids)
+            continue; // Pickups are matched by place (pickups.cpp), not compared here; nor trains (their carriages go by each end's own car ids), nor shots (their start)
         }
         if (EntityAge(s))
         {

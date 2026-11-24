@@ -37,6 +37,7 @@ const net::SessionEnv& net::Env()
         e.testBlast = getenv("GTA2_NET_TESTBLAST");
         e.testPhase = getenv("GTA2_NET_TESTPHASE");
         e.testPatients = getenv("GTA2_NET_TESTPATIENTS");
+        e.testShot = getenv("GTA2_NET_TESTSHOT");
         e.testCar = getenv("GTA2_NET_TESTCAR");
         e.testTrain = getenv("GTA2_NET_TESTTRAIN");
         e.snapCheck = getenv("GTA2_NET_SNAPCHECK") != NULL;

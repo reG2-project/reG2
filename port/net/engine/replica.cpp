@@ -656,6 +656,12 @@ void net::engine::PrintReplicaLog()
         printf("net: %d pickups made as the server's, %d removed\n", gPickupsMade, gPickupsRemoved);
         gPickupsMade = gPickupsRemoved = 0;
     }
+    if (gShotsMade + gShotsRemoved + gShotsBeyond)
+    {
+        printf("net: shots against the snapshots: %d kept, %d made as the server's, %d removed, %d beyond the reach\n", gShotsKept, gShotsMade,
+               gShotsRemoved, gShotsBeyond);
+    }
+    gShotsKept = gShotsMade = gShotsRemoved = gShotsBeyond = 0;
     if (gPedsRemade)
     {
         printf("net: %d corpses of this game's own made again\n", gPedsRemade);
@@ -764,6 +770,7 @@ unsigned int ClientCarKey(const Car* c)
 void ClientTickStart()
 {
     ProtectPlayers(); // before every tick, live or resimulated: a frame may run several
+    ShotsTickStart();
     // Made again every tick (a few hundred entries); the maps change with every apply and restore
     gPedKeys.clear();
     gCarKeys.clear();
@@ -784,6 +791,7 @@ void net::engine::SetRandOwners(bool client)
     PortRand::gPedKey = client ? ClientPedKey : ServerPedKey;
     PortRand::gCarKey = client ? ClientCarKey : ServerCarKey;
     PortRand::gTickHook = client ? ClientTickStart : NULL;
+    InstallShots(true, client);
 }
 
 void net::engine::ClearRandOwners()
@@ -792,6 +800,7 @@ void net::engine::ClearRandOwners()
     PortRand::gPedKey = NULL;
     PortRand::gCarKey = NULL;
     PortRand::gTickHook = NULL;
+    InstallShots(false, false);
 }
 
 const std::unordered_map<uint32_t, Car*>& net::engine::ReplicaCars()

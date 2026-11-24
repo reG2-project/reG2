@@ -55,6 +55,8 @@ const Rule kRules[] = {
     {kEntityObject, "y", kRange, kMapMin, kMapMax},
     {kEntityTrain, "x", kRange, kMapMin, kMapMax},
     {kEntityTrain, "y", kRange, kMapMin, kMapMax},
+    {kEntityShot, "x", kRange, kMapMin, kMapMax},
+    {kEntityShot, "y", kRange, kMapMin, kMapMax},
     // The input's key event: a DirectInput code of 0..255 (KeyboardLayout::mKeys[256], read by the chat), its press bit
     {kEntityPlayer, "buttons", kMask, 0x2FFFFF, 0},
     {kEntityPlayer, "money", kRange, 0, 999999999}, // the HUD's "%09d" into its 10 bytes (RollingDigitCounter)
@@ -137,6 +139,15 @@ const Rule kRules[] = {
     {kEntityPed, "mVelocityVector.x", kRange, -kSpeedMax, kSpeedMax},
     {kEntityPed, "mVelocityVector.y", kRange, -kSpeedMax, kSpeedMax},
     {kEntityPed, "mAnimationFrame", kRange, 0, 31}, // added to the animation's first sprite: within a ped's 158
+    // A shot (shots.cpp): its angles, a ped's speeds at most, its friction a brake, Object_3C's collision modes
+    {kEntityShot, "rot", kAngle, 0, 0},
+    {kEntityShot, "mAngle", kAngle, 0, 0},
+    {kEntityShot, "mSpeed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityShot, "mZSpeed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityShot, "mSavedSpeed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityShot, "mZAccel", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityShot, "mFriction", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityShot, "mSpriteCollideMode", kRange, 0, 2},
     {kEntityTrain, "speed", kRange, 0, kTrainSpeedMax},
     {kEntityTrain, "state", kRange, 0, 5},
     {kEntityTrain, "stop_phase", kRange, 0, 11},

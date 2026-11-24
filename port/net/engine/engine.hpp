@@ -96,6 +96,7 @@ enum EntityKind : uint8_t
     kEntityWorld = 3, // one, kWorldId: game-wide state (no position), in every client's snapshot
     kEntityObject = 4, // a pickup (pickups.cpp)
     kEntityTrain = 5, // a train (trains.cpp): in every client's snapshot
+    kEntityShot = 6, // a rocket, grenade, molotov or blast (shots.cpp): in every client's snapshot
 };
 const uint32_t kWorldId = 0;
 // NetIds: a player's is its slot + 1; cars, peds and pickups have theirs from these on
@@ -103,6 +104,7 @@ const uint32_t kCarIdBase = 0x01000000; // + Car::mCarId
 const uint32_t kPedIdBase = 0x02000000; // + Ped::mId
 const uint32_t kObjIdBase = 0x03000000; // + Object::mId
 const uint32_t kTrainIdBase = 0x04000000; // + its index in PublicTransport::mTrainArray
+const uint32_t kShotIdBase = 0x05000000; // + its prediction key (24 bits, port/src/rand/owner.hpp)
 inline bool IsPlayerId(uint32_t id)
 {
     return id < kCarIdBase;
@@ -116,7 +118,7 @@ inline float Blocks(int32_t raw)
 {
     return raw / 16384.0f;
 }
-// Every player, car, ped, pickup and train
+// Every player, car, ped, pickup, train and shot
 void Capture(Snapshot& out);
 // A snapshot from the server made safe for the game, before anything uses it (sanitize.cpp): each field into its valid
 // range, a changed one printed as a CHECK line. SnapshotClamps counts the fields changed so far

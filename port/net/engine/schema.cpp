@@ -112,12 +112,18 @@ net::Schema BuildSchema()
     AppendNumbered(train.fields, "carriage", kTrainCarriages, 25);
     AppendNumbered(train.fields, "damage", kTrainCarriages, 16);
     AppendNumbered(train.fields, "explosion", kTrainCarriages, 8);
+    // Fixed at its first tick: both ends simulate it on from there (shots.cpp)
+    // (z 18 bits: thrown from a roof's top, a grenade starts above 8 blocks)
+    net::EntityType shot = {"shot", {{"x", 22, false}, {"y", 22, false}, {"z", 18, false}, {"rot", 11, false}, {"model", 9, false},
+                                     {"kind", 6, false}, {"timer", 16, false}, {"owner", 32, false}, {"born", 16, false}}};
+    ShotMotionFields(shot.fields);
     s.types.push_back(player); // kEntityPlayer
     s.types.push_back(car); // kEntityCar
     s.types.push_back(ped); // kEntityPed
     s.types.push_back(world); // kEntityWorld
     s.types.push_back(object); // kEntityObject
     s.types.push_back(train); // kEntityTrain
+    s.types.push_back(shot); // kEntityShot
     return s;
 }
 } // namespace

@@ -18,7 +18,7 @@ class ServerProbe
     void Captured(uint32_t tick, const Snapshot& world); // the world as captured: the logs
 
   private:
-    struct TestEvent // GTA2_NET_TESTKILL, _TESTPOWERUP, _TESTCAR, _TESTTRAIN, _TESTSTREAK, _TESTFIRE, _TESTBLAST, _TESTPATIENTS, _TESTPHASE
+    struct TestEvent // GTA2_NET_TESTKILL, _TESTPOWERUP, _TESTCAR, _TESTTRAIN, _TESTSTREAK, _TESTFIRE, _TESTBLAST, _TESTPATIENTS, _TESTPHASE, _TESTSHOT
     {
         enum Kind
         {
@@ -30,7 +30,8 @@ class ServerProbe
             kFire,
             kBlast,
             kPatients,
-            kPhase
+            kPhase,
+            kShot
         } kind;
         uint32_t tick;
         // The victim and its killer (-1: nobody); the player and the power-up, car model, train, blast distance or patients (+ 1000

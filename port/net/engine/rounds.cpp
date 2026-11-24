@@ -97,6 +97,7 @@ void net::engine::ResetForNewGame()
 {
     ClearReplicas();
     ClearPickups();
+    ClearShots();
     for (int i = 0; i < MAX_PLAYERS; i++)
     {
         ResetDeaths(i);

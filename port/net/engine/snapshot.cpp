@@ -100,10 +100,15 @@ net::engine::ReachArea::ReachArea(const Snapshot& snap, float margin) : mFoci(Pl
 
 float net::engine::ReachArea::DistanceTo(const Sprite* s) const
 {
+    return DistanceTo(s->mXy.x.ToFloat(), s->mXy.y.ToFloat());
+}
+
+float net::engine::ReachArea::DistanceTo(float x, float y) const
+{
     float d = 1e9f;
     for (int k = 0; k < mFoci.count; k++)
     {
-        const float dx = s->mXy.x.ToFloat() - mFoci.x[k], dy = s->mXy.y.ToFloat() - mFoci.y[k];
+        const float dx = x - mFoci.x[k], dy = y - mFoci.y[k];
         d = std::min(d, sqrtf(dx * dx + dy * dy));
     }
     return d;
@@ -375,6 +380,7 @@ void net::engine::Capture(Snapshot& out)
     }
     CapturePickups(out);
     CaptureTrains(out);
+    CaptureShots(out);
     SortById(out);
 }
 
@@ -396,6 +402,7 @@ void net::engine::Apply(const Snapshot& snap)
     }
     ApplyCarsAndPeds(snap);
     ApplyPickups(snap);
+    ApplyShots(snap); // after the cars and peds: owners and what a catch-up hits are the server's
 }
 
 // --- A client's view ---
