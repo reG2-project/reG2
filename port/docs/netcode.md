@@ -375,8 +375,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   object its char follows until the object stops, then lands it by the throw's outcome: back on its feet, knocked down,
   or dead), lying knocked down, sinking in water, electrocuted, or pulled out of a car at its door. The player and the
   ped entity carry the same record: the phase, whether its char is yet to start it, the value that ends it (a throw's
-  timeout, the lying, sinking and electrocution timers, the door's frame and door), the door's car, and a throw's object
-  (its place, motion and outcome). A client predicts every ped's phases as the game makes them, and at each snapshot's
+  timeout, the lying, sinking and electrocution timers, the door's frame, its timer and the door), the door's car, and
+  a throw's object (its place, motion and outcome). A client predicts every ped's phases as the game makes them, and at each snapshot's
   tick the server's wins: the same phase gets its timer, one the server has is started the game's way (`Char::DrownPed`,
   a throw's object, the door as the jacker's char puts a driver there), one the server lacks is cancelled to walking
   (a throw: its object removed). Nothing waits: there is no grace for a throw just landed.
