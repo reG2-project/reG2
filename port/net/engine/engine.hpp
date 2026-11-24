@@ -83,6 +83,7 @@ void ClientModeFrame();
 void AnchorAttachments();
 // After every tick, on the server too: what the game's own logic can leave behind that crashes it later (guards.cpp)
 void GuardPeds();
+void GuardFatalPhases(); // a client's: the server's peds' fatal phase steps held (also before each tick)
 
 // --- Snapshots (schema.cpp, snapshot.cpp, players.cpp) ---
 
