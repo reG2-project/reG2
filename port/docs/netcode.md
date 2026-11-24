@@ -379,7 +379,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
 - **Sinking and electrocution** (`engine/phases.cpp`): both end in the ped's death (`Char::UpdateImmobilized`). The
   player entity's state says whether the server's player is in one; a client starts the one it didn't predict as the
   game does, gets a player the server has out of it back on its feet, and holds its timer short of the death before each
-  tick (`GuardPhases`), so that only the server's death (`KillNow`) ends it.
+  tick (`GuardPhases`), so that only the server's death (`KillNow`) ends it. A player lying knocked down is the server's
+  the same way, its timer with it (`kPlayerLying`; not an arrest's, which the arrest carries).
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
   server's world. It carries every player, the car each sits in and every train wherever they are, and everything
   within the reach (the interest area, 24 blocks around the client's player's foci as the server has them), each entity the

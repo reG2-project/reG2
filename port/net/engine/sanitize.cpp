@@ -68,6 +68,7 @@ const Rule kRules[] = {
     {kEntityPlayer, "throw_zspeed", kRange, -kSpeedMax, kSpeedMax},
     {kEntityPlayer, "throw_zaccel", kRange, -kSpeedMax, kSpeedMax},
     {kEntityPlayer, "throw_friction", kRange, -kSpeedMax, 0},
+    {kEntityPlayer, "lying", kRange, 0, kLyingMax + 1},
     {kEntityPlayer, "multiplier", kRange, 0, 99},
     {kEntityWorld, "zone_turn", kRange, -1, 39}, // Map_0x370::GetNextZoneOfTypeRoundRobin's zone_stack[40]
     {kEntityWorld, "police_level", kRange, 0, 6},

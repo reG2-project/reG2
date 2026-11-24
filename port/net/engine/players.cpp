@@ -438,7 +438,7 @@ void net::engine::CapturePlayer(int i, Snapshot& out)
     }
     e.f[kPlayerCar] = CarRef(ped->mCar);
     e.f[kPlayerState] = (InCarTransition(ped) ? kPlayerTransition : 0) | (ped->isDead() ? kPlayerDead : 0) | (LeavingCar(ped) ? kPlayerLeaving : 0) |
-                         (ped->mBf21C.bOnFire ? kPlayerOnFire : 0) | PhaseBits(ped);
+                         (ped->mBf21C.bOnFire ? kPlayerOnFire : 0);
     e.f[kPlayerTarget] = ped->get_objective() == objectives_enum::enter_car_as_driver_35 ? CarRef(ped->mTargetObjectiveCar) : 0;
     PackName(p, e);
     PackChat(p, e);
@@ -450,6 +450,7 @@ void net::engine::CapturePlayer(int i, Snapshot& out)
         e.f[kPlayerPowerUp + k] = p->mPowerUpTimers[k];
     }
     CaptureThrow(ped, e);
+    CapturePhases(ped, e);
     out.entities.push_back(e);
 }
 

@@ -23,6 +23,7 @@ namespace engine
 const int kPlayerWeapons = 28; // Player::mWeapons: its own (0..14) and its car weapons (15..27)
 const int kPowerUps = 17; // Player::mPowerUpTimers
 const int kKillerLaw = 63; // kPlayerKiller: killed by the police
+const int kLyingMax = 60; // Char::mLyingOnFloorTimer's start, a ped's (a player's: 20)
 enum PlayerField
 {
     kPlayerX,
@@ -63,6 +64,7 @@ enum PlayerField
     kPlayerThrowZSpeed,
     kPlayerThrowZAccel,
     kPlayerThrowFriction,
+    kPlayerLying, // knocked down on the floor (phases.cpp): its timer + 1 (Char::mLyingOnFloorTimer), 0 not lying
 };
 enum PlayerState
 {
@@ -281,7 +283,7 @@ void CaptureThrow(Ped* ped, EntityState& e);
 void ApplyThrow(Ped* ped, const EntityState& e);
 void MoveThrow(Ped* ped, int32_t dx, int32_t dy); // raw Fix16
 void GuardThrow(int i, Ped* ped); // before each tick on a client: its players' throws land fatally only by KillNow
-int32_t PhaseBits(const Ped* ped); // kPlayerSinking, kPlayerShocked (phases.cpp)
+void CapturePhases(const Ped* ped, EntityState& e); // kPlayerSinking, kPlayerShocked, kPlayerLying (phases.cpp)
 void GuardPhases(Ped* ped); // before each tick on a client: its players sink or are electrocuted to death only by KillNow
 void ApplyPhases(Ped* ped, const EntityState& e);
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there

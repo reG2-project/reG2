@@ -1,5 +1,6 @@
 // port/net (port/docs/netcode.md, "Entities"): a player sinking (Char::DrownPed) or electrocuted (Ped::ManageShocking),
-// both ended by its death (Char::UpdateImmobilized). A client holds them short of it and follows the server's phase.
+// both ended by its death (Char::UpdateImmobilized), or lying knocked down. A client follows the server's phase, and
+// holds sinking and electrocution short of the death.
 #include "internal.hpp"
 #include "Source/Ped.hpp"
 #include "Source/char.hpp"
@@ -34,9 +35,15 @@ void Cancel(Ped* ped, Char* c)
 }
 } // namespace
 
-int32_t net::engine::PhaseBits(const Ped* ped)
+void net::engine::CapturePhases(const Ped* ped, EntityState& e)
 {
-    return (InPhase(ped, ped_state_2::sinking_20) ? kPlayerSinking : 0) | (InPhase(ped, ped_state_2::electrocuted_27) ? kPlayerShocked : 0);
+    e.f[kPlayerState] |= (InPhase(ped, ped_state_2::sinking_20) ? kPlayerSinking : 0) | (InPhase(ped, ped_state_2::electrocuted_27) ? kPlayerShocked : 0);
+    // An arrest's lying (Ped::mBf21C.bBusted) is the arrest's: its timer runs on below 0
+    const Char* c = ped->mGameObject;
+    if (c && !c->mStateInitPending && InPhase(ped, ped_state_2::lying_on_floor_22) && !ped->mBf21C.bBusted)
+    {
+        e.f[kPlayerLying] = (c->mLyingOnFloorTimer > 0 ? (c->mLyingOnFloorTimer < kLyingMax ? c->mLyingOnFloorTimer : kLyingMax) : 0) + 1;
+    }
 }
 
 void net::engine::GuardPhases(Ped* ped)
@@ -66,9 +73,17 @@ void net::engine::ApplyPhases(Ped* ped, const EntityState& e)
         return;
     }
     const bool sinking = InPhase(ped, ped_state_2::sinking_20), shocked = InPhase(ped, ped_state_2::electrocuted_27);
-    if ((sinking && !(state & kPlayerSinking)) || (shocked && !(state & kPlayerShocked)))
+    const int32_t lying = e.f[kPlayerLying];
+    // Lying here, getting up or thrown again there (throws.cpp starts that one)
+    const bool lyingHere = InPhase(ped, ped_state_2::lying_on_floor_22) && !c->mStateInitPending && !ped->mBf21C.bBusted;
+    if ((sinking && !(state & kPlayerSinking)) || (shocked && !(state & kPlayerShocked)) || (lyingHere && !lying && !e.f[kPlayerThrow]))
     {
         Cancel(ped, c);
+        return;
+    }
+    if (lyingHere && lying)
+    {
+        c->mLyingOnFloorTimer = (s8)(lying - 1);
         return;
     }
     // Started as the game starts them, on a ped not already held (thrown, lying, in another phase)
@@ -85,5 +100,11 @@ void net::engine::ApplyPhases(Ped* ped, const EntityState& e)
         ped->ChangeNextPedState1(ped_state_1::immobilized_8);
         ped->ChangeNextPedState2(ped_state_2::electrocuted_27);
         ped->SetStateInitPending();
+    }
+    else if (lying && !e.f[kPlayerThrow])
+    {
+        ped->ChangeNextPedState1(ped_state_1::immobilized_8);
+        ped->ChangeNextPedState2(ped_state_2::lying_on_floor_22);
+        ped->SetStateInitPending(); // its timer the next snapshot's
     }
 }
