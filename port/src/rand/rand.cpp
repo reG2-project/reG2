@@ -124,6 +124,13 @@ void PortRand::TickStart(unsigned int cycle)
     }
 }
 
+unsigned int PortRand::SetTick(unsigned int cycle)
+{
+    const unsigned int was = sTick;
+    sTick = cycle;
+    return was;
+}
+
 void PortRand::SetSeed(unsigned int seed)
 {
     sSeed = seed;

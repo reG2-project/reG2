@@ -9,6 +9,7 @@
 #include "port/src/rand/owner.hpp"
 #include "Source/Car.hpp"
 #include "Source/Char_Pool.hpp"
+#include "Source/CollisionSoundQueue.hpp"
 #include "Source/Explosion.hpp"
 #include "Source/Object_3C.hpp"
 #include "Source/Object_5C.hpp"
@@ -19,6 +20,7 @@
 #include "Source/explosion_type.hpp"
 #include "Source/rng.hpp"
 #include "Source/sprite.hpp"
+#include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -218,10 +220,62 @@ void SetDebris(Object* o, const EntityState& e)
 std::unordered_map<uint32_t, EntityState> gStarts; // a live shot's key -> its start, as first captured
 std::unordered_set<uint32_t> gMadeHere; // a client's blasts made from a snapshot: they hurt on the server
 uint32_t gKeySkew; // DebugShotSkew
+std::vector<std::pair<Object*, uint32_t>>* gCatchUpMade; // while a made shot is brought on: the keyed objects it makes
 
 void ObjectMade(Object* o)
 {
     SetKey(o, KeyedModel(o->mModel) ? PortRand::NextObjectKey() ^ gKeySkew : 0);
+    if (gCatchUpMade && KeyOf(o))
+    {
+        gCatchUpMade->push_back(std::make_pair(o, KeyOf(o)));
+    }
+}
+
+// Brought on <ticks> ticks to the snapshot's, each numbered for the draws as the server ran it; what it hits makes no
+// blast, sound or rumble here (the server's blast comes with the next snapshot). False: gone on the way
+bool CatchUp(Object* o, uint32_t ticks, uint32_t cycle)
+{
+    std::vector<std::pair<Object*, uint32_t>> made;
+    gCatchUpMade = &made;
+    const bool noRumble = gPortNoRumble;
+    gPortNoRumble = true;
+    const s32 sounds = gCollisionSoundQueue ? gCollisionSoundQueue->mCount : 0;
+    const unsigned int tick = PortRand::SetTick(0);
+    bool gone = false;
+    for (uint32_t t = 0; t < ticks && !gone; t++)
+    {
+        PortRand::SetTick(cycle - ticks + t);
+        PortRand::Scope scope(o);
+        gone = o->PoolUpdate();
+    }
+    PortRand::SetTick(tick);
+    if (gCollisionSoundQueue && gCollisionSoundQueue->mCount > sounds)
+    {
+        gCollisionSoundQueue->mCount = sounds;
+    }
+    gPortNoRumble = noRumble;
+    gCatchUpMade = NULL;
+    for (const auto& m : made)
+    {
+        Object* x = m.first;
+        if (x != o && x->mSprite && !x->mRemovalState && KeyOf(x) == m.second && SyncedBlast(BlastKind(x)))
+        {
+            x->Dealloc();
+        }
+    }
+    if (gone)
+    {
+        // As the pool's update frees it
+        if (o->mPoolListState == object_pool_state::in_pool_list_1)
+        {
+            gObject_2C_Pool->FindAndDeAllocate(o);
+        }
+        else
+        {
+            gObject_2C_Pool->DeAllocate(o);
+        }
+    }
+    return !gone;
 }
 
 unsigned int ObjectCreator(const Object* o)
@@ -333,24 +387,7 @@ Object* MakeShot(const EntityState& e, uint32_t key, uint32_t cycle)
     }
     SetKey(o, key);
     const uint32_t behind = model == objects::explosion_fragments_127 ? 0 : (cycle - (uint32_t)e.f[kShotBorn]) & 0xFFFF;
-    for (uint32_t t = 0; t < behind && t < kMostCatchUp; t++)
-    {
-        PortRand::Scope scope(o);
-        if (o->PoolUpdate())
-        {
-            // Gone on the way (a flight that differs here): as the pool's update frees it
-            if (o->mPoolListState == object_pool_state::in_pool_list_1)
-            {
-                gObject_2C_Pool->FindAndDeAllocate(o);
-            }
-            else
-            {
-                gObject_2C_Pool->DeAllocate(o);
-            }
-            return NULL;
-        }
-    }
-    return o;
+    return CatchUp(o, std::min(behind, kMostCatchUp), cycle) ? o : NULL;
 }
 } // namespace
 

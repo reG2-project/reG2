@@ -68,6 +68,7 @@ unsigned int NextObjectKey();
 
 // The tick that starts (Game::UpdateGame_4B9410, the game's cycle): the owners' draws are numbered per tick
 void TickStart(unsigned int cycle);
+unsigned int SetTick(unsigned int cycle); // the tick the owners' draws are numbered by, returning the one before
 extern void (*gTickHook)(); // the netcode's, at each tick's start (a client's id maps for the keys)
 void SetSeed(unsigned int seed); // the game's seed for the owners' draws (sent to clients with the world)
 unsigned int Seed();
