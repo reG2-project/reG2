@@ -274,7 +274,7 @@ throws() {
     END {
       for (k in s) { thrown++; if (s[k] == "8/26") fatal++ }
       # A client never lands a player fatally itself (GuardThrow): a flying death of the server shows knocked down there
-      for (k in c) { shown++; if (s[k] == "8/26") shownFatal++; if ((s[k] == "8/26" ? "8/25" : s[k]) != c[k]) wrong++ }
+      for (k in c) { shown++; if (s[k] == "8/26") shownFatal++; if ((s[k] == "8/26" ? "8/25" : s[k]) != c[k]) { wrong++; print "  wrong at " k ": server " s[k] ", client " c[k] > "/dev/stderr" } }
       # Electrocuted or sinking to a death on the server: the client still shows that tick alive in it
       for (t in sp) if (sp[t] ~ /^9\// && sp[t - 1] ~ /^8\/2[07]$/) { phased++; if (cp[t] !~ /^8\/2[07]$/) early++ }
       # Pulled out of its car (8/17): the client starts it from the server alone, never while the server has it seated or walking
