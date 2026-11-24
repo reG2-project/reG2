@@ -2,6 +2,7 @@
 // counts its input's response and the corrections. The script joins the server's lines with a client's by tick.
 #include "comfort.hpp"
 #include "../internal.hpp"
+#include "port/src/interpolation.hpp"
 #include "Source/Car.hpp"
 #include "Source/Char_Pool.hpp"
 #include "Source/Object_5C.hpp"
@@ -489,6 +490,11 @@ void net::engine::ComfortClientFrame(uint32_t frame, uint32_t tick, int slot, ui
         auto it = p ? netIds.find(p) : netIds.end();
         return it != netIds.end() ? it->second : 0u;
     });
+    // Another player's shot first drawn: its distance from the shooter's drawn gun, without and with the slide
+    for (float would, drawn; PortInterp::TakeSlideMeasure(&would, &drawn);)
+    {
+        printf("comfort: C shotdraw %u %.2f %.2f\n", frame, would, drawn);
+    }
     const bool valid = ms && me && !me->isDead() && me->mPedState1 != ped_state_1::immobilized_8 && (!me->mCar || myCar);
     gResponse.Frame(frame, input, valid, me && me->mCar, me ? me->mCar : NULL, valid ? ms->mXy.x.ToFloat() : 0,
                     valid ? ms->mXy.y.ToFloat() : 0, valid ? ms->mRotation.rValue : 0);
