@@ -247,6 +247,8 @@ class SavedWorld
 void SaveGame(SavedWorld& out, uint32_t tick);
 void RestoreGame(const SavedWorld& in);
 bool Restorable(const SavedWorld& in); // saved with the rollback set as it is now
+// The game restored to the snapshot's tick: whether any state it predicts differs from the snapshot's (compare.cpp)
+bool Differs(const Snapshot& snap);
 // One tick without drawing or sound, with every player's buttons (count: players)
 void ResimTick(const uint32_t* buttons, int count);
 // Before resimulating the tick the frame loop just ran: the corrected game's places the frames draw from

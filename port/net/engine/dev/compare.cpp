@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <numeric>
 #include <set>
 #include <string.h>
 #include <string>
@@ -192,6 +193,31 @@ void EnsureTally(std::vector<std::vector<FieldTally>>& tally)
 }
 } // namespace
 
+namespace
+{
+// Not the client's to predict: a player's deaths (a client counts its own, only to carry out each once), its points,
+// money and multiplier (set from the snapshot after this comparison), the world's reach (the server's area)
+bool Predicted(uint32_t type, size_t f)
+{
+    return !((type == kEntityPlayer && (f == kPlayerDeaths || f == kPlayerPoints || f == kPlayerMoney || f == kPlayerMultiplier || f == kPlayerDeathEvents)) ||
+             (type == kEntityWorld && f == kWorldReach));
+}
+} // namespace
+
+bool net::engine::Differs(const Snapshot& snap)
+{
+    const uint64_t missing = std::accumulate(gMissing, gMissing + 8, (uint64_t)0);
+    bool differs = false;
+    ForEachPair(snap, [&](const EntityState& s, const EntityState& h, int) {
+        const size_t fields = NetSchema().types[s.type].fields.size();
+        for (size_t f = 0; f < fields && !differs; f++)
+        {
+            differs = Predicted(s.type, f) && h.f[f] != s.f[f];
+        }
+    });
+    return differs || std::accumulate(gMissing, gMissing + 8, (uint64_t)0) != missing; // or one it has that this game lacks
+}
+
 void net::engine::ComparePrediction(const Snapshot& snap)
 {
     EnsureTally(gTally);
@@ -206,7 +232,7 @@ void net::engine::ComparePrediction(const Snapshot& snap)
         {
             // Not the client's to predict: a player's deaths (a client counts its own, only to carry out each once),
             // its points, money and multiplier (set from the snapshot after this comparison), the world's reach (the server's area)
-            if ((s.type == kEntityPlayer && (f == kPlayerDeaths || f == kPlayerPoints || f == kPlayerMoney || f == kPlayerMultiplier || f == kPlayerDeathEvents)) || (s.type == kEntityWorld && f == kWorldReach))
+            if (!Predicted(s.type, f))
             {
                 continue;
             }

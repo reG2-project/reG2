@@ -343,7 +343,10 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   Everything else moves on by the game's own simulation in those ticks. Of the resimulated ticks only the first 4 are
   saved again (the next snapshots restore those; a save of the 3 MB world was three quarters of a rollback's time): the
   later ones keep their save from before, a world of that tick still, which a snapshot after 4 lost ones would restore
-  (counted in the log).
+  (counted in the log). Every snapshot is reconciled so, as routine: the client's log counts, every 300 frames, the
+  snapshots reconciled, those that changed something (any state the client predicts, the comparison check's fields
+  below, differed from its own at that tick: the local player's prediction error among them) and those that changed
+  nothing, the ticks resimulated each, and what a reconciliation takes.
 - **The blend**: what is shown, place and facing alike, moves a part of the way to the corrected state each tick: 0.3
   of a small error, rising to 0.5 of one near 2 blocks, and 0.5 of the local player's own (on foot or its car); more
   than 2 blocks off (a respawn, a car entered) jumps. Tuned on recordings by the display error (what a tick showed
@@ -939,7 +942,7 @@ own (`single`) and rollback in scenes with explosions (`explode`).
 | Drift of a client's own simulation | within 330 ms nearly everything stays within a pixel; peds drift first (46% by a pixel after 1 s) |
 | ENet 1.3.18 | the largest unfragmented unreliable packet at `mtu` 1400 is 1372 bytes; a larger one goes as reliable fragments (seconds of delay under loss) |
 | A link at 150 ms, ±10 ms, 5% loss | commands 2 ticks early, none late; about 9 ticks resimulated per snapshot; the local player's prediction error 0.00 blocks |
-| A link at 300 ms (Linux, x86_64 desktop) | 12 ticks resimulated per snapshot: a rollback takes 3 ms a tick on average, 6 ms at worst, three quarters of it the 12 saves of the world (LAN: 0.6 ms); in the client's log every 300 frames |
+| A link at 300 ms (Linux, x86_64 desktop) | 12 ticks resimulated per snapshot: a reconciliation takes 3 ms a tick on average, 6 ms at worst, three quarters of it the 12 saves of the world (LAN: 0.6 ms); in the client's log every 300 frames |
 
 ## Open
 

@@ -342,7 +342,7 @@ record() {
 # taken again that moved (a new game's allocations may land where the old game's were)
 replay_log() {
   (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 GTA2_NET_CORRLOG=1 exec "$BIN" --replay "$1" 2>&1) | grep "^net:" |
-    grep -v "a rollback takes" | sed -E 's/0x[0-9a-f]+/PTR/g; s/, from block -?[0-9]+ \([^)]*\)$//'
+    grep -v "a reconciliation takes" | sed -E 's/0x[0-9a-f]+/PTR/g; s/, from block -?[0-9]+ \([^)]*\)$//'
 }
 
 replay() {

@@ -94,13 +94,13 @@ class Client
     struct Stats
     {
         CorrectionStats players, cars;
-        uint32_t rollbacks = 0, resimTicks = 0;
+        uint32_t reconciles = 0, changed = 0, resimTicks = 0; // changed: the snapshot differed from our prediction
         float maxError = 0; // the prediction error
         double shownErrorSum = 0;
         uint32_t shownErrorCount = 0;
         float shownErrorMax = 0;
         ShownError others, self; // the display error of the other players, and of the local player
-        double restoreUs = 0, resimUs = 0, saveUs = 0, reconcileWorstUs = 0; // the rollbacks' time
+        double restoreUs = 0, resimUs = 0, saveUs = 0, reconcileWorstUs = 0; // the reconciliations' time
         // The same, and the cars' corrections, split: within the local player's view and a block (InView), and beyond
         double shownViewSum[2] = {};
         uint32_t shownViewCount[2] = {};
@@ -212,7 +212,7 @@ class Client
     // GTA2_NET_STATS: the connection over the last second, shown with the ping
     struct LinkStats
     {
-        uint32_t fromTick = 0, snapshots = 0, rollbacks = 0, resimTicks = 0;
+        uint32_t fromTick = 0, snapshots = 0, reconciles = 0, resimTicks = 0;
     };
     LinkStats mLink;
     std::string mLinkShown;
