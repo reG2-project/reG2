@@ -103,6 +103,7 @@ void net::engine::ClientModeFrame()
     gPortCarMayExplode = ClientCarMayExplode;
     gPortPedMayDie = ClientPedMayDie;
     gPortMayPullOut = ClientMayPullOut;
+    gPortPedMayGo = ClientPedMayGo;
     SeenByAll();
 }
 

@@ -519,6 +519,8 @@ bool StartCarTransition(Ped* p, const net::EntityState& e)
 }
 } // namespace
 
+int net::engine::gPedsRevived;
+
 bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
 {
     // Knocked down, a ped the server killed dies as it gets up (Ped::Kill stored its dead_9): thrown, it is carried out
@@ -541,11 +543,22 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
     }
     if (deadHere && !deadThere)
     {
-        // A death of this game's own (none should be: ClientPedMayDie), the ped is made again; or the server's to come,
-        // carried out a tick early here
-        return dyingThere;
+        if (dyingThere)
+        {
+            return true; // the server's death to come, carried out a tick early here
+        }
+        if (!p->mGameObject || !p->IsActive())
+        {
+            return false; // gone here: the ped is made again
+        }
+        // Alive there (revived by the paramedics, AmbulanceService, or a death of this game's own): revived here as the
+        // paramedics do it, then the server's state below
+        p->mPedState1 = ped_state_1::walking_0;
+        p->mPedState2 = ped_state_2::ped2_walking_0;
+        p->mHealth = (s16)(e.f[kHealth] > 0 ? e.f[kHealth] : 1);
+        gPedsRevived++;
     }
-    if (deadHere)
+    else if (deadHere)
     {
         return true; // a corpse on both sides
     }

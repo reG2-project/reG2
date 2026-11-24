@@ -329,8 +329,12 @@ void MoveThrow(Ped* ped, int32_t dx, int32_t dy); // raw Fix16
 void GuardThrow(Ped* ped);
 // gPortPedMayDie on a client: only the server's death (KillNow), or one in a car; another is held, the ped knocked down
 bool ClientPedMayDie(Ped* ped);
+// gPortPedMayGo on a client: a server's ped goes by the snapshots (RemoveUnsent), a death of the server's or with its car
+bool ClientPedMayGo(Ped* ped);
+bool InServerDeath(); // inside KillNow
 bool ClientMayPullOut(Ped* victim); // gPortMayPullOut on a client: a player is pulled out of its car by the server only
 extern int gDeathsHeld; // for the log
+extern int gPedsRevived; // for the log: corpses here the server has alive (ApplyPedState)
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there
 void EndDeath(Player* p); // a death's or an arrest's countdown over at once, the player's part (slots.cpp)
 void InstallStarts(bool on); // the players' peds past the script's and their start blocks (starts.cpp)

@@ -49,6 +49,7 @@ int gEvicted;
 int gOccupiedKept;
 int gPedsRemade;
 int gPedsRemadeTotal; // for the first ones' log
+int gPedsKept; // deallocations of the server's peds refused (ClientPedMayGo)
 
 template <class T> int FreeSlots(T* head)
 {
@@ -225,6 +226,16 @@ bool RemoveCar(const Pass& a, Car* car)
     return true;
 }
 
+bool gFreeing; // in Free
+
+// A server's ped this game lets go (gPortPedMayGo)
+void Free(Ped* p)
+{
+    gFreeing = true;
+    p->Deallocate();
+    gFreeing = false;
+}
+
 // A ped goes, once (Deallocate undoes counters and groups, and marks it inactive)
 void RemovePed(Ped* p)
 {
@@ -234,7 +245,7 @@ void RemovePed(Ped* p)
     }
     if (p->IsActive() && !p->mCar)
     {
-        p->Deallocate();
+        Free(p);
     }
 }
 
@@ -528,7 +539,7 @@ void RemoveUnsent(const Pass& a, const Snapshot& snap)
             q->mCar->mPassengersList.RemovePed_471240(q);
             q->mEnterCarAsPassenger = 0;
             q->mCar = NULL;
-            q->Deallocate();
+            Free(q);
         }
         else if (it->second->IsActive())
         {
@@ -537,7 +548,7 @@ void RemoveUnsent(const Pass& a, const Snapshot& snap)
             {
                 p->mCar = NULL; // not that car's driver (any more): Deallocate would clear whoever is (a player)
             }
-            p->Deallocate();
+            Free(p);
         }
         it = gPeds.erase(it);
     }
@@ -674,6 +685,16 @@ void net::engine::PrintReplicaLog()
     {
         printf("net: %d corpses of this game's own made again\n", gPedsRemade);
         gPedsRemade = 0;
+    }
+    if (gPedsKept)
+    {
+        printf("net: %d removals of the server's peds by this game refused\n", gPedsKept);
+        gPedsKept = 0;
+    }
+    if (gPedsRevived)
+    {
+        printf("net: %d corpses of this game's alive on the server, revived\n", gPedsRevived);
+        gPedsRevived = 0;
     }
     if (gDeathsHeld)
     {
@@ -827,6 +848,23 @@ const std::unordered_map<uint32_t, Car*>& net::engine::ReplicaCars()
 const std::unordered_map<uint32_t, Ped*>& net::engine::ReplicaPeds()
 {
     return gPeds;
+}
+
+bool net::engine::ClientPedMayGo(Ped* ped)
+{
+    if (gFreeing || ped->mCar || InServerDeath())
+    {
+        return true; // in a car, it goes with its car (Car::KillContainedPeds), whose state is the server's
+    }
+    for (const auto& it : gPeds)
+    {
+        if (it.second == ped)
+        {
+            gPedsKept++;
+            return false;
+        }
+    }
+    return true;
 }
 
 namespace

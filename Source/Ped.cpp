@@ -2660,6 +2660,13 @@ static inline PedFlags32 ClearActive(PedFlags32 bf)
 MATCH_FUNC(0x45eb60)
 void Ped::Deallocate()
 {
+#if defined(GTA2_PORT)
+    // Port: a network client's peds of the server go by the snapshots only (port/net/engine/replica.cpp)
+    if (gPortPedMayGo && !gPortPedMayGo(this))
+    {
+        return;
+    }
+#endif
     switch (mOccupation)
     {
         case ped_ocupation_enum::mugger:

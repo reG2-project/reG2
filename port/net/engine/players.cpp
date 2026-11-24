@@ -600,6 +600,11 @@ bool net::engine::ClientPedMayDie(Ped* ped)
     return false;
 }
 
+bool net::engine::InServerDeath()
+{
+    return gServerDeath;
+}
+
 void net::engine::SnapCamera(Player* p)
 {
     p->mGameCamera.UpdateFollowPedCamera(p->mPlayerPed);
