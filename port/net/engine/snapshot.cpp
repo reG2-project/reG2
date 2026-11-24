@@ -398,6 +398,7 @@ void net::engine::Apply(const Snapshot& snap)
     ApplySlots(snap);
     ZoneTurn() = zoneTurn;
     std::vector<const EntityState*> settle;
+    NoteSeats(snap);
     for (const EntityState& e : snap.entities)
     {
         if (e.type == kEntityPlayer && ApplyPlayer(e))

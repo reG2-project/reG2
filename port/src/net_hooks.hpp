@@ -84,8 +84,8 @@ extern bool (*gPortBlastDebris)(Explosion* pExplosion);
 // Asked as a ped would die (Ped::Kill): false, and it doesn't. NULL but on a network client, whose peds on foot die by
 // the server's death only
 extern bool (*gPortPedMayDie)(Ped* pPed);
-// Asked as a jacker's char pulls a driver out (Char::UpdateCharB4): false, and the jacker waits at the door. NULL but on
-// a network client, whose players are pulled out by the server's jack only
+// Asked as a jacker's char pulls a driver out (Char::UpdateCharB4): false, and the jacker waits at the door. NULL but in
+// a network test that holds the server's pull
 extern bool (*gPortMayPullOut)(Ped* pVictim);
 // Asked as a ped would be deallocated (Ped::Deallocate): false, and it stays. NULL but on a network client, whose peds of
 // the server go when the snapshots no longer carry them

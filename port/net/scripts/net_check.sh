@@ -256,11 +256,17 @@ throws() {
   local result
   result=$(awk '
     /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) { burn[$6]++} }
-    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { c[$5 $6] = $12 }
+    # Not the throw that ends a jack the client predicted ahead of the server (checked below)
+    /THROW client tick [0-9]+: p[01] / && $12 == "8/17" && $5 + 0 > 830 { door[$6] = $5 + 0 }
+    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ && !(($6 in door) && $5 + 0 - door[$6] <= 12) { c[$5 $6] = $12 }
     /THROW server tick [0-9]+: p1 / { sp[$5 + 0] = $12 }
-    # The client player jacks p0 or p1 (from 830): pulled out on both sides, here only when the server has it so
-    /THROW server tick [0-9]+: p[01] / && $5 + 0 > 830 && $12 == "8/17" { jackServer++; sjack[$5 $6] = 1 }
-    /THROW client tick [0-9]+: p[01] / && $5 + 0 > 830 && $12 == "8/17" { jackClient++; if (!(($5 $6) in sjack)) pullWrong++ }
+    # The client player jacks p0 or p1 (from 830), twice: the server calls the first off at the door, pulls on the second
+    # 10 ticks after its jacker got there. The client predicts both pulls at once: the first back in its seat soon after
+    # the call-off, the second shown no later than on the server
+    /test phase 4: player 2 jacks player/ { victim = "p" $NF }
+    /test phase 4: jack called off at tick/ { calloff = $NF + 0 }
+    /THROW server tick [0-9]+: p[01] / && $5 + 0 > 830 && $6 == victim && $12 == "8/17" { jackServer++; if (!sfirst) sfirst = $5 + 0 }
+    /THROW client tick [0-9]+: p[01] / && $5 + 0 > 830 && $6 == victim && $12 ~ /^8\// { cv[$5 + 0] = $12; if ($12 == "8/17") jackClient++ }
     /THROW client tick [0-9]+: p1 / { cp[$5 + 0] = $12 }
     /THROW server tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ { delete own[$5 + 0]; sown[$5 + 0] = 1 }
     /THROW client tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ && !(($5 + 0) in sown) { own[$5 + 0] = 1 }
@@ -272,21 +278,25 @@ throws() {
       for (t in sp) if (sp[t] ~ /^9\// && sp[t - 1] ~ /^8\/2[07]$/) { phased++; if (cp[t] !~ /^8\/2[07]$/) early++ }
       # Pulled out of its car (8/17): the client starts it from the server alone, never while the server has it seated or walking
       for (t in sp) if (sp[t] == "8/17") pulled++
-      for (t in cp) if (cp[t] == "8/17") { pullShown++; if ((t in sp) && sp[t] != "8/17") pullWrong++ }
+      for (t in cp) if (cp[t] == "8/17") { pullShown++; if ((t in sp) && sp[t] != "8/17" && t < 830) pullWrong++ }
+      # The jacks: the cancelled pull shown before the call-off, none of it 12 ticks after until the second pull here
+      cfirst = 0; for (t in cv) if (t + 0 > calloff + 12 && cv[t] == "8/17" && (!cfirst || t + 0 < cfirst)) cfirst = t + 0
+      for (t in cv) { if (t + 0 <= calloff + 4 && cv[t] == "8/17") cancelShown++; if (t + 0 >= calloff + 12 && (!cfirst || t + 0 < cfirst)) cancelLate++ }
+      lead = calloff && sfirst && cfirst ? sfirst - cfirst : -1
       # The own player of the client (p2) drowned or electrocuted there alone: cancelled by the next snapshots
       for (t in own) { ownTicks++; run = 0; for (u = t; u in own; u--) run++; if (run > ownRun) ownRun = run }
-      printf "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], phased, early, pulled, pullShown, pullWrong, ownTicks, ownRun, jackServer, jackClient
+      printf "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], phased, early, pulled, pullShown, pullWrong, ownTicks, ownRun, jackServer, jackClient, cancelShown, cancelLate, lead
     }' "$OUT/throws_server.log" "$OUT/throws_client.log")
-  local thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient
-  read -r thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient <<< "$result"
+  local thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead
+  read -r thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead <<< "$result"
   echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's; a player burning $burnt ticks; $phased deaths electrocuted or sinking, $early of them the client's own"
-  echo "  pulled out of a car: $pulled server ticks, $pullShown client ticks, $pullWrong of them while the server's sat or walked; the client's own phases: $ownTicks ticks, $ownRun at most in a row; its player's jack: pulled out $jackServer server ticks, $jackClient client ticks"
+  echo "  pulled out of a car: $pulled server ticks, $pullShown client ticks, $pullWrong of them while the server's sat or walked; the client's own phases: $ownTicks ticks, $ownRun at most in a row; its player's jack: pulled out $jackServer server ticks, $jackClient client ticks ($lead ticks ahead); the jack called off: $cancelShown ticks shown pulled before, $cancelLate after"
   if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ "${phased:-0}" = 0 ] || [ "${early:-1}" != 0 ] ||
     [ "${pulled:-0}" = 0 ] || [ "${pullShown:-0}" = 0 ] || [ "${pullWrong:-1}" != 0 ] || [ "${ownTicks:-0}" = 0 ] || [ "${ownRun:-99}" -gt 20 ] ||
-    [ "${jackServer:-0}" = 0 ] || [ "${jackClient:-0}" = 0 ]; then
+    [ "${jackServer:-0}" = 0 ] || [ "${jackClient:-0}" = 0 ] || [ "${lead:--1}" -lt 0 ] || [ "${cancelShown:-0}" = 0 ] || [ "${cancelLate:-1}" != 0 ]; then
     fail "throws: the client's throws or burning aren't the server's ($BUILD/net_check/throws_*.log)"
   else
-    pass "throws: every throw the client showed was the server's at that tick, flying deaths included; electrocution and sinking deaths were the server's; a pull out of a car the server's; the client's own phases cancelled; its player's jack of another player's car done"
+    pass "throws: every throw the client showed was the server's at that tick, flying deaths included; electrocution and sinking deaths were the server's; a pull out of a car the server's; the client's own phases cancelled; its player's jacks of another player's car predicted, the one called off cancelled"
   fi
 }
 

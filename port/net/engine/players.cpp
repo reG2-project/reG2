@@ -30,6 +30,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <algorithm>
+#include <vector>
 
 
 namespace
@@ -365,14 +367,18 @@ void StartTransition(Player* p, Ped* ped, Car* serverTarget, const net::EntitySt
         StartLeaving(ped);
     }
 }
-// Jacking a seated player here only: its char would wait at the door for a pull the server never starts (ClientMayPullOut)
+// The cars the snapshot's players sit in (NoteSeats)
+std::vector<Car*> gSeatsThere;
+
+// At the door of a car another player sits in there, this game's jack (its pull predicted or not) the server's isn't
+// getting into any more: called off, the victim put back in its seat by its own SettleCar
 void CancelJack(Ped* ped, const net::EntityState& e)
 {
     Char* c = ped->mGameObject;
     Car* car = c ? c->mTargetCar : NULL;
     if ((e.f[kPlayerState] & (kPlayerTransition | kPlayerDead)) || ped->mCar || !car || ped->isDead() ||
         (c->mAnimationState != Char_Anim_state::Entering_Car_6 && c->mAnimationState != Char_Anim_state::Carjacking_9) ||
-        !car->mDriver || car->mDriver == ped || ClientMayPullOut(car->mDriver))
+        RefCar(e.f[kPlayerCar]) == car || std::find(gSeatsThere.begin(), gSeatsThere.end(), car) == gSeatsThere.end())
     {
         return;
     }
@@ -452,6 +458,19 @@ void net::engine::ApplySlots(const Snapshot& snap)
     }
 }
 
+void net::engine::NoteSeats(const Snapshot& snap)
+{
+    gSeatsThere.clear();
+    for (const EntityState& e : snap.entities)
+    {
+        Car* car = e.type == kEntityPlayer && e.f[kPlayerInCar] ? RefCar(e.f[kPlayerCar]) : NULL;
+        if (car)
+        {
+            gSeatsThere.push_back(car);
+        }
+    }
+}
+
 // Again once the snapshot's cars are here (ApplyCarsAndPeds): a car new to this game wasn't when its player was applied
 void net::engine::SettlePlayerCar(const EntityState& e)
 {
@@ -516,7 +535,9 @@ bool net::engine::ApplyPlayer(const EntityState& e)
     Car* serverTarget = RefCar(e.f[kPlayerTarget]);
     RetargetEntering(ped, serverTarget, e);
     SettleCar(p, ped, e);
-    const bool jump = MovePlayer(ped, e);
+    // Pulled out here ahead of the server's jack: where the pull put it, not in the seat the server's still has
+    const bool pulledAhead = !ped->mCar && e.f[kPlayerInCar] && PhaseOf(ped) != kPhaseNone;
+    const bool jump = !pulledAhead && MovePlayer(ped, e);
     StartTransition(p, ped, serverTarget, e);
     if (jump)
     {

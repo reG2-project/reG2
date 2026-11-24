@@ -242,11 +242,18 @@ Ped* NearestAmbient(Ped* to)
     return best;
 }
 
-// Code 4's jack: the server's pull waits its first 10 ticks at the door, which a client's prediction has to wait for too
+// Code 4's jacks: the first never pulls (called off after 10 ticks at the door), the next waits its first 10 ticks there;
+// a client predicts both pulls at once, the first to be cancelled
 int gPullAsks;
-bool HeldPull(Ped*)
+bool gNeverPull;
+Ped* sVictim;
+bool HeldPull(Ped* victim)
 {
-    return ++gPullAsks > 10;
+    if (victim != sVictim)
+    {
+        return true; // another jack (an ambient car thief's)
+    }
+    return ++gPullAsks > 10 && !gNeverPull;
 }
 } // namespace
 
@@ -301,11 +308,21 @@ void net::engine::DebugPhase(int player, int what)
         StartPulledOut(ped, ped->mCar, 0, cs->mXy.x + Fix16(1), cs->mXy.y, cs->mZpos);
     }
     // Code 4: tried at several ticks, the jacker sent again while its victim still sits in the car made for it
-    static Ped* sVictim;
     static Car* sCar;
     static Fix16 sX, sY, sZ;
     if (what != 4 || ped->isDead() || !gCarManager_6C)
     {
+        return;
+    }
+    if (sVictim && gNeverPull && gPullAsks >= 10)
+    {
+        const uint32_t tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+        printf("net: test phase 4: jack called off at tick %u\n", tick);
+        ped->SetObjective(objectives_enum::no_obj_0, 9999);
+        ped->SetObjective2(objectives_enum::no_obj_0);
+        CancelPhase(ped);
+        gNeverPull = false;
+        gPullAsks = 0;
         return;
     }
     if (ped->mCar && ped->mCar->mCarSprite && ped->mCar->mDriver == ped && ped->mCar != sCar)
@@ -313,6 +330,12 @@ void net::engine::DebugPhase(int player, int what)
         const Sprite* cs = ped->mCar->mCarSprite;
         ForceOutOfCar(ped, cs->mXy.x + Fix16(1), cs->mXy.y, cs->mZpos, cs->mRotation); // on foot for the next try
         return;
+    }
+    if (!sVictim && !ped->mCar && ped->mGameObject && InCarTransition(ped))
+    {
+        ped->SetObjective(objectives_enum::no_obj_0, 9999); // its bot's own way into a car: called off for the jack
+        ped->SetObjective2(objectives_enum::no_obj_0);
+        CancelPhase(ped);
     }
     if (ped->mCar || !ped->mGameObject || InCarTransition(ped))
     {
@@ -329,7 +352,7 @@ void net::engine::DebugPhase(int player, int what)
         }
         return;
     }
-    for (int i = 0; i < PlayerCount(); i++)
+    for (int i = PlayerCount() - 1; i >= 0; i--) // the last first: player 0 has the test blasts at its feet
     {
         Ped* victim = InGamePed(i);
         if (victim && victim != ped && !victim->mCar && victim->mGameObject && !victim->isDead())
@@ -337,17 +360,20 @@ void net::engine::DebugPhase(int player, int what)
             Fix16 scale;
             scale.mValue = 0x4000;
             sX = victim->get_cam_x(), sY = victim->get_cam_y(), sZ = victim->get_cam_z();
-            Car* car = gCarManager_6C->SpawnCarAt(sX + Fix16(2 << 14, 0), sY, sZ, 0, car_model_enum::MERC, scale);
+            Car* car = gCarManager_6C->SpawnCarAt(sX, sY, sZ, 0, car_model_enum::MERC, scale); // where the victim stands: on its ground
             if (car)
             {
                 printf("net: test phase 4: player %d jacks player %d\n", player, i);
                 car->IncrementCarStats(car_kind::recycled_1);
                 ForceIntoCar(victim, car);
-                MovePed(ped, sX, sY, sZ, Angle(0)); // where the victim stood
+                Fix16 x, y;
+                car->GetDoorWorldPosition(0, &x, &y);
+                MovePed(ped, x, y, sZ, Angle(0));
                 StartEntering(ped, car);
                 sVictim = victim;
                 sCar = car;
                 gPullAsks = 0;
+                gNeverPull = true;
                 gPortMayPullOut = HeldPull;
             }
             return;

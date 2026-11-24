@@ -246,8 +246,3 @@ void net::engine::StartPulledOut(Ped* ped, Car* car, int door, const Fix16& x, c
     c->mSpritePtr->SetDrawLayer(6);
     ped->SetStateInitPending();
 }
-
-bool net::engine::ClientMayPullOut(Ped* victim)
-{
-    return !victim->mPlayer;
-}

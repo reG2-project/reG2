@@ -111,7 +111,6 @@ void net::engine::ClientModeFrame()
     bSkip_ambulance = true;
     gPortCarMayExplode = ClientCarMayExplode;
     gPortPedMayDie = ClientPedMayDie;
-    gPortMayPullOut = ClientMayPullOut;
     gPortPedMayGo = ClientPedMayGo;
 }
 

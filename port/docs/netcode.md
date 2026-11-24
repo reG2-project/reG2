@@ -398,9 +398,12 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
 - **A server's ped goes by the snapshots only** (`ClientPedMayGo`, `gPortPedMayGo` in `Ped::Deallocate`): the client's
   own AI doesn't free a ped the snapshots carry (one boarding a train, a group's cleanup); a server's death and a ped
   in a car going with its car (`Car::KillContainedPeds`) do.
-- **A player is pulled out of its car by the server only** (`gPortMayPullOut` in `Char::UpdateCharB4`): a jacker the
-  client predicts, its own player or another, waits at the door until the server's pull arrives (`StartPulledOut`) and
-  clears the seat. An ambient driver's pull is predicted and corrected as its phase. A ped jacking a driver on foot
+- **A player's pull out of its car is predicted** (it can be undone, unlike a death): a jacker the client predicts, its own
+  player or another, pulls the seated player out at the door as the game does. While the server's jacker is still on
+  its way in, the pull stands (its victim stays where the pull put it, not in the server's seat); once the server's
+  jacker isn't getting into that car and isn't in it, the jack is called off (`CancelJack`) and the victim put back
+  in its seat (`SettleCar`). A pull the server had first starts here from its door (`StartPulledOut`). Deaths stay
+  the server's. An ambient driver's pull is predicted and corrected as its phase. A ped jacking a driver on foot
   (`Ped::PullDriverOutOfCarStateMachine`, the carjacking animation) gets the server's states with its char at the
   victim's car here, or keeps its own while that car isn't here.
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
@@ -842,9 +845,10 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
   same outcome (a flying death shows knocked down until the server's death).
   The burning bot is also electrocuted and drowned (`GTA2_NET_TESTPHASE`): the client still shows it in that state at
   the tick the server's dies. It is also put in a car and pulled out of it: the client shows it at the door only on ticks the
-  server has it there, never seated or walking; then the client's player jacks it out of a car (server's
-  `GTA2_NET_TESTPHASE` code 4, the server's pull held for 10 ticks at the door), which the client shows from the server's
-  pull too, its own jacker waiting at the door as the server's does. The client's own player is drowned and electrocuted at times
+  server has it there, never seated or walking; then the client's player jacks a player out of a car twice
+  (server's `GTA2_NET_TESTPHASE` code 4, `HeldPull`): the server calls the first jack off at the door, and pulls on the
+  second after 10 ticks there. The client shows both pulls at once, the first back in its seat within 12 ticks of the
+  call-off, the second no later than the server. The client's own player is drowned and electrocuted at times
   where the server never has it (`GTA2_NET_TESTLOCALPHASE`, on every run of that tick, live and resimulated): the
   snapshots cancel it within 20 ticks.
 - **peds**: the ambient ped nearest the client's player drowned, electrocuted, knocked down or blown up in turns

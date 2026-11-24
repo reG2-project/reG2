@@ -306,6 +306,7 @@ void CapturePlayer(int slot, Snapshot& out);
 void CaptureWorld(Snapshot& out); // the world entity (world_entity.cpp)
 void ApplyWorld(const EntityState& w);
 void ApplySlots(const Snapshot& snap); // the slots in the game: the snapshot's
+void NoteSeats(const Snapshot& snap); // the cars its players sit in, before ApplyPlayer
 bool ApplyPlayer(const EntityState& e); // false: nothing more for it this apply (a death carried out)
 void SettlePlayerCar(const EntityState& e);
 void KillCredited(Ped* ped, int killerSlot); // the game's own death, credited to a player (-1: nobody)
@@ -336,7 +337,6 @@ bool ClientPedMayDie(Ped* ped);
 bool ClientPedMayGo(Ped* ped);
 bool IsServerPed(const Ped* p); // a player's, or mapped to a snapshot's ped (a client's own one isn't)
 bool InServerDeath(); // inside KillNow
-bool ClientMayPullOut(Ped* victim); // gPortMayPullOut on a client: a player is pulled out of its car by the server only
 extern int gDeathsHeld; // for the log
 extern int gPedsRevived; // for the log: corpses here the server has alive (ApplyPedState)
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there
