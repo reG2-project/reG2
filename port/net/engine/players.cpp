@@ -367,6 +367,26 @@ void StartTransition(Player* p, Ped* ped, Car* serverTarget, const net::EntitySt
         StartLeaving(ped);
     }
 }
+// Leaving a car here while the server's is on foot and not leaving (its leave cut short there): over here too
+void EndLeaving(Ped* ped, const net::EntityState& e)
+{
+    if (e.f[kPlayerInCar] || (e.f[kPlayerState] & (kPlayerLeaving | kPlayerDead)) || ped->isDead() || !LeavingCar(ped))
+    {
+        return;
+    }
+    if (ped->mCar)
+    {
+        ForceOutOfCar(ped, Raw(e.f[kPlayerX]), Raw(e.f[kPlayerY]), Raw(e.f[kPlayerZ]), Angle(e.f[kPlayerRot]));
+        return;
+    }
+    if (ped->mGameObject)
+    {
+        ped->SetObjective(objectives_enum::no_obj_0, 9999);
+        ped->SetObjective2(objectives_enum::no_obj_0);
+        CancelPhase(ped);
+    }
+}
+
 // The cars the snapshot's players sit in (NoteSeats)
 std::vector<Car*> gSeatsThere;
 
@@ -531,6 +551,7 @@ bool net::engine::ApplyPlayer(const EntityState& e)
         // ped has (0) started a death of this game's own, undone by the next restore (a flicker of dying and living)
         ped->set_health((s16)(e.f[kPlayerHealth] > 0 ? e.f[kPlayerHealth] : 1));
     }
+    EndLeaving(ped, e);
     CancelJack(ped, e);
     Car* serverTarget = RefCar(e.f[kPlayerTarget]);
     RetargetEntering(ped, serverTarget, e);
