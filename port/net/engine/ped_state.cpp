@@ -540,6 +540,10 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
             }
             KillNow(p); // the server's death, the game's own way (as a player's, snapshot.cpp)
         }
+        if (ThrowOf(p))
+        {
+            p->mStoredPedState2 = e.f[kStates + kStored2]; // its landing restores it: thrown while sinking, the server keeps sinking_20
+        }
         return true;
     }
     if (deadHere && !deadThere)

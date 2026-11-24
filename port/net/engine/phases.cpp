@@ -156,6 +156,12 @@ void net::engine::ApplyPhases(Ped* ped, const EntityState& e, int base, bool dea
     }
     if (deadThere)
     {
+        // Thrown there out of another phase here (lying, sinking): that one ends for the throw, as the server's did
+        const int32_t here = PhaseOf(ped);
+        if ((f[kPhase] & 7) == kPhaseThrown && here > kPhaseThrown && here != kPhaseDoor)
+        {
+            CancelPhase(ped);
+        }
         ApplyThrow(ped, e, base); // a thrown ped's death takes at its landing; the others' end as KillNow ends them
         return;
     }
