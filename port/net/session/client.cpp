@@ -1270,8 +1270,9 @@ int net::Client::PacedTickMs() const
     {
         return mTickMs;
     }
-    // Late: a quarter faster; far ahead: a fifth slower, before it comes to a jump (kMaxAhead)
-    return mSlack < 1 ? mTickMs * 3 / 4 : mSlack - 2 > 12 ? mTickMs + mTickMs / 5 : mSlack > 4 ? mTickMs + mTickMs / 10 : mTickMs;
+    // Late: a quarter faster; far ahead: a fifth slower, before it comes to a jump (kMaxAhead); 4 or more: a tenth slower,
+    // as every tick early lengthens the prediction of the others (a server that lost ticks leaves us there)
+    return mSlack < 1 ? mTickMs * 3 / 4 : mSlack - 2 > 12 ? mTickMs + mTickMs / 5 : mSlack > 3 ? mTickMs + mTickMs / 10 : mTickMs;
 }
 
 // The next tick's inputs: ours (predicted and sent), the others' last known
