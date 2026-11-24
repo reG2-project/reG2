@@ -316,6 +316,7 @@ void ApplyFire(Ped* p, bool onFire); // on fire or not as the server has it, the
 void PhaseRecordFields(std::vector<FieldDesc>& out);
 extern const int kPedPhase;
 int32_t PhaseOf(const Ped* ped); // PhaseCode, without kPhaseInit
+int32_t PhaseTimer(const int32_t* f); // a phase record's timer, at most its phase's start value (a hostile server's too)
 void CapturePhases(const Ped* ped, EntityState& e, int base);
 void ApplyPhases(Ped* ped, const EntityState& e, int base, bool deadThere, Car* seat);
 void CancelPhase(Ped* ped); // on its feet, walking

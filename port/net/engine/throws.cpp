@@ -153,7 +153,7 @@ void net::engine::ApplyThrow(Ped* ped, const EntityState& e, int base)
         }
         else
         {
-            c->mTimeout = (u16)t[kPhaseTimer];
+            c->mTimeout = (u16)PhaseTimer(t);
         }
     }
 }

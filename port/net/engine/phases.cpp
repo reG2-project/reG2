@@ -70,6 +70,15 @@ int32_t net::engine::PhaseOf(const Ped* ped)
     return kPhaseNone;
 }
 
+int32_t net::engine::PhaseTimer(const int32_t* f)
+{
+    // As the game starts them: a char's timeout 500 (knocked down 300), lying 60, sinking 10, electrocuted 0 up to 100
+    static const int32_t kMost[] = {0, 500, 60, 10, 100, 0x7F, 0, 0};
+    const int32_t timer = f[kPhaseTimer];
+    const int32_t most = kMost[f[kPhase] & 7];
+    return timer < 0 ? 0 : timer > most ? most : timer;
+}
+
 // On its feet as a live electrocuted ped gets up, its sinking's shrink undone (a ped's sprite has no visual shape)
 void net::engine::CancelPhase(Ped* ped)
 {
@@ -205,7 +214,7 @@ void net::engine::ApplyPhases(Ped* ped, const EntityState& e, int base, bool dea
         {
             return;
         }
-        const int32_t timer = f[kPhaseTimer];
+        const int32_t timer = PhaseTimer(f);
         switch (there)
         {
             case kPhaseLying:
