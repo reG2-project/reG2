@@ -6,8 +6,8 @@
 #   churn   two bot clients staying while two others join and leave, four times (stopped: SIGTERM, Ctrl-C): no
 #           crash, no CHECK line, nobody turned away as the server being full
 #   rounds  the round flow: two bot clients ready up, play a round, vote for the next map and follow; a third joins late
-#   maps    a map rotation, a round of 15 s each (the clock 4 times as fast): two bot clients follow every map change,
-#           no crash, no CHECK line
+#   maps    a map rotation, a round of 15 s each (the clock 4 times as fast): two bot clients follow every map change and
+#           play the resimulated ticks' sounds on a later map, no crash, no CHECK line
 #   soak    a server and three bot clients, the clock 10 times as fast: 10 minutes of play in 60 s, no crash
 #   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown as the
 #           server has it at that tick, with its outcome, and hears a flying death's landing as the server does
@@ -154,18 +154,20 @@ maps() {
   sleep $secs
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
-  local changes crashes checks followed=1 b
+  local changes crashes checks followed=1 heard=1 b
   changes=$(grep -c "net: the next map:" "$OUT/maps_server.log")
   crashes=$(grep -l "crashed" "$OUT"/maps_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/maps_*.log | grep -c "net: CHECK")
   for b in rammer soldier; do
     # every change but perhaps the last, still under way at the end
     [ $(grep -c "a new game" "$OUT/maps_$b.log") -ge $((changes - 1)) ] || followed=0
+    # the sound log plays the resimulated ticks' sounds on a later map too (its ticks are that map's game cycle)
+    awk '/a new game/ { n++ } /sounds of the resimulated ticks played/ && n { ok = 1 } END { exit !ok }' "$OUT/maps_$b.log" || heard=0
   done
-  if [ "$changes" -lt 3 ] || [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $followed = 0 ]; then
-    fail "maps: $changes map changes, clients followed: $followed, $crashes crashed, $checks CHECK lines ($BUILD/net_check/maps_*.log)"
+  if [ "$changes" -lt 3 ] || [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $followed = 0 ] || [ $heard = 0 ]; then
+    fail "maps: $changes map changes, clients followed: $followed, resimulated sounds on a later map: $heard, $crashes crashed, $checks CHECK lines ($BUILD/net_check/maps_*.log)"
   else
-    pass "maps: $changes map changes, both clients followed"
+    pass "maps: $changes map changes, both clients followed, both played the resimulated ticks' sounds on a later map"
   fi
 }
 

@@ -149,6 +149,7 @@ void GiveOwed()
             continue;
         }
         given.push_back(w);
+        net::engine::gSoundsGiven++;
         if (w.mOwner == &gSound_obj.mVocals)
         {
             if (!gSound_obj.mVocals.mPendingVoice)
@@ -201,6 +202,8 @@ void LiveRequests(bool requested)
     Prune(tick);
 }
 } // namespace
+
+int net::engine::gSoundsGiven;
 
 void net::engine::SoundLogWorldAt(uint32_t tick)
 {

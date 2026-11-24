@@ -375,6 +375,7 @@ void ResetHudScores(Player* p); // the HUD's money, frags and multiplier as at a
 void SoundLogRestored(uint32_t tick);
 // The world restored is the save of that snapshot tick: the log goes by the game's cycle, which another map started anew
 void SoundLogWorldAt(uint32_t tick);
+extern int gSoundsGiven; // the resimulated ticks' sounds played, for the stats
 void SoundLogResimTick(bool applied);
 void SoundLogStop();
 void ProtectPlayers(); // the cars of player peds kept, the server's peds' fatal phase steps held (GuardPhases)

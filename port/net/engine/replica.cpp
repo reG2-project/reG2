@@ -686,6 +686,11 @@ void net::engine::PrintReplicaLog()
         printf("net: %d deaths of this game's own held for the server's\n", gDeathsHeld);
         gDeathsHeld = 0;
     }
+    if (gSoundsGiven)
+    {
+        printf("net: %d sounds of the resimulated ticks played\n", gSoundsGiven);
+        gSoundsGiven = 0;
+    }
     if (gOccupiedKept)
     {
         printf("net: %d removals of occupied cars skipped\n", gOccupiedKept);

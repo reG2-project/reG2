@@ -890,7 +890,8 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
   corrections and the comparison check's worst fields.
 - **churn**: two bot clients stay while two others join and leave four times (stopped by SIGTERM and Ctrl-C): no
   crash, no `CHECK` line, nobody turned away as the server being full.
-- **maps**: a three-map rotation, 15 s rounds at 4 times the clock: both clients follow every change.
+- **maps**: a three-map rotation, 15 s rounds at 4 times the clock: both clients follow every change, and play the
+  resimulated ticks' sounds on a later map.
 - **rounds**: two bot clients ready up, play a round, vote for map 2 and follow the server there (a check of where
   the players stand: on the new map); a third joins during the results and plays round 2.
 - **soak**: a server and three bot clients at 10 times the clock: 10 minutes of play in 60 s, no crash.
