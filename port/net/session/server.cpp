@@ -690,19 +690,22 @@ void net::Server::Transmit(const Slot& s, const BitWriter& w)
     mStats.maxBytes = std::max(mStats.maxBytes, (uint32_t)w.ByteCount());
 }
 
-// The client's area: every player and the cars they sit in (wherever they are: a player far off isn't a ped without its
-// car), every train (a few, and a client's own moves on wherever it is), every shot (sent once each, and then a client
-// knows all the server has), and the cars, peds and pickups near what its view follows and near its ped (PlayerFoci:
-// apart while it is wasted), nearest first
+// The client's area: every player and the cars they sit in, get into or are pulled out of (wherever they are: a player
+// far off isn't a ped without its car), every train (a few, and a client's own moves on wherever it is), every shot
+// (sent once each, and then a client knows all the server has), and the cars, peds and pickups near what its view
+// follows and near its ped (PlayerFoci: apart while it is wasted), nearest first
 void net::Server::SendSnapshot(int slot, Slot& s, const Snapshot& world)
 {
     const engine::Foci foci = engine::PlayerFoci(slot);
     std::vector<uint32_t> playersCars;
     for (const EntityState& e : world.entities)
     {
-        if (engine::PlayerCarId(e))
+        for (uint32_t car : {engine::PlayerCarId(e), engine::PlayerDoorCarId(e)})
         {
-            playersCars.push_back(engine::PlayerCarId(e));
+            if (car)
+            {
+                playersCars.push_back(car);
+            }
         }
     }
     Snapshot fixed;

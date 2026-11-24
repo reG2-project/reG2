@@ -305,7 +305,7 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   them, the game's timers still count the server's tick length); commands a few
   ticks late are caught up by running the missing ticks at once, saved, and only more than 8 late or 20 early make it
   jump (its saves lost until snapshots of the new ticks come).
-- **Snapshots**, per client, every tick (`Server::SendSnapshot`): every player and the car each sits in, wherever they
+- **Snapshots**, per client, every tick (`Server::SendSnapshot`): every player and the car each sits in, gets into or is pulled out of, wherever they
   are, and everything within the client's interest area (24 blocks around its player's foci; a camera sees 6 to 8). Each
   entity is a delta against the state that client acknowledged for it (per-entity baselines, so a snapshot can carry
   part of the world and nothing waits for a lost packet). What doesn't fit the budget goes with the state the client
@@ -396,7 +396,7 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   (`Ped::PullDriverOutOfCarStateMachine`, the carjacking animation) gets the server's states with its char at the
   victim's car here, or keeps its own while that car isn't here.
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
-  server's world. It carries every player, the car each sits in and every train wherever they are, and everything
+  server's world. It carries every player, the car each sits in, gets into or is pulled out of, and every train wherever they are, and everything
   within the reach (the interest area, 24 blocks around the client's player's foci as the server has them), each entity the
   client has acknowledged at least as its last state and its age when the budget is short: so nothing the client has
   inside the reach is ever left out, and what a snapshot lacks is gone on the server or out of the client's area,

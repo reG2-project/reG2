@@ -693,6 +693,16 @@ uint32_t net::engine::PlayerCarId(const EntityState& e)
     return e.type == kEntityPlayer ? CarRefNetId(e.f[kPlayerCar]) : 0;
 }
 
+uint32_t net::engine::PlayerDoorCarId(const EntityState& e)
+{
+    if (e.type != kEntityPlayer)
+    {
+        return 0;
+    }
+    const int32_t door = (e.f[kPlayerPhase + kPhase] & 7) == kPhaseDoor ? e.f[kPlayerPhase + kPhaseCar] : 0;
+    return CarRefNetId(door ? door : e.f[kPlayerTarget]);
+}
+
 int net::engine::PlayerWeapon(const EntityState& e)
 {
     return e.type == kEntityPlayer ? e.f[kPlayerWeapon] - 1 : -1;
