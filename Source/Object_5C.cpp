@@ -29,6 +29,9 @@
 #include "map_0x370.hpp"
 #include "sprite.hpp"
 #include "block_face.hpp"
+#if defined(GTA2_PORT)
+#include "../port/src/net_hooks.hpp" // gPortObjectMade
+#endif
 
 DEFINE_GLOBAL(Object_5C*, gObject_5C, 0x6F8F84);
 DEFINE_STATIC_GLOBAL(s32, sObjectCounterUnused, 0x6f8f88);
@@ -3501,6 +3504,12 @@ Object* Object_5C::CreateObject(s32 object_type, Fix16 xpos, Fix16 ypos, Fix16 z
     ++sObjectCounterUnused;
 
     pNewObject->mModel = object_type;
+#if defined(GTA2_PORT)
+    if (gPortObjectMade)
+    {
+        gPortObjectMade(pNewObject); // a network game's prediction key (port/net/engine/shots.cpp)
+    }
+#endif
     if (pNewObject->IsPickup())
     {
         pNewObject->SetDefaultWeaponAmmo();

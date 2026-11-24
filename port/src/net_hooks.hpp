@@ -5,6 +5,8 @@
 #include "types.hpp"
 
 class Car;
+class Explosion;
+class Object;
 class Ped;
 class Player;
 class gmp_map_zone;
@@ -70,6 +72,12 @@ extern bool (*gPortWorldStill)();
 // Asked as a car would blow up (Car::HandleCarExplosion): false, and it doesn't. NULL but on a network client, whose cars
 // the server sends blow up when the server's do (a prediction can't be taken back)
 extern bool (*gPortCarMayExplode)(Car* pCar);
+// Called as Object_5C::CreateObject makes an object, its model set: a network game keys the ones it predicts
+// (port/net/engine/shots.cpp). NULL but in a network game
+extern void (*gPortObjectMade)(Object* pObject);
+// Asked as a blast hurts what is near it (Explosion::ApplyBlastDamage): false, and it doesn't. NULL but on a network
+// client, whose blasts made from a snapshot already hurt on the server
+extern bool (*gPortBlastHurts)(Explosion* pExplosion);
 // Asked for each command a script thread runs (ScriptThread::PreExecOpCode): false, and it is stepped over. NULL but on a
 // network client, which runs its map script's level start for what only shows or sounds here (the server runs the rest)
 extern bool (*gPortScriptCommandRuns)(u16 type);

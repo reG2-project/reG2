@@ -21,6 +21,8 @@ void (*gPortExtraPlayerPeds)();
 bool (*gPortSpawnBlock)(Ped*, gmp_map_zone*, s32*, s32*, s32*);
 bool (*gPortWorldStill)();
 bool (*gPortCarMayExplode)(Car* pCar);
+void (*gPortObjectMade)(Object* pObject);
+bool (*gPortBlastHurts)(Explosion* pExplosion);
 bool (*gPortScriptCommandRuns)(u16 type);
 void (*gPortFrontendSetup)(Frontend* pFrontend);
 bool (*gPortFrontendInput)(Frontend* pFrontend);

@@ -13,6 +13,9 @@
 #include "PedRefTable.hpp"
 #include "debug.hpp"
 #include "rng.hpp"
+#if defined(GTA2_PORT)
+#include "../port/src/net_hooks.hpp" // gPortBlastHurts
+#endif
 
 DEFINE_GLOBAL(ExplosionPool*, gExplosionPool_7A8, 0x6FD5F0);
 DEFINE_GLOBAL(ExplosionPool_3D4*, gExplosionPool_3D4, 0x6FD5EC);
@@ -413,6 +416,13 @@ void Explosion::SpawnFlashParticle()
 MATCH_FUNC(0x541850)
 void Explosion::ApplyBlastDamage(u16 timerVal)
 {
+#if defined(GTA2_PORT)
+    // Port: a network client's blast the server made before this tick: what it hit comes with the snapshots
+    if (gPortBlastHurts && !gPortBlastHurts(this))
+    {
+        return;
+    }
+#endif
     SpriteList collision_list;
 
     Fix16 half_height = Explosion::GetBlastHeight();
