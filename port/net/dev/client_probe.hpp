@@ -41,11 +41,13 @@ class ClientProbe
     void Jerk(uint32_t frame, int slot, bool synced, const Snapshot& newest, const Snapshot& before);
     void PrintStats(uint32_t frame); // with the client's periodic log lines
     void FrameEnd(); // the frame's last: the game as it is drawn
+    void Comfort(uint32_t frame, uint32_t tick, int slot, bool synced); // GTA2_NET_COMFORT, after FrameEnd
 
   private:
     JerkMeter mJerk;
     uint32_t mAloneFrom = 0; // the server tick from which this game runs on its own (0: not yet)
     uint32_t mLastInput = ~0u;
+    uint32_t mInput = 0; // the input chosen this frame
     uint32_t mLastSnap = 0; // the tick of the last snapshot applied
 };
 } // namespace net

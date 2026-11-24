@@ -1,4 +1,5 @@
 #include "server_probe.hpp"
+#include "../engine/dev/comfort.hpp"
 #include "../engine/dev/dev.hpp"
 #include "../session/env.hpp"
 #include <stdio.h>
@@ -151,6 +152,7 @@ void net::ServerProbe::Captured(uint32_t tick, const Snapshot& world)
     engine::InstallSfxLog(true);
     engine::DumpPeds(tick, true);
     engine::StartRandLog();
+    engine::ComfortServerTick(tick);
     if (!Env().jerkLog)
     {
         return;
