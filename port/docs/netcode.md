@@ -782,6 +782,18 @@ and brain. With 10 seeds and hunter, soldier and simple twice each, stuck second
 104 and 60 (the three brains summed, downtown, mp1, Industrial) to 60, 74 and 68, frags about doubled, and search
 cells per tick fell from 2200..15000 to 15..230 on average. Leaving a wedged car took the hunter's longest stuck
 stretch from 96 to 14 s; its time stuck in a car (about 30 s per 5 minutes) is still the largest share.
+**Behaviour line**: `net: arena <slot> <brain> behaviour alive A s armed G s fists F s dealing D in a car near one on
+foot C s`: the time alive with a gun, unarmed on foot within 1.5 blocks of someone (and the damage dealt so), and in a
+car within 6 blocks of someone on foot. The fighters (`simple`, the hunter on foot, `soldier`) remember the weapon
+pickups they have seen by place (one missing while they stand within 8 blocks is taken, and left 30 s) and fetch the
+best for its distance (machine guns, shotgun and rockets first); they hold the weapon that suits the target (rockets at
+a car from 4 blocks, nothing that blows up nearer). Fists hit within a quarter block and only knock a player under 30
+health down, so an unarmed bot punches only an unarmed target above that it hurt in the last 4 s, else it fetches a
+weapon. A car coming within a block in the next 20 ticks makes a bot on foot step aside, or jump when it is about to
+hit. A well armed hunter gets out of its car for someone on foot within 6 blocks, or with rockets for a car within 8,
+and stays on foot 10 s; the soldier gets out for a car only with rockets. Over 20 seeds on the three maps: frags 594 to
+754, fistfight time 61, 27, 12 to 18, 17, 14 s per 5 minutes (simple, hunter, soldier), the hunter armed 112 to 208 s and
+in a car near someone on foot 35 to 2 s; against rammers the simple bot's dodge took their frags from 265 to 162.
 A bot client still takes the keyboard's key events (Escape and the pause menu, the chat), so `GTA2_INPUT` can press
 them in a test.
 
@@ -790,7 +802,7 @@ them in a test.
 | `simple` | walks its route to the nearest player and fights when close |
 | `carhop` | gets into the nearest car, drives, gets out, again |
 | `rammer` | drives at players; stuck 4 s with nobody in front, leaves the car and skips it 30 s |
-| `hunter` | the rammer when a car is near and nobody is, the fighter otherwise |
+| `hunter` | the rammer when a car is near, nobody is and it has a good gun or none to fetch, the fighter otherwise |
 | `soldier` | a weapon, a car, then to the nearest player: runs it over when coming at it head on, or gets out and shoots |
 | `human` | for crash hunts, what people do and the others don't, in turns: cars, buses and the tank (in, about, out at speed), trains (on at a station, a ride, off), every weapon it has, pickups, into water, its own blasts (`session/bot_human.cpp`) |
 | `nn:<file>` | a trained network (`session/bot_nn.cpp`): 62 inputs (`BotFeatures`), a choice in six groups of outputs |
