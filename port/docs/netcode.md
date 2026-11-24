@@ -199,7 +199,7 @@ score (`gPortDrawNetStandings`). A replay keeps the original's list and counter.
 
 **Connection.** The ping shows at the bottom right: the network's round trip alone (`kMsgPing`, answered at once,
 both polled between frames). With no snapshot for 0.7 s it shows **Connection interrupted** and plays on, the others'
-last inputs held for 5 ticks after the last snapshot, then without fire, then from 10 ticks on none. When ENet drops
+last inputs (without fire) held for 10 ticks after the last snapshot, then none. When ENet drops
 the connection (after 5-10 s) it shows **Lost the server, reconnecting** and connects again every 3 s with its slot's
 token (the welcome's): the server gives the slot back with its score and ammo, also while it still has the old
 connection (dropped then, the player stays where it is), else at a restart zone. A game the server went on to
@@ -345,12 +345,14 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   restores S, applies the server's state, and runs the ticks up to its own with its own inputs; other players take
   the controls the snapshot forwards for the ticks after it (the next tick's as the server runs it, then the commands
   it holds, up to 4), then the last of them repeated, a turn only once two in a row have it (a tap repeated turns far
-  past the server's). `GTA2_NET_NOFORWARD=1` predicts by the repeated input alone (to compare on a replay).
+  past the server's), without fire: another player's shots come only from the ticks the server forwarded, never drawn
+  for a burst it didn't fire (`GTA2_NET_HOLDFIRE=1` repeats the fire too, to compare). `GTA2_NET_NOFORWARD=1` predicts
+  by the repeated input alone (to compare on a replay).
   Everything else moves on by the game's own simulation in those ticks. Of the resimulated ticks only the first 4 are
   saved again (the next snapshots restore those; a save of the 3 MB world was three quarters of a rollback's time): the
   later ones keep their save from before, a world of that tick still, which a snapshot after 4 lost ones would restore
-  (counted in the log). A snapshot whose save is lost (a jump) or was taken with another rollback set is applied on the
-  game as it is, and the ticks since run again the same way, so the game stays at the client's tick. Every snapshot is
+  (counted in the log). A snapshot whose save is lost (a jump) or was taken with another rollback set (one with a block in the
+  middle, not only at the end: a pool allocated) is applied on the game as it is, and the ticks since run again the same way, so the game stays at the client's tick. Every snapshot is
   reconciled so, as routine: the client's log counts, every 300 frames, the snapshots reconciled, those that changed something (a player's or its car's state the client predicts, or the
   world's, differed from its own at that tick: the local player's prediction error among them) and those that changed
   nothing, the ticks resimulated each, and what a reconciliation takes.
@@ -919,6 +921,7 @@ off by default:
 | `GTA2_NET_REPLAYON=<frames>` | replay | the game runs on that many frames after the recording ends, nothing arriving |
 | `GTA2_NET_STATS=1` | client | the connection beside the ping, over the last second: the snapshots lost (the server sends one a tick), received per second, the ticks the game runs ahead of the newest, and the ticks resimulated per rollback |
 | `GTA2_NET_NOFORWARD=1` | client | other players predicted by their repeated input only, not the forwarded controls |
+| `GTA2_NET_HOLDFIRE=1` | client | other players' held fire predicted too, past the forwarded controls |
 | `GTA2_NET_HOLDALL=1` | client | other players' last input held through a stall, not let go |
 | `GTA2_NET_CUT=<every ms>:<ms>` | either end | with the link conditioner on (`--lag 1`): every unreliable send lost that long that often |
 | `GTA2_NET_RESIMSAVES=<n>` | client | the resimulated ticks saved again after a rollback: the first n (4; 0: all) |
