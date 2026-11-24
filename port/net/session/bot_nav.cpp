@@ -3,8 +3,21 @@
 #include "bot.hpp"
 #include <queue>
 
-bool net::FindPath(const engine::NavMap& map, int sx, int sy, int gx, int gy, std::vector<int>& path, int maxExpand)
+bool net::FindPath(const engine::NavMap& map, int sx, int sy, int gx, int gy, std::vector<int>& path, int maxExpand, int* pExpanded)
 {
+    int expanded = 0;
+    struct Count
+    {
+        int* out;
+        int& n;
+        ~Count()
+        {
+            if (out)
+            {
+                *out = n;
+            }
+        }
+    } count = {pExpanded, expanded};
     const int N = engine::NavMap::kSize;
     path.clear();
     if (sx < 0 || sy < 0 || gx < 0 || gy < 0 || sx >= N || sy >= N || gx >= N || gy >= N)
@@ -29,7 +42,6 @@ bool net::FindPath(const engine::NavMap& map, int sx, int sy, int gx, int gy, st
     open.push(Open(0, start));
     static const int kDx[4] = {0, 0, -1, 1}, kDy[4] = {-1, 1, 0, 0};
     static const uint8_t kWay[4] = {engine::NavMap::kNorth, engine::NavMap::kSouth, engine::NavMap::kWest, engine::NavMap::kEast};
-    int expanded = 0;
     while (!open.empty() && expanded < maxExpand)
     {
         const int cell = open.top().second;
@@ -75,7 +87,14 @@ void net::BotRoute::Next(const BotView& v, float goalX, float goalY, float* pX, 
     {
         goal = gy * N + gx;
         replanAt = v.frame + 30;
-        none = !FindPath(*v.map, cx, cy, gx, gy, path);
+        int expanded = 0;
+        none = !FindPath(*v.map, cx, cy, gx, gy, path, 40000, &expanded);
+        if (v.stats)
+        {
+            v.stats->searches++;
+            v.stats->failed += none;
+            v.stats->expanded += (uint64_t)expanded;
+        }
     }
     // Drop the waypoints up to the one we are on, if it is among the next few (cutting a corner skips some)
     for (size_t i = 0; i < path.size() && i < 6; i++)

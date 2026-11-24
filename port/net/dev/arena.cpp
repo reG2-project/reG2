@@ -135,6 +135,11 @@ void net::Arena::Think(const Snapshot& world, uint32_t tick)
         engine::BuildNavMap(*mNavMap);
     }
     Score(world);
+    uint64_t expanded = 0;
+    for (const Bot& bot : mBots)
+    {
+        expanded += bot.nav.expanded;
+    }
     std::vector<float> message;
     for (size_t i = 0; i < mBots.size(); i++)
     {
@@ -142,6 +147,7 @@ void net::Arena::Think(const Snapshot& world, uint32_t tick)
         if (bot.brain || tick % kBotDecisionTicks == 0)
         {
             FillBotView(mView, world, (int)i, tick, mNavMap.get());
+            mView.stats = &bot.nav;
         }
         if (bot.brain)
         {
@@ -152,6 +158,13 @@ void net::Arena::Think(const Snapshot& world, uint32_t tick)
             AddRemote((int)i, message);
         }
     }
+    uint64_t after = 0;
+    for (const Bot& bot : mBots)
+    {
+        after += bot.nav.expanded;
+    }
+    mExpanded += after - expanded;
+    mMaxExpanded = after - expanded > mMaxExpanded ? after - expanded : mMaxExpanded;
     if (!message.empty() && !Exchange(message, false))
     {
         fprintf(stderr, "net: the trainer is gone\n");
@@ -282,10 +295,40 @@ void net::Arena::Score(const Snapshot& world)
             bot.reward += took ? kPickupReward : 0;
             bot.cars += me.car && !bot.last.car;
         }
+        Meter(bot, me);
         bot.last = me;
         bot.last.nearest = nearest;
     }
     mTicks++;
+}
+
+// Stuck: alive through a window, pressing on (forward, or back in a car) for most of it, and under 0.3 blocks (on foot)
+// or 0.5 (in a car) from where it started
+void net::Arena::Meter(Bot& bot, const Bot::Body& me)
+{
+    const bool inCar = me.car != 0;
+    if (me.health <= 0 || (bot.windowOpen && inCar != bot.windowInCar))
+    {
+        bot.windowOpen = false;
+        bot.stuckRun = me.health <= 0 ? 0 : bot.stuckRun;
+        return;
+    }
+    if (!bot.windowOpen)
+    {
+        bot.windowOpen = true;
+        bot.windowFrom = mTicks, bot.pushing = 0, bot.windowInCar = inCar, bot.windowX = me.x, bot.windowY = me.y;
+    }
+    bot.pushing += (bot.buttons & (inCar ? kBtnForward | kBtnBack : kBtnForward)) != 0;
+    const uint32_t length = inCar ? 60 : 45;
+    if (mTicks - bot.windowFrom + 1 < length)
+    {
+        return;
+    }
+    const bool stuck = bot.pushing * 2 >= length && hypotf(me.x - bot.windowX, me.y - bot.windowY) < (inCar ? 0.5f : 0.3f);
+    bot.stuckTicks += stuck ? length : 0;
+    bot.stuckRun = stuck ? bot.stuckRun + length : 0;
+    bot.longestStuck = bot.stuckRun > bot.longestStuck ? bot.stuckRun : bot.longestStuck;
+    bot.windowOpen = false;
 }
 
 uint32_t net::Arena::Buttons(int slot) const
@@ -304,8 +347,11 @@ void net::Arena::Finish(const Snapshot& world)
             const Bot& bot = mBots[p];
             printf("net: arena %d %s frags %d deaths %d near %.3f dealt %d cars %d pickups %d\n", p, bot.kind.c_str(), engine::PlayerFrags(e),
                    engine::PlayerDeaths(e), mTicks ? bot.closeness / mTicks : 0.0, bot.dealt, bot.cars, bot.pickups);
+            printf("net: arena %d %s stuck %.1f s longest %.1f s searches %u failed %u giveups %u recoveries %u\n", p, bot.kind.c_str(),
+                   bot.stuckTicks / 30.0, bot.longestStuck / 30.0, bot.nav.searches, bot.nav.failed, bot.nav.giveUps, bot.nav.recoveries);
         }
     }
+    printf("net: arena search cells per tick: mean %.0f max %llu\n", mTicks ? (double)mExpanded / mTicks : 0.0, (unsigned long long)mMaxExpanded);
     if (mSocket >= 0)
     {
         std::vector<float> message;

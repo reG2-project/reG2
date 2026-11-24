@@ -26,6 +26,13 @@ enum BotButton : uint32_t
     kBtnSpecial = 0x200, // the horn in a car
 };
 
+// What a bot's navigation did (the arena's stuck meter prints it)
+struct BotNavStats
+{
+    uint32_t searches = 0, failed = 0, giveUps = 0, recoveries = 0;
+    uint64_t expanded = 0; // cells looked at by its searches
+};
+
 struct BotView
 {
     uint32_t frame = 0;
@@ -58,6 +65,7 @@ struct BotView
     };
     std::vector<Seen> seen; // what the client's snapshot has, others only
     const engine::NavMap* map = nullptr;
+    BotNavStats* stats = nullptr; // counted into when set (arena bots)
 };
 
 class BotBrain
@@ -125,5 +133,6 @@ void FillBotView(BotView& view, const Snapshot& snap, int self, uint32_t frame, 
 
 // Navigation (bot_nav.cpp, no game code): the cells (y * 256 + x) from start to goal, start excluded; false if
 // there is no way within <maxExpand> cells looked at
-bool FindPath(const engine::NavMap& map, int sx, int sy, int gx, int gy, std::vector<int>& path, int maxExpand = 40000);
+bool FindPath(const engine::NavMap& map, int sx, int sy, int gx, int gy, std::vector<int>& path, int maxExpand = 40000,
+              int* pExpanded = nullptr);
 } // namespace net

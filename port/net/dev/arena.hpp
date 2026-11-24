@@ -25,7 +25,8 @@ class Arena
     }
     void Think(const Snapshot& world, uint32_t tick); // each bot's buttons for the next tick
     uint32_t Buttons(int slot) const;
-    // "net: arena <slot> <brain> frags F deaths D near N dealt H cars C pickups P", and the trainer's last message
+    // "net: arena <slot> <brain> frags F deaths D near N dealt H cars C pickups P", its stuck meter's line, and the
+    // trainer's last message
     void Finish(const Snapshot& world);
 
   private:
@@ -48,7 +49,13 @@ class Arena
         bool droveThisLife = false; // (remote) the car reward is paid once a life
         BotMemory memory; // its features' (remote)
         std::unique_ptr<BotBrain> teacher; // a scripted brain on the same view (remote): what it would press
+        BotNavStats nav;
+        // The stuck meter: a window of 1.5 s on foot (2 s in a car) alive, and how far it got while pressing on
+        uint32_t windowFrom = 0, pushing = 0, stuckTicks = 0, stuckRun = 0, longestStuck = 0;
+        float windowX = 0, windowY = 0;
+        bool windowInCar = false, windowOpen = false;
     };
+    void Meter(Bot& bot, const Bot::Body& me);
     void Score(const Snapshot& world);
     void AddRemote(int slot, std::vector<float>& message);
     bool Exchange(const std::vector<float>& message, bool done);
@@ -57,6 +64,7 @@ class Arena
     std::unique_ptr<engine::NavMap> mNavMap;
     BotView mView;
     uint32_t mTicks = 0;
+    uint64_t mExpanded = 0, mMaxExpanded = 0; // all bots' search cells, in total and in the worst tick
     int mSocket = -1; // to the trainer
 };
 } // namespace net
