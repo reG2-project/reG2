@@ -241,7 +241,7 @@ throws() {
     blasts="$blasts,$t:0:$(( (t / 90) % 2 ? 0 : 9 ))"
   done
   rm -f "$OUT"/throws_*.log
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_TESTBLAST=${blasts#,} GTA2_NET_TESTFIRE=1500:1 GTA2_NET_TESTPHASE=400:1:1,1000:1,700:1:2,730:1:3,830:2:4,850:2:4,870:2:4,890:2:4,910:2:4,930:2:4,950:2:4,970:2:4,990:2:4,1010:2:4,1030:2:4,1050:2:4,1070:2:4,1090:2:4,1110:2:4,1130:2:4,1150:2:4,1170:2:4,1190:2:4 exec "$BIN" --server --port $p \
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_TESTBLAST=${blasts#,} GTA2_NET_TESTFIRE=1500:1 GTA2_NET_TESTPHASE=400:1:1,1000:1,700:1:2,730:1:3,830:2:4,840:2:4,850:2:4,860:2:4,870:2:4,880:2:4,890:2:4,900:2:4,910:2:4,920:2:4,930:2:4,940:2:4,950:2:4,960:2:4,970:2:4,980:2:4,990:2:4,1000:2:4,1010:2:4,1020:2:4,1030:2:4,1040:2:4,1050:2:4,1060:2:4,1070:2:4,1080:2:4,1090:2:4,1100:2:4,1110:2:4,1120:2:4,1130:2:4,1140:2:4,1150:2:4,1160:2:4,1170:2:4,1180:2:4,1190:2:4 exec "$BIN" --server --port $p \
     --map mp1-6p --players 6 --arena simple,simple > "$OUT/throws_server.log" 2>&1) &
   sleep 2
   # The blend off: what the client shows at a tick is its prediction of it, the server's state there to the bit. Its own

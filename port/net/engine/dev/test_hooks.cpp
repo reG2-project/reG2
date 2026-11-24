@@ -291,38 +291,55 @@ void net::engine::DebugPhase(int player, int what)
         const Sprite* cs = ped->mCar->mCarSprite;
         StartPulledOut(ped, ped->mCar, 0, cs->mXy.x + Fix16(1), cs->mXy.y, cs->mZpos);
     }
-    static bool sJacked; // code 4 once: tried at several ticks for one the jacker is on foot
-    if (what == 4 && sJacked)
+    // Code 4: tried at several ticks, the jacker sent again while its victim still sits in the car made for it
+    static Ped* sVictim;
+    static Car* sCar;
+    static Fix16 sX, sY, sZ;
+    if (what != 4 || ped->isDead() || !gCarManager_6C)
     {
         return;
     }
-    else if (what == 4 && ped->mCar && ped->mCar->mCarSprite && ped->mCar->mDriver == ped)
+    if (ped->mCar && ped->mCar->mCarSprite && ped->mCar->mDriver == ped && ped->mCar != sCar)
     {
         const Sprite* cs = ped->mCar->mCarSprite;
         ForceOutOfCar(ped, cs->mXy.x + Fix16(1), cs->mXy.y, cs->mZpos, cs->mRotation); // on foot for the next try
+        return;
     }
-    else if (what == 4 && !ped->mCar && ped->mGameObject && !ped->isDead() && gCarManager_6C)
+    if (ped->mCar || !ped->mGameObject || InCarTransition(ped))
     {
-        for (int i = 0; i < PlayerCount(); i++)
+        return;
+    }
+    if (sVictim)
+    {
+        if (sVictim->mCar == sCar && sCar->mDriver == sVictim && sCar->mCarSprite)
         {
-            Ped* victim = InGamePed(i);
-            if (victim && victim != ped && !victim->mCar && victim->mGameObject && !victim->isDead())
+            Fix16 x, y;
+            sCar->GetDoorWorldPosition(0, &x, &y); // its bot may have driven off
+            MovePed(ped, x, y, sCar->mCarSprite->mZpos, Angle(0));
+            StartEntering(ped, sCar);
+        }
+        return;
+    }
+    for (int i = 0; i < PlayerCount(); i++)
+    {
+        Ped* victim = InGamePed(i);
+        if (victim && victim != ped && !victim->mCar && victim->mGameObject && !victim->isDead())
+        {
+            Fix16 scale;
+            scale.mValue = 0x4000;
+            sX = victim->get_cam_x(), sY = victim->get_cam_y(), sZ = victim->get_cam_z();
+            Car* car = gCarManager_6C->SpawnCarAt(sX + Fix16(2 << 14, 0), sY, sZ, 0, car_model_enum::MERC, scale);
+            if (car)
             {
-                Fix16 scale;
-                scale.mValue = 0x4000;
-                const Fix16 x = victim->get_cam_x(), y = victim->get_cam_y(), z = victim->get_cam_z();
-                Car* car = gCarManager_6C->SpawnCarAt(x + Fix16(2 << 14, 0), y, z, 0, car_model_enum::MERC, scale);
-                if (car)
-                {
-                    printf("net: test phase 4: player %d jacks player %d\n", player, i);
-                    car->IncrementCarStats(car_kind::recycled_1);
-                    ForceIntoCar(victim, car);
-                    MovePed(ped, x, y, z, Angle(0)); // where the victim stood
-                    StartEntering(ped, car);
-                    sJacked = true;
-                }
-                break;
+                printf("net: test phase 4: player %d jacks player %d\n", player, i);
+                car->IncrementCarStats(car_kind::recycled_1);
+                ForceIntoCar(victim, car);
+                MovePed(ped, sX, sY, sZ, Angle(0)); // where the victim stood
+                StartEntering(ped, car);
+                sVictim = victim;
+                sCar = car;
             }
+            return;
         }
     }
 }
