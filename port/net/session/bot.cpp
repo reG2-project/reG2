@@ -58,7 +58,9 @@ uint32_t ApproachCar(const net::BotView& v, net::BotWalker& walker)
     const net::BotView::Seen* car = Nearest(v, net::BotView::Seen::kCar, &d, false, &walker);
     if (!car)
     {
-        return net::kBtnForward | (v.frame % 90 < 20 ? net::kBtnLeft : 0);
+        // None in sight (a client sees cars within its area only): towards someone, where there are roads and cars
+        const net::BotView::Seen* p = Nearest(v, net::BotView::Seen::kPlayer, &d, false, &walker);
+        return p ? walker.Walk(v, p->id, p->x, p->y, p->z) : net::kBtnForward | (v.frame % 90 < 20 ? net::kBtnLeft : 0);
     }
     if (d < 2.5f)
     {
