@@ -614,10 +614,11 @@ bool net::engine::ClientPedMayDie(Ped* ped)
     {
         return true; // in a car, its car's state (an explosion) is the server's; this game's own ped, its own
     }
-    // Held: alive, and on its feet knocked down until the server's state says what became of it
+    // Held: alive, and on its feet knocked down until the server's state says what became of it (getting into or out
+    // of a car, it goes on: the door's states are the entering's and leaving's)
     gDeathsHeld++;
     ped->mHealth = ped->mHealth > 0 ? ped->mHealth : 1;
-    if (ped->mPedState1 != ped_state_1::immobilized_8)
+    if (ped->mPedState1 != ped_state_1::immobilized_8 && !InCarTransition(ped))
     {
         ped->ChangeNextPedState1(ped_state_1::immobilized_8);
         ped->ChangeNextPedState2(ped_state_2::lying_on_floor_22);
