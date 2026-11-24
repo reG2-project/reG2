@@ -51,7 +51,7 @@ class Arena
         std::unique_ptr<BotBrain> teacher; // a scripted brain on the same view (remote): what it would press
         BotNavStats nav;
         // The stuck meter: a window of 1.5 s on foot (2 s in a car) alive, and how far it got while pressing on
-        uint32_t windowFrom = 0, pushing = 0, stuckTicks = 0, stuckRun = 0, longestStuck = 0;
+        uint32_t windowFrom = 0, pushing = 0, stuckTicks = 0, carStuckTicks = 0, stuckRun = 0, longestStuck = 0;
         float windowX = 0, windowY = 0;
         bool windowInCar = false, windowOpen = false;
     };

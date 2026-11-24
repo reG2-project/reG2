@@ -327,6 +327,7 @@ void net::Arena::Meter(Bot& bot, const Bot::Body& me)
     }
     const bool stuck = bot.pushing * 2 >= length && hypotf(me.x - bot.windowX, me.y - bot.windowY) < (inCar ? 0.5f : 0.3f);
     bot.stuckTicks += stuck ? length : 0;
+    bot.carStuckTicks += stuck && inCar ? length : 0;
     bot.stuckRun = stuck ? bot.stuckRun + length : 0;
     bot.longestStuck = bot.stuckRun > bot.longestStuck ? bot.stuckRun : bot.longestStuck;
     bot.windowOpen = false;
@@ -348,8 +349,9 @@ void net::Arena::Finish(const Snapshot& world)
             const Bot& bot = mBots[p];
             printf("net: arena %d %s frags %d deaths %d near %.3f dealt %d cars %d pickups %d\n", p, bot.kind.c_str(), engine::PlayerFrags(e),
                    engine::PlayerDeaths(e), mTicks ? bot.closeness / mTicks : 0.0, bot.dealt, bot.cars, bot.pickups);
-            printf("net: arena %d %s stuck %.1f s longest %.1f s searches %u failed %u giveups %u recoveries %u\n", p, bot.kind.c_str(),
-                   bot.stuckTicks / 30.0, bot.longestStuck / 30.0, bot.nav.searches, bot.nav.failed, bot.nav.giveUps, bot.nav.recoveries);
+            printf("net: arena %d %s stuck %.1f s longest %.1f s searches %u failed %u giveups %u recoveries %u in a car %.1f s\n", p,
+                   bot.kind.c_str(), bot.stuckTicks / 30.0, bot.longestStuck / 30.0, bot.nav.searches, bot.nav.failed, bot.nav.giveUps,
+                   bot.nav.recoveries, bot.carStuckTicks / 30.0);
         }
     }
     printf("net: arena search cells per tick: mean %.0f max %llu\n", mTicks ? (double)mExpanded / mTicks : 0.0, (unsigned long long)mMaxExpanded);
