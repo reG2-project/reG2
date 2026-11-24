@@ -234,7 +234,7 @@ soak() {
 
 throws() {
   local p=$((BASE + 207)) blasts="" own="" t
-  for t in $(seq 900 50 1700); do # the client's own player drowned and electrocuted in turns (when on foot)
+  for t in $(seq 1250 50 1700); do # the client's own player drowned and electrocuted in turns (when on foot), after the jacks
     own="$own,$t:$(( (t / 50) % 2 ))"
   done
   for t in $(seq 300 90 1400); do # at the feet (a flying death) and a block away (knocked down), in turns
@@ -256,9 +256,10 @@ throws() {
   local result
   result=$(awk '
     /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) { burn[$6]++} }
-    # Not the throw that ends a jack the client predicted ahead of the server (checked below)
-    /THROW client tick [0-9]+: p[01] / && $12 == "8/17" && $5 + 0 > 830 { door[$6] = $5 + 0 }
-    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ && !(($6 in door) && $5 + 0 - door[$6] <= 12) { c[$5 $6] = $12 }
+    # Not the throw that ends a jack the client predicted ahead of the server (checked below): the ticks in a row after
+    # its pull, 12 of them or up to the pull of the victim on the server
+    /THROW client tick [0-9]+: p[01] / { t = $5 + 0; if ($12 == "8/17" && t > 830) { door[$6] = t; drun[$6] = 1 } else if (t != last[$6] + 1 || $12 !~ /^8\//) drun[$6] = 0; last[$6] = t }
+    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ && !(drun[$6] && ($5 + 0 - door[$6] <= 12 || ($6 == victim && $5 + 0 < sfirst))) { c[$5 $6] = $12 }
     /THROW server tick [0-9]+: p1 / { sp[$5 + 0] = $12 }
     # The client player jacks p0 or p1 (from 830), twice: the server calls the first off at the door, pulls on the second
     # 10 ticks after its jacker got there. The client predicts both pulls at once: the first back in its seat soon after
