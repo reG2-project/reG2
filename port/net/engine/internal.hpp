@@ -305,7 +305,7 @@ void CapturePlayer(int slot, Snapshot& out);
 void CaptureWorld(Snapshot& out); // the world entity (world_entity.cpp)
 void ApplyWorld(const EntityState& w);
 void ApplySlots(const Snapshot& snap); // the slots in the game: the snapshot's
-void ApplyPlayer(const EntityState& e);
+bool ApplyPlayer(const EntityState& e); // false: nothing more for it this apply (a death carried out)
 void SettlePlayerCar(const EntityState& e);
 void KillCredited(Ped* ped, int killerSlot); // the game's own death, credited to a player (-1: nobody)
 void KillNow(Ped* ped); // the game's own death (Ped::Kill), dead at once even when knocked down, at its landing when thrown

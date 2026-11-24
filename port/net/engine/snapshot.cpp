@@ -397,20 +397,18 @@ void net::engine::Apply(const Snapshot& snap)
     const s16 zoneTurn = ZoneTurn(); // the server's: a player put in the game here takes a restart zone in its turn
     ApplySlots(snap);
     ZoneTurn() = zoneTurn;
+    std::vector<const EntityState*> settle;
     for (const EntityState& e : snap.entities)
     {
-        if (e.type == kEntityPlayer)
+        if (e.type == kEntityPlayer && ApplyPlayer(e))
         {
-            ApplyPlayer(e);
+            settle.push_back(&e);
         }
     }
     ApplyCarsAndPeds(snap);
-    for (const EntityState& e : snap.entities)
+    for (const EntityState* e : settle)
     {
-        if (e.type == kEntityPlayer)
-        {
-            SettlePlayerCar(e);
-        }
+        SettlePlayerCar(*e);
     }
     ApplyPickups(snap);
     ApplyShots(snap); // after the cars and peds: owners and what a catch-up hits are the server's

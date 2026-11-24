@@ -462,14 +462,14 @@ void net::engine::SettlePlayerCar(const EntityState& e)
     }
 }
 
-void net::engine::ApplyPlayer(const EntityState& e)
+bool net::engine::ApplyPlayer(const EntityState& e)
 {
     const int i = (int)e.id - 1;
     Player* p = GetPlayer(i);
     Ped* ped = p ? p->mPlayerPed : NULL;
     if (!ped)
     {
-        return;
+        return false;
     }
     const std::string name = UnpackName(e);
     if (!name.empty() && NarrowName(p) != name)
@@ -504,7 +504,7 @@ void net::engine::ApplyPlayer(const EntityState& e)
     ApplyPhases(ped, e, kPlayerPhase, (e.f[kPlayerState] & kPlayerDead) != 0, e.f[kPlayerInCar] ? RefCar(e.f[kPlayerCar]) : NULL);
     if (CarryOutDeath(i, p, ped, e))
     {
-        return;
+        return false;
     }
     if (!ped->isDead())
     {
@@ -522,6 +522,7 @@ void net::engine::ApplyPlayer(const EntityState& e)
     {
         SnapCamera(p);
     }
+    return true;
 }
 
 void net::engine::ApplyScores(const Snapshot& snap)
