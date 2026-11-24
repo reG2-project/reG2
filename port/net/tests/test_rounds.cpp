@@ -152,13 +152,14 @@ int main()
         f.Command(tick, 0, "/map 3", players, late); // a results' choice arriving in the fresh game's countdown
         CHECK(f.State().voteKind == net::kVoteNone && late.changeMap < 0);
     }
-    // A tie: one of the tied maps, at random (never the current one here)
+    // A tie: one of the tied maps, drawn from the seed (never the current one here)
     {
         bool seen[3] = {};
         for (int run = 0; run < 40; run++)
         {
             net::RoundFlow f;
             f.Start(rules, maps, 0);
+            f.Seed(run);
             auto players = Players(2);
             uint32_t tick = RunTo(f, 0, net::kPhasePlaying, players, 70 * kTps);
             players[0].score = 3;
