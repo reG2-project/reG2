@@ -322,6 +322,7 @@ peds() {
   local result
   result=$(awk '
     function phase(v) { return v % 8 }
+    function justRevived(id, t,   d) { for (d = 0; d <= 30; d++) if ((id, t - d) in revived) return 1; return 0 }
     /PEDPHASE server tick/ { k = $5 " " $6; s[k] = $7 " " phase($9); dead[k] = ($7 ~ /^9\//); car[k] = $15; if ($9 % 8) phased++ }
     # On foot on both sides, not on the way to a car (cars go by the seats), a fatal throw shown knocked down, a flight to
     # a death of the server as a flight
@@ -333,7 +334,9 @@ peds() {
         if (a != b) { wrong++; if (wrong <= 5) print "  at " k ": server " s[k] ", applied " a > "/dev/stderr" }
       }
     }
-    /PEDPHASE client tick/ { k = $5 " " $6; if ((k in s) && $7 ~ /^9\// && !dead[k]) early++ }
+    # Not a corpse a paramedic revived (AmbulanceService, on the server alone), until the revival reaches the client
+    /PEDPHASE server tick/ { if (!dead[k] && wasDead[$6] && $5 + 0 == lastS[$6] + 1) revived[$6, $5 + 0] = 1; wasDead[$6] = dead[k]; lastS[$6] = $5 + 0 }
+    /PEDPHASE client tick/ { k = $5 " " $6; if ((k in s) && $7 ~ /^9\// && !dead[k] && !justRevived($6, $5 + 0)) early++ }
     /corpses of this game.s own made again/ { remade += $2 }
     /deaths of this game.s own held/ { held += $2 }
     END { printf "%d %d %d %d %d %d", phased, applied, wrong, early, remade, held }' "$OUT/peds_server.log" "$OUT/peds_client.log")
