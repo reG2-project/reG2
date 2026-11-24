@@ -8,6 +8,7 @@
 #include "Source/CarPhysics.hpp"
 #include "port/src/net_hooks.hpp"
 #include "port/src/rand/owner.hpp"
+#include <stdlib.h>
 #include <unordered_set>
 #include <vector>
 
@@ -110,7 +111,9 @@ void UpdateCars()
 }
 } // namespace
 
+// GTA2_NET_CARTURNS=0: the game's own order (a test's, to compare; the server and its clients must agree)
 void net::engine::InstallCarTurns(bool on)
 {
-    gPortUpdateCars = on ? UpdateCars : NULL;
+    const char* env = getenv("GTA2_NET_CARTURNS");
+    gPortUpdateCars = on && !(env && env[0] == '0') ? UpdateCars : NULL;
 }
