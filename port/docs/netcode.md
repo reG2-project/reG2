@@ -371,19 +371,24 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   player's health that drops in a snapshot shows the server's hit: the game's blood burst at its ped and the grunt of a
   punch (`ShowServerHit`, `engine/players.cpp`), which the client's own hits on an invulnerable ped don't give; burning
   takes 1 a tick without bleeding (`Ped::ManageBurning`), so only what drops beyond the burn is a hit.
-- **Throws** (`engine/throws.cpp`): the game throws a ped (a blast, a car, a door) on a moving object its char follows
-  until the object stops, then lands it by the throw's outcome: back on its feet, knocked down, or dead (a blast at its
-  feet: the flying death). A client predicts its players' throws as the game makes them, so its own player flies at
-  once, and the snapshots correct them: the player entity carries the object's place and motion and the outcome, a
-  client starts a throw it didn't predict (also on a player lying knocked down; not one it landed in the last 10
-  ticks), puts the object where the server's is, and stops one the server doesn't have at the server's place, landing
-  it back on its feet. Deaths are the server's only: before each tick a client's fatal outcome becomes knocked down
-  (`GuardThrow`), and the server's death (`KillNow`) leaves the dead state that any landing then restores.
-- **Sinking and electrocution** (`engine/phases.cpp`): both end in the ped's death (`Char::UpdateImmobilized`). The
-  player entity's state says whether the server's player is in one; a client starts the one it didn't predict as the
-  game does, gets a player the server has out of it back on its feet, and holds its timer short of the death before each
-  tick (`GuardPhases`), so that only the server's death (`KillNow`) ends it. A player lying knocked down is the server's
-  the same way, its timer with it (`kPlayerLying`; not an arrest's, which the arrest carries).
+- **Phases** (`engine/phases.cpp`, `engine/throws.cpp`): a ped thrown (a blast, a car or a door throws it on a moving
+  object its char follows until the object stops, then lands it by the throw's outcome: back on its feet, knocked down,
+  or dead), lying knocked down, sinking in water, electrocuted, or pulled out of a car at its door. The player and the
+  ped entity carry the same record: the phase, whether its char is yet to start it, the value that ends it (a throw's
+  timeout, the lying, sinking and electrocution timers, the door's frame and door), the door's car, and a throw's object
+  (its place, motion and outcome). A client predicts every ped's phases as the game makes them, and at each snapshot's
+  tick the server's wins: the same phase gets its timer, one the server has is started the game's way (`Char::DrownPed`,
+  a throw's object, the door as the jacker's char puts a driver there), one the server lacks is cancelled to walking
+  (a throw: its object removed). Nothing waits: there is no grace for a throw just landed.
+- **Deaths are the server's** (`ClientPedMayDie`, `gPortPedMayDie` in `Ped::Kill`): a client's ped on foot dies only by
+  the server's death (`KillNow`, also the ambient peds'); its own death, from a predicted shot, car or fall, is held
+  (health 1, knocked down on its feet) until a snapshot says what became of it. Before each tick a fatal outcome of its
+  own becomes knocked down and the sinking and electrocution timers are held short of the death (`GuardPhases`); the
+  server's death ends them as the game does (a charred corpse, a sunk one, neither dropping its weapon; a player's
+  electrocution voice and death type). Deaths in a car are its car's, whose explosion is the server's.
+- **A player is pulled out of its car by the server only** (`gPortMayPullOut` in `Char::UpdateCharB4`): a jacker the
+  client predicts, its own player or another, waits at the door until the server's pull arrives (`StartPulledOut`) and
+  clears the seat. An ambient driver's pull is predicted and corrected as its phase.
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
   server's world. It carries every player, the car each sits in and every train wherever they are, and everything
   within the reach (the interest area, 24 blocks around the client's player's foci as the server has them), each entity the
@@ -434,9 +439,9 @@ the original's.
 | Entity | Carries |
 |---|---|
 | World (one per snapshot, `engine/world_entity.cpp`) | the game's tick counter (timers are stamped with it), the random seed and stream, the restart zones' turn, the round's state (`core/round_state.hpp`), the game's generation (a map change), the traffic lights, the tag game's fugitive and times, the map's light level (its script sets it: `MapRenderer`'s ambient, its target and step), the police's state that a client's cops, cop cars and HUD read (the highest wanted level, the strongest crew, a crew on screen, the last cop whose shot hit, and each pursuit's criminal, level, state, timer and crews) |
-| Player (`engine/players.cpp`) | place, input, health, death count and last killer, weapons and the ammo of all 28 (a car weapon the car here lacks is added to it), frags and points, the HUD's money and multiplier, power-up timers, its car, the chat line, its throw (`engine/throws.cpp`: the object it flies on, its motion and the outcome) |
+| Player (`engine/players.cpp`) | place, input, health, death count and last killer, weapons and the ammo of all 28 (a car weapon the car here lacks is added to it), frags and points, the HUD's money and multiplier, power-up timers, its car, the chat line, its phase (`engine/phases.cpp`: thrown, lying, sinking, electrocuted, at a car door, and a throw's object) |
 | Car (`engine/cars.cpp`, `car_ai.cpp`) | place, its whole `CarPhysics` (but its two pointers), damage, its wreck's fire, lights, horn, colour, its roof turret's angle, the trailer it tows (towed trailers sent too), its proofs and alarm (`Car::mFlags`), its driver, and its AI (`CarAI`: route, speed, the cars it chases) |
-| Ped (`engine/ped_state.cpp`) | place, and the plain values its AI runs on (objectives, targets, speeds, timers, occupation, flags, health, death cause), its references (targets, group) and its car and seat |
+| Ped (`engine/ped_state.cpp`) | place, and the plain values its AI runs on (objectives, targets, speeds, timers, occupation, flags, health, death cause), its states, its references (targets, group), its car and seat, and its phase as a player's |
 | Pickup (`engine/pickups.cpp`) | model and place; roadblock barriers too (they are off the object pool's list), and the car weapons' mines and oil |
 | Shot (`engine/shots.cpp`, every shot in every snapshot) | a rocket's, grenade's, molotov's or throwing blast's start, keyed by prediction: place, model, blast type, timer or fuse, owner, the tick, its motion; a burning debris' state now (its fire's timer) |
 | Train (`engine/trains.cpp`, every train in every snapshot) | its lead's place, speed and driver (none, the traffic driver, a ped, a player), its carriages' car ids (the client's train of the same index takes them), which end leads (`Train::ReassignTrainHead`), its state, stop phase and timers, the station it heads for and that station's state, each carriage's damage and explosion timer |
@@ -468,10 +473,11 @@ the interest covers it too, so its surroundings are there at the cut. A death by
 own rocket) stays on the corpse; a busted player respawns as in the original.
 
 A ped's AI state is applied only while it is on foot on both sides (a driver in the same car gets its objectives but
-not its states), its states only when plain (walking, running, standing) on both sides, and all or nothing: if a
-reference its objective acts on (its target ped, internal target, car thief, the car it heads for, enters or flees in)
-isn't in the client's game, the ped keeps its own state for that snapshot; the others (who attacked, punched, was hit
-or killed it, the car it stole) stay the client's when missing. Groups are rebuilt on
+not its states). Its phase goes first, whatever it does (on its way to a car too); its states and its char's movement
+and animation then, whatever they are, once both have the same phase (a fall of one side only waits). The rest is all
+or nothing: if a reference its objective acts on (its target ped, internal target, car thief, the car it heads for,
+enters or flees in) isn't in the client's game, the ped keeps its own objectives for that snapshot; the others (who
+attacked, punched, was hit or killed it, the car it stole) stay the client's when missing. Groups are rebuilt on
 the client from each ped's leader, keeping only members that are present (the game walks a group's list up to its
 count).
 
@@ -819,7 +825,14 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
   client watching with the blend off: every tick it shows a player thrown, the server had it thrown there with the
   same outcome (a flying death shows knocked down until the server's death), and the burning player's health drops didn't bleed.
   The burning bot is also electrocuted and drowned (`GTA2_NET_TESTPHASE`): the client still shows it in that state at
-  the tick the server's dies.
+  the tick the server's dies. It is also put in a car and pulled out of it: the client shows it at the door only on ticks the
+  server has it there or past it, never seated or walking. The client's own player is drowned and electrocuted at times
+  where the server never has it (`GTA2_NET_TESTLOCALPHASE`, on every run of that tick, live and resimulated): the
+  snapshots cancel it within 20 ticks.
+- **peds**: the ambient ped nearest the client's player drowned, electrocuted, knocked down or blown up in turns
+  (`GTA2_NET_TESTPHASE`), the client driving into peds, the blend off: at every snapshot tick, as its apply leaves them,
+  the client's peds on foot have the server's states and phase there; none is dead on a live tick before the server's,
+  and no corpse of the client's own is made again.
 - **shots**: armed bots, a server's own rocket, grenade or molotov beside a bot every 60 ticks (`GTA2_NET_TESTSHOT`)
   and a human:fight bot client at 60 ms, the blend off, with a rocket of its own the server never fires
   (`GTA2_NET_TESTGHOSTSHOT`): the shots it predicted keep their keys (no more than one in five made or removed within
@@ -893,6 +906,7 @@ off by default:
 | `GTA2_NET_PICKUPLOG=1` | client | pickups made and removed |
 | `GTA2_NET_THROWLOG=1` | both | every tick, the players thrown, knocked down, dead or on fire (their states, the throw's object and motion) and the explosions just made |
 | `GTA2_NET_SHOTLOG=1` | both | every tick, the shots by key (model, blast type and timer, owner, place); on a client each shot made, removed or beyond the reach at a snapshot |
+| `GTA2_NET_PEDLOG=<player>` | both | the peds within 12 blocks of that player, their states and phase: every tick, and on a client also as each snapshot's apply left them |
 | `GTA2_NET_FIRELOG=1` | both | every fire at every 30th tick of the game's cycle: a car's (its id, wrecked or not, its fire's explosion types), the ones on nothing by place, the peds on fire |
 | `GTA2_NET_TRAINLOG=1` | both | every train's place and state at every 150th tick of the game's cycle (the same tick on both ends) |
 | `GTA2_NET_CHECKGRID=1` | both | the collision grid checked after every move, a sprite moved off the map reported with the code that moved it, a rollback block whose pointee moved since the set was taken, on a client a ped driving a car that has another driver or leaving it through another car, and on both the weapon pool's lists looping or sharing a weapon and a ped holding a weapon it would free wrongly (a freed one, a player slot's, a car's, another ped's), a tank, fire truck or gun jeep without its roof turret, and a collision grid row that isn't a sorted list of pool cells and links, after every tick, restore and apply (`net: CHECK` lines) |
@@ -906,7 +920,8 @@ off by default:
 | `GTA2_NET_TESTSHOT=<tick>:<player>:<model>,...` | server | a rocket (128), molotov (138) or grenade (183) thrown east from beside the player, made by the server alone |
 | `GTA2_NET_TESTGHOSTSHOT=<tick>` | client | a rocket beside the local player at that tick of the game's cycle, in every run of it: one the server never has |
 | `GTA2_NET_SHOTSKEW=1` | client | its shots' keys none of the server's (the shots step's red run) |
-| `GTA2_NET_TESTPHASE=<tick>:<player>[:1],...` | server | the player on foot drowned, or electrocuted (1) |
+| `GTA2_NET_TESTPHASE=<tick>:<player>[:<what>],...` | server | the player on foot drowned (0) or electrocuted (1), seated in a car beside it (2), pulled out of its car (3); 10 to 13: the ambient ped nearest it drowned, electrocuted, knocked down, or blown up |
+| `GTA2_NET_TESTLOCALPHASE=<tick>:<what>,...` | client | its own player drowned (0), electrocuted (1) or knocked down (2) before each run of that tick, live and resimulated (the server never has it) |
 | `GTA2_NET_TESTPATIENTS=<tick>:<player>:<n>[:<blocks>],...` | server | the n ambient peds nearest the player (at least that many blocks away) set on fire: the ambulance comes for their corpses |
 | `GTA2_NET_TESTSTREAK=<tick>:<player>,...` | server | a kill streak's bonus, as the 20th kill in a row gives it |
 | `GTA2_NET_TESTCAR=<tick>:<player>:<model>,...` | server | a car beside the player (11: a bus; 63, 64: a truck cab with a container trailer); model + 1000 * n: damaged by n * 1000 (n = 16: on fire, 25: burning); a model the game can't wreck (24 to 26, 85: the HOTDOG_D vans; the wrecks) isn't spawned |
@@ -953,6 +968,9 @@ own (`single`) and rollback in scenes with explosions (`explode`).
 - **Other players at car doors**: most of the remaining large corrections of other players are with the server at a
   door. Next: a remote player the server has at a door put there at once instead of walked there by its predicted
   inputs, measured on recorded sessions (`GTA2_NET_COMPARE`, `GTA2_NET_JERKLOG`).
+- **A player's throw outcome predicted by a car**: `Char::HandleCarImpact` and two cases of `HandleGenericImpact` read
+  `mInvulnerability > 0`, not `PortReactsInvulnerable`, so a client's player (kept at 2) is predicted back on its feet
+  where the server's is knocked down, until the snapshot (a few ticks; the throws step fails on it at times).
 - **Cops** differ the most of any entity (health from hits a client predicts, animation and aim on foot): corrected by
   the next snapshot; worth a look if players see cops jump.
 - **The police are the original's**: one city for every criminal. Four pursuits for six players, and the most wanted
