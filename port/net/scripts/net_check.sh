@@ -11,9 +11,11 @@
 #   soak    a server and three bot clients, the clock 10 times as fast: 10 minutes of play in 60 s, no crash
 #   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown as the
 #           server has it at that tick, with its outcome (a flying death knocked down), and burning doesn't bleed
+#   shots   armed bots and a server's own rockets, grenades and molotovs, a bot client watching: it keeps the shots it
+#           predicted, makes the ones it lacks and removes one the server never had at the next snapshot
 #   replay  recorded client sessions replayed against their saved logs: the same, or nondeterministic (it differs
 #           from itself too), else a regression
-# usage: port/net/scripts/net_check.sh [--quick] [--record] [--save] [arena|live|churn|maps|rounds|soak|throws|replay ...]
+# usage: port/net/scripts/net_check.sh [--quick] [--record] [--save] [arena|live|churn|maps|rounds|soak|throws|shots|replay ...]
 #   --record  new fixtures (recorded sessions) and their logs; --save: the current build's replay logs as the baseline
 # Fixtures and logs: $BUILD/net_check/. Exit 1 if anything failed.
 for v in BUILD GAME BIN; do # given as relative paths: from here (the games run in $GAME)
@@ -37,7 +39,7 @@ for a in "$@"; do
     *) STEPS+=("$a") ;;
   esac
 done
-[ ${#STEPS[@]} -eq 0 ] && STEPS=(arena live churn maps rounds soak throws replay)
+[ ${#STEPS[@]} -eq 0 ] && STEPS=(arena live churn maps rounds soak throws shots replay)
 [ -x "$BIN" ] && [ -d "$GAME/data" ] || { echo "no build or game: the port built in $BUILD (cmake -S port -B build_mac -G Ninja), and a game folder with data/ in $GAME"; exit 1; }
 mkdir -p "$OUT"
 trap 'kill $(jobs -p) 2>/dev/null' EXIT # our games end with us (most jobs exec their game; an arena match's subshell waits for it)
@@ -270,6 +272,49 @@ throws() {
   fi
 }
 
+# Rockets, grenades and molotovs (shots.cpp): armed bots fire their own, the server throws its own beside player 0
+# every 60 ticks, and the client makes a rocket the server never has at tick 900
+shots() {
+  local p=$((BASE + 208)) list="" t
+  for t in $(seq 300 60 1500); do
+    list="$list,$t:0:$(( (t / 60) % 3 == 0 ? 128 : (t / 60) % 3 == 1 ? 183 : 138 ))"
+  done
+  rm -f "$OUT"/shots_*.log
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_SHOTLOG=1 GTA2_NET_TESTARM=2:50,5:30,4:30 GTA2_NET_TESTSHOT=${list#,} exec "$BIN" --server --port $p \
+    --map mp1-6p --players 6 --arena soldier,simple > "$OUT/shots_server.log" 2>&1) &
+  sleep 2
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_SHOTLOG=1 GTA2_NET_TESTGHOSTSHOT=900 GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
+    exec "$BIN" --connect 127.0.0.1:$p --name c_shots --bot human:fight --lag 60 --jitter 5 > "$OUT/shots_client.log" 2>&1) &
+  sleep 50
+  kill $(jobs -p) 2>/dev/null
+  wait 2>/dev/null
+  # Keys both had; keys the client missed: a projectile made, or a shot removed within the reach (beyond, its world is a
+  # guess; a blast is made when the shot before it was beyond); the server's own shots made; the ghost
+  local result
+  result=$(awk '
+    FNR == 1 { file++ }
+    file == 1 && /test shot key/ { test[$NF] = 1 }
+    file == 1 && /SHOT server tick/ { server[$6] = 1 }
+    file == 2 && /test ghost shot key/ { ghost = $NF }
+    file == 2 && /SHOT client tick/ { if ($6 in server) matched[$6] = 1; if ($6 == ghost && gone) back++ }
+    file == 2 && /SHOT made tick/ { if ($6 in test) made[$6] = 1; else if ($10 == 0) miss[$6] = 1 }
+    file == 2 && /SHOT removed tick/ { if ($6 == ghost) gone = 1; else if (/within the reach/) miss[$6] = 1 }
+    END {
+      for (k in matched) m++; for (k in miss) x++; for (k in test) t++; for (k in made) tm++
+      printf "%d %d %d %d %d %d", m, x, t, tm, gone, back
+    }' "$OUT/shots_server.log" "$OUT/shots_client.log")
+  local matched missed tests made gone back crashes checks
+  read -r matched missed tests made gone back <<< "$result"
+  crashes=$(grep -l "crashed" "$OUT"/shots_*.log | wc -l | tr -d ' ')
+  checks=$(cat "$OUT"/shots_*.log | grep -c "net: CHECK")
+  echo "  $matched shots both had, $missed the client made or removed; $made of the server's $tests own made; the ghost removed: $gone, shown again $back ticks"
+  if [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ "${made:-0}" -lt 3 ] || [ "${gone:-0}" != 1 ] || [ "${back:-1}" != 0 ] || [ $((missed * 5)) -gt "${matched:-0}" ]; then
+    fail "shots: the client's shots aren't the server's ($BUILD/net_check/shots_*.log)"
+  else
+    pass "shots: the client kept its predicted shots, made the server's own and removed its ghost at the next snapshot"
+  fi
+}
+
 record() {
   local p=$((BASE + 201))
   rm -f "$OUT"/fixture_*.rec
@@ -327,8 +372,8 @@ replay() {
 
 for s in "${STEPS[@]}"; do
   case $s in
-    arena | live | churn | maps | rounds | soak | throws | replay) $s ;;
-    *) echo "no step $s (arena, live, churn, maps, rounds, soak, throws, replay)"; FAILED=1 ;;
+    arena | live | churn | maps | rounds | soak | throws | shots | replay) $s ;;
+    *) echo "no step $s (arena, live, churn, maps, rounds, soak, throws, shots, replay)"; FAILED=1 ;;
   esac
 done
 exit $FAILED
