@@ -529,4 +529,14 @@ void net::engine::ComfortCorrection(uint32_t id, float blocks, float x, float y)
     c.n++;
     c.over[0] += blocks > 0.25f;
     c.over[1] += blocks > 1;
+    if (blocks > 0.25f && !self)
+    {
+        // One line each for comfort.py's breakdown: kind 0 player, 1 car, 2 the server's ped, 3 the client's own ped
+        const Ped* p = IsPlayerId(id) ? InGamePed((int)id - 1) : IsCarId(id) ? NULL : ReplicaPed(id);
+        const Car* car = IsCarId(id) ? ReplicaCar(id) : NULL;
+        const int kind = IsPlayerId(id) ? 0 : car ? 1 : p && IsServerPed(p) ? 2 : 3;
+        printf("comfort: C cv %u %u %.2f %d %d %d %d %d %d %.1f\n", gSyncedFrames, id, blocks, kind, p ? p->mPedState1 : -1,
+               p ? p->mPedState2 : -1, p ? PhaseOf(p) : -1, car && car->mDriver ? (car->mDriver->mPlayer ? 2 : 1) : 0,
+               car ? car->IsTrainModel() : 0, sqrtf(dx * dx + dy * dy));
+    }
 }
