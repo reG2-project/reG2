@@ -1,5 +1,6 @@
 // port/net core (port/docs/netcode.md, "Maps and players"): see spawn_spots.hpp.
 #include "spawn_spots.hpp"
+#include <math.h>
 
 uint8_t net::FreeLook(uint32_t* used)
 {
@@ -96,4 +97,43 @@ bool net::SpawnBlock(const std::vector<SpawnZone>& zones, int first, int slot, c
         skip = nth % blocks;
     }
     return false;
+}
+
+namespace
+{
+// From <p> to the nearest point of <zone>
+float ZoneDistance(const net::SpawnZone& zone, const net::SpawnPlace& p)
+{
+    const float x0 = (float)zone.x, x1 = (float)(zone.x + zone.w), y0 = (float)zone.y, y1 = (float)(zone.y + zone.h);
+    const float dx = p.x < x0 ? x0 - p.x : p.x > x1 ? p.x - x1 : 0, dy = p.y < y0 ? y0 - p.y : p.y > y1 ? p.y - y1 : 0;
+    return sqrtf(dx * dx + dy * dy);
+}
+} // namespace
+
+int net::SafeZone(const std::vector<SpawnZone>& zones, int first, const std::vector<SpawnPlace>& others)
+{
+    const int n = (int)zones.size();
+    const int start = first >= 0 && first < n ? first : 0;
+    int best = start;
+    float bestNearest = -1;
+    for (int k = 0; k < n; k++)
+    {
+        const int i = (start + k) % n;
+        float nearest = 1e9f;
+        for (const SpawnPlace& p : others)
+        {
+            const float d = ZoneDistance(zones[i], p);
+            nearest = d < nearest ? d : nearest;
+        }
+        if (nearest >= kSafeStart)
+        {
+            return i;
+        }
+        if (nearest > bestNearest)
+        {
+            best = i;
+            bestNearest = nearest;
+        }
+    }
+    return best;
 }

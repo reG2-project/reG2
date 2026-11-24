@@ -697,6 +697,14 @@ void TestSpawnSpots()
             }
         }
     }
+    // The zone in turn unless another player is near it: the next one in turn with nobody near, else the farthest
+    const std::vector<net::SpawnZone> four = {{10, 10, 2, 2}, {50, 10, 2, 2}, {10, 50, 2, 2}, {50, 50, 2, 2}};
+    CHECK(net::SafeZone(four, 0, {}) == 0);
+    CHECK(net::SafeZone(four, 0, {{100, 100}}) == 0);
+    CHECK(net::SafeZone(four, 0, {{13, 11}}) == 1); // 1 block from zone 0
+    CHECK(net::SafeZone(four, 1, {{13, 11}, {51, 20}}) == 2); // zone 1 near the second: the next safe in turn
+    CHECK(net::SafeZone(four, 0, {{11, 11}, {51, 11}, {11, 51}, {45, 45}}) == 3); // none safe: the farthest nearest
+    CHECK(net::SafeZone(four, 2, {{30, 30}}) == 2); // 18 blocks from every zone
     printf("spawn spots ok\n");
 }
 

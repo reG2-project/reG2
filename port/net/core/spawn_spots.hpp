@@ -27,4 +27,15 @@ struct SpawnWorld
 // round again past the last). From the map only, so a client predicting its respawn picks the server's block whatever
 // the other players do. False: no block with ground anywhere (the game's own spot then)
 bool SpawnBlock(const std::vector<SpawnZone>& zones, int first, int slot, const SpawnWorld& world, int* x, int* y, int* z);
+
+// Blocks from a zone within which another player makes it unsafe to start at
+const float kSafeStart = 12.0f;
+struct SpawnPlace
+{
+    float x, y; // in blocks
+};
+
+// The zone a player starts at: <first> (the restart zones' turn), else the next in turn with none of <others> (the
+// other living players) within kSafeStart blocks of it, else the one whose nearest of them is farthest
+int SafeZone(const std::vector<SpawnZone>& zones, int first, const std::vector<SpawnPlace>& others);
 } // namespace net
