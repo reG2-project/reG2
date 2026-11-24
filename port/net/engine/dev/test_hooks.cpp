@@ -16,6 +16,7 @@
 #include "Source/explosion_type.hpp"
 #include "Source/sprite.hpp"
 #include "Source/rng.hpp"
+#include "port/src/net_hooks.hpp"
 #include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
@@ -188,7 +189,8 @@ void net::engine::DebugBlast(int player, int tenths)
 {
     Ped* ped = InGamePed(player);
     Sprite* s = ped ? PedSprite(ped) : NULL;
-    if (s)
+    // None on a player just respawned: invulnerable, it would walk into the blast again and again, which no client has
+    if (s && ped->mInvulnerability <= 0)
     {
         const Fix16 x = s->mXy.x + Fix16(tenths * 16384 / 10, 0);
         gObject_5C->CreateExplosion(x, s->mXy.y, s->mZpos, Ang16((s16)0, (u8)0), explosion_type::small_18, 0);
@@ -238,6 +240,13 @@ Ped* NearestAmbient(Ped* to)
         }
     }
     return best;
+}
+
+// Code 4's jack: the server's pull waits its first 10 ticks at the door, which a client's prediction has to wait for too
+int gPullAsks;
+bool HeldPull(Ped*)
+{
+    return ++gPullAsks > 10;
 }
 } // namespace
 
@@ -338,6 +347,8 @@ void net::engine::DebugPhase(int player, int what)
                 StartEntering(ped, car);
                 sVictim = victim;
                 sCar = car;
+                gPullAsks = 0;
+                gPortMayPullOut = HeldPull;
             }
             return;
         }
