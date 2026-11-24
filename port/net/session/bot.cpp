@@ -440,7 +440,7 @@ class SoldierBot : public DecidingBot
         float wx = target->x, wy = target->y;
         if (d > 10)
         {
-            mRoute.Next(v, target->x, target->y, &wx, &wy); // far: along the route; near: straight at it
+            mRoute.Next(v, target->x, target->y, &wx, &wy, target->z); // far: along the route; near: straight at it
         }
         return net::kBtnForward | Steer(TurnTo(v.rot, wx - v.x, wy - v.y));
     }
