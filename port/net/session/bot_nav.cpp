@@ -237,7 +237,7 @@ void net::BotRoute::Next(const BotView& v, float goalX, float goalY, float* pX, 
     const int start = NavCell(map, v.x, v.y, v.z), at = start >= 0 ? start : raw;
     const int found = goalZ >= 0 ? NavCell(map, goalX, goalY, goalZ) : -1;
     const int target = found >= 0 ? found : (int)goalY * N + (int)goalX;
-    if (path.empty() || v.frame >= replanAt || target != goal)
+    if ((path.empty() && !none) || v.frame >= replanAt || target != goal)
     {
         goal = target;
         replanAt = v.frame + 30;
