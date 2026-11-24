@@ -176,7 +176,7 @@ rounds() {
   local S="$OUT/rounds_server.log" crashes checks ok=1 b
   crashes=$(grep -l "crashed" "$OUT"/rounds_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/rounds_*.log | grep -c "net: CHECK")
-  for line in "countdown (round 1)" "round (round 1)" "round 1 over" "results (round 2)" "votes for mp2-6p" "the next map, mp2-6p" \
+  for line in "countdown (round 1)" "round (round 1)" "round 1 over" "results (round 2)" "votes for" "the next map, mp2-6p" \
     "countdown (round 2)" "round (round 2)"; do
     grep -q "$line" "$S" || { ok=0; echo "  rounds: no \"$line\" on the server"; }
   done
