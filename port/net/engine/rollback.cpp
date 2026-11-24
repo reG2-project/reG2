@@ -34,6 +34,7 @@ struct net::engine::SavedWorld::Impl
 namespace
 {
 unsigned gSet; // which rollback set: taken again, its blocks lie elsewhere in a saved world (Restorable)
+unsigned gSetBase; // the oldest set whose blocks start every set since (only blocks added at the end since then)
 
 // The first block that differs between two sets (none: -1)
 long FirstDifference(const std::vector<net::engine::Block>& a, const std::vector<net::engine::Block>& b)
@@ -59,8 +60,10 @@ const std::vector<net::engine::Block>& RollbackSet()
     const long diff = FirstDifference(sBlocks, now);
     if (diff >= 0)
     {
+        const bool appended = (size_t)diff == sBlocks.size() && now.size() > sBlocks.size();
         sBlocks.swap(now);
         gSet++;
+        gSetBase = appended ? gSetBase : gSet;
         // A block that keeps changing (a scratch pointer with a pointee, for kNoPointee in world.cpp) would leave no save
         // to restore: each retake throws the saves away
         static int sGeneration = -1, sTakes;
@@ -122,12 +125,12 @@ void net::engine::SaveGame(SavedWorld& out, uint32_t tick)
     out.valid = true;
 }
 
-// A world saved with another set (taken again since: a function's static registered, or a pool a global points to
-// allocated, puts a block in the middle) would be copied into the wrong blocks: a pool's list from another's bytes
+// A world saved with another set (a pool a global points to allocated puts a block in the middle) would be copied into
+// the wrong blocks: a pool's list from another's bytes. One saved before blocks came at the end is the start of this one
 bool net::engine::Restorable(const SavedWorld& in)
 {
     RollbackSet();
-    return in.mImpl->set == gSet;
+    return in.mImpl->set >= gSetBase && in.mImpl->set <= gSet;
 }
 
 void net::engine::RestoreGame(const SavedWorld& in)
