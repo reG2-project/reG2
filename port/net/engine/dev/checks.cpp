@@ -1135,7 +1135,7 @@ void net::engine::FireLog(bool server)
            me ? me->get_cam_y().ToFloat() : -1.0f);
 }
 
-void net::engine::ThrowLog(bool server)
+void net::engine::ThrowLog(bool server, uint32_t snap)
 {
     static const bool on = getenv("GTA2_NET_THROWLOG") != NULL;
     static uint32_t sLast;
@@ -1157,13 +1157,14 @@ void net::engine::ThrowLog(bool server)
         }
         const Object* o = ped->mpObj2C;
         printf("net: THROW %s tick %u: p%d at (%.2f, %.2f, %.2f) ped %d/%d stored %d/%d char %d/%d anim %d health %d inv %d fire %d "
-               "cause %d obj %s(%.2f, %.2f, %.2f) speed %.3f z %.3f\n",
+               "cause %d obj %s(%.2f, %.2f, %.2f) speed %.3f z %.3f snap %u\n",
                end, tick, i, s->mXy.x.ToFloat(), s->mXy.y.ToFloat(), s->mZpos.ToFloat(), (int)ped->mPedState1, (int)ped->mPedState2,
                (int)ped->mStoredPedState1, (int)ped->mStoredPedState2, c ? (int)c->mPedState1 : -1, c ? (int)c->mPedState2 : -1,
                c ? (int)c->mAnimationState : -1, (int)ped->mHealth, (int)ped->mInvulnerability, (int)ped->mBf21C.bOnFire,
                (int)ped->mDeathCause, o ? "" : "none ", o && o->mSprite ? o->mSprite->mXy.x.ToFloat() : 0.0f,
                o && o->mSprite ? o->mSprite->mXy.y.ToFloat() : 0.0f, o && o->mSprite ? o->mSprite->mZpos.ToFloat() : 0.0f,
-               o && o->mObj3c ? o->mObj3c->mSpeed.ToFloat() : 0.0f, o && o->mObj3c ? o->mObj3c->mZSpeed.ToFloat() : 0.0f);
+               o && o->mObj3c ? o->mObj3c->mSpeed.ToFloat() : 0.0f, o && o->mObj3c ? o->mObj3c->mZSpeed.ToFloat() : 0.0f,
+               server ? tick : snap);
     }
     for (int pool = 0; pool < 2; pool++)
     {

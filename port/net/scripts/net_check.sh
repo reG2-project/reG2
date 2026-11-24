@@ -256,10 +256,12 @@ throws() {
   local result
   result=$(awk '
     /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) { burn[$6]++} }
+    # The tick each server throw started at: a client that has no snapshot of it yet shows its own prediction
+    /THROW server tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { t = $5 + 0; prev = (t - 1) ":" $6; sstart[$5 $6] = (prev in sstart) ? sstart[prev] : t }
     # Not the throw that ends a jack the client predicted ahead of the server (checked below): the ticks in a row after
     # its pull, 12 of them or up to the pull of the victim on the server
     /THROW client tick [0-9]+: p[01] / { t = $5 + 0; if ($12 == "8/17" && t > 830) { door[$6] = t; drun[$6] = 1 } else if (t != last[$6] + 1 || $12 !~ /^8\//) drun[$6] = 0; last[$6] = t }
-    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ && !(drun[$6] && ($5 + 0 - door[$6] <= 12 || ($6 == victim && $5 + 0 < sfirst))) { c[$5 $6] = $12 }
+    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ && !(drun[$6] && ($5 + 0 - door[$6] <= 12 || ($6 == victim && $5 + 0 < sfirst))) { c[$5 $6] = $12; csnap[$5 $6] = $NF + 0 }
     /THROW server tick [0-9]+: p1 / { sp[$5 + 0] = $12 }
     # The client player jacks p0 or p1 (from 830), twice: the server calls the first off at the door, pulls on the second
     # 10 ticks after its jacker got there. The client predicts both pulls at once: the first back in its seat soon after
@@ -274,7 +276,11 @@ throws() {
     END {
       for (k in s) { thrown++; if (s[k] == "8/26") fatal++ }
       # A client never lands a player fatally itself (GuardThrow): a flying death of the server shows knocked down there
-      for (k in c) { shown++; if (s[k] == "8/26") shownFatal++; if ((s[k] == "8/26" ? "8/25" : s[k]) != c[k]) { wrong++; print "  wrong at " k ": server " s[k] ", client " c[k] > "/dev/stderr" } }
+      for (k in c) {
+        shown++; if (s[k] == "8/26") shownFatal++
+        if ((s[k] == "8/26" ? "8/25" : s[k]) == c[k]) continue
+        if ((k in sstart) && sstart[k] > csnap[k]) unseen++; else { wrong++; print "  wrong at " k ": server " s[k] ", client " c[k] > "/dev/stderr" }
+      }
       # Electrocuted or sinking to a death on the server: the client still shows that tick alive in it
       for (t in sp) if (sp[t] ~ /^9\// && sp[t - 1] ~ /^8\/2[07]$/) { phased++; if (cp[t] !~ /^8\/2[07]$/) early++ }
       # Pulled out of its car (8/17): the client starts it from the server alone, never while the server has it seated or walking
@@ -286,11 +292,11 @@ throws() {
       lead = calloff && sfirst && cfirst ? sfirst - cfirst : -1
       # The own player of the client (p2) drowned or electrocuted there alone: cancelled by the next snapshots
       for (t in own) { ownTicks++; run = 0; for (u = t; u in own; u--) run++; if (run > ownRun) ownRun = run }
-      printf "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], phased, early, pulled, pullShown, pullWrong, ownTicks, ownRun, jackServer, jackClient, cancelShown, cancelLate, lead
+      printf "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", unseen, thrown, fatal, shown, shownFatal, wrong, burn["p1"], phased, early, pulled, pullShown, pullWrong, ownTicks, ownRun, jackServer, jackClient, cancelShown, cancelLate, lead
     }' "$OUT/throws_server.log" "$OUT/throws_client.log")
-  local thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead
-  read -r thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead <<< "$result"
-  echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's; a player burning $burnt ticks; $phased deaths electrocuted or sinking, $early of them the client's own"
+  local unseen thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead
+  read -r unseen thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead <<< "$result"
+  echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's (and $unseen before a snapshot had the server's throw); a player burning $burnt ticks; $phased deaths electrocuted or sinking, $early of them the client's own"
   echo "  pulled out of a car: $pulled server ticks, $pullShown client ticks, $pullWrong of them while the server's sat or walked; the client's own phases: $ownTicks ticks, $ownRun at most in a row; its player's jack: pulled out $jackServer server ticks, $jackClient client ticks ($lead ticks ahead); the jack called off: $cancelShown ticks shown pulled before, $cancelLate after"
   if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ "${phased:-0}" = 0 ] || [ "${early:-1}" != 0 ] ||
     [ "${pulled:-0}" = 0 ] || [ "${pullShown:-0}" = 0 ] || [ "${pullWrong:-1}" != 0 ] || [ "${ownTicks:-0}" = 0 ] || [ "${ownRun:-99}" -gt 20 ] ||
