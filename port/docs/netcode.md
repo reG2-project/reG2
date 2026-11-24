@@ -322,6 +322,12 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   16:9 at most, the renderer its aspect) and a narrower one sees less width. The server gives every player's cameras
   that view, so peds and cars spawn and go out of everyone's sight, and a traffic car, which the game spawns 5 blocks
   beyond one camera's edge, isn't spawned where another player's view is (`TrafficSpawner::SpawnTrafficCar`).
+- **What is on screen is the same on both ends** (`engine/spawn.cpp`, `NetworkViews`): the game decides by what the
+  players see in many places (a ped's AI draws a number only on screen, a fleeing car's route ends off screen, a car
+  blocking a chase goes once off screen), so a client gives every player's cameras the bounds the server's have: the
+  network view whatever its window or the size the others' cameras have here (640x480), grown by each client's lead,
+  which the snapshots carry (the world entity's; a client resimulates with the last it got). The cameras follow the same peds and cars on both ends, so they agree but for a misprediction; a player
+  a snapshot moves more than 8 blocks (its first snapshot, a respawn) gets its camera there at once, as the server's.
 - **Joining and leaving** (`engine/slots.cpp`): a slot without a client is out of the game the way the game handles a
   player who left (its ped walks on as a pedestrian). A joining client gets a new player ped at the next restart zone,
   on a block nobody stands on ("Maps and players"), and an empty score. Snapshots carry the slots in the game, and clients mirror them. The others read "BOB joined",
@@ -446,7 +452,7 @@ the original's.
 
 | Entity | Carries |
 |---|---|
-| World (one per snapshot, `engine/world_entity.cpp`) | the game's tick counter (timers are stamped with it), the random seed and stream, the restart zones' turn, the round's state (`core/round_state.hpp`), the game's generation (a map change), the traffic lights, the tag game's fugitive and times, the map's light level (its script sets it: `MapRenderer`'s ambient, its target and step), the police's state that a client's cops, cop cars and HUD read (the highest wanted level, the strongest crew, a crew on screen, the last cop whose shot hit, and each pursuit's criminal, level, state, timer and crews) |
+| World (one per snapshot, `engine/world_entity.cpp`) | the game's tick counter (timers are stamped with it), the random seed and stream, the restart zones' turn, the round's state (`core/round_state.hpp`), the game's generation (a map change), the traffic lights, the tag game's fugitive and times, the map's light level (its script sets it: `MapRenderer`'s ambient, its target and step), the police's state that a client's cops, cop cars and HUD read (the highest wanted level, the strongest crew, a crew on screen, the last cop whose shot hit, and each pursuit's criminal, level, state, timer and crews), and each player's lead (its view, "What is on screen is the same on both ends") |
 | Player (`engine/players.cpp`) | place, input, health, death count and last killer, weapons and the ammo of all 28 (a car weapon the car here lacks is added to it), frags and points, the HUD's money and multiplier, power-up timers, its car, the chat line, its phase (`engine/phases.cpp`: thrown, lying, sinking, electrocuted, at a car door, and a throw's object) |
 | Car (`engine/cars.cpp`, `car_ai.cpp`) | place, its whole `CarPhysics` (but its two pointers), damage, its wreck's fire, lights, horn, colour, its roof turret's angle, the trailer it tows (towed trailers sent too), its proofs and alarm (`Car::mFlags`), its driver, and its AI (`CarAI`: route, speed, the cars it chases) |
 | Ped (`engine/ped_state.cpp`) | place, and the plain values its AI runs on (objectives, targets, speeds, timers, occupation, flags, health, death cause), its states, its references (targets, group), its car and seat, and its phase as a player's |
@@ -756,7 +762,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 
 | Where | Hook | |
 |---|---|---|
-| `Game.cpp` | `gPortAfterPlayersHook` | after the players' tick, before anything spawns: the server's camera lead |
+| `Game.cpp` | `gPortAfterPlayersHook` | after the players' tick, before anything spawns: every player's view, the same on both ends |
 | `Game.cpp` | `gPortExtraPlayerPeds` | at boot, after the level start: a ped for each player past the script's `PLAYER_PED`s |
 | `Ped.cpp` | `gPortSpawnBlock` | a ped starting at a restart zone: a block of it no other player stands on |
 | `Game.cpp`, `sound_obj.cpp` | `gPortWorldStill` | the results: nothing runs but the players' tick and the HUD; the world's sounds stop |
