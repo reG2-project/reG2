@@ -488,7 +488,7 @@ molotov's fire) are their carrier's.
 The burning debris a large blast throws (loose fires: `explosion_fragments_127` with a fire and a light, at the blast's
 timers 89 to 59) are shots too, but sent as they are at each tick, place, motion and fire's timer (0: out), not as
 they started: their way is the blast's last particle's (`Explosion::mSpawnAngle`), which depends on what each end
-draws. A client puts its own at the server's state and makes the ones it lacks at it, with no catch-up. In a network game
+shows. A client puts its own at the server's state and makes the ones it lacks at it, with no catch-up. In a network game
 a blast throws them whether a player sees it or not (`gPortBlastDebris`; the cameras differ between the ends), and on a
 client one it didn't predict (a car's, one made from a snapshot) throws none: the server's come. Not synced: bullets, flames and other
 shots that don't throw (their hits on players are the server's), and the client's guesses beyond its reach.
@@ -500,9 +500,13 @@ simulating the whole map. A client here simulates its own area only, so every dr
 would move every later draw of the client's. In a network game the draws have owners (`port/src/rand/owner.hpp`): each
 ped's update (with its char's), each car's, and each service only the server runs draws a hash of the game's seed, the
 owner (its net id, or the service), the tick and how many it drew in this update. An entity then decides the same way
-wherever it is simulated. The same owners make the shots' prediction keys ("Entities"). Draws without an owner (a player's controls, objects, explosions) stay the one stream, which
-the world entity carries. Sound and particles draw from streams of their own (`port/src/rand/sound.hpp`, `particle.hpp`),
-so muting sound in a resimulation, or the particles there are, don't move the game's draws. Outside a network game
+wherever it is simulated. The same owners make the shots' prediction keys ("Entities"), and a shot (an object with a
+key, a thrown ped's object included) owns its own draws. On a client, the peds and cars the server doesn't have own
+theirs too. Draws without an owner (a player's controls, objects without a key) stay the one stream, which the world
+entity carries. Cosmetics never draw from it: sound and particles have streams of their own
+(`port/src/rand/sound.hpp`, `particle.hpp`), and so do a blast's particles and the electro gun's arc
+(`Explosion.cpp`, `DrawElectricArc`), which the screen and the particle pool decide, so what each end shows, or
+muting sound in a resimulation, doesn't move the game's draws. The shots check sees the stream at every snapshot. Outside a network game
 none of this is on, and the port draws exactly as `10.5.exe`.
 
 ### The rollback set
@@ -765,7 +769,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
 | `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
 | `Pool.hpp`, `Car.cpp`, `Char_Pool.cpp`, `Game.cpp` | `PortRand::Scope` (`port/src/rand/owner.hpp`) | who a random draw belongs to, and who makes a shot |
-| `sound_obj.*`, `ParticleManager.cpp`, `Particle_4C.cpp` | `port/src/rand/sound.hpp`, `particle.hpp` | their own random streams; `SoundPosEntry` from the pool; `sound_obj`'s state public for the rollback |
+| `sound_obj.*`, `ParticleManager.cpp`, `Particle_4C.cpp`, `Explosion.cpp`, `Weapon.cpp` (`DrawElectricArc`) | `port/src/rand/sound.hpp`, `particle.hpp` | their own random streams; `SoundPosEntry` from the pool; `sound_obj`'s state public for the rollback |
 
 The game's own multiplayer assumed one machine per player in places; under `GTA2_PORT` a network game fixes them:
 the view (`winmain.cpp`'s `ReadScreenSettings`, `PortCameraZoom`) and the traffic spawn (`Car.cpp`) above, the police
@@ -816,8 +820,9 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
 - **shots**: armed bots, a server's own rocket, grenade or molotov beside a bot every 60 ticks (`GTA2_NET_TESTSHOT`)
   and a human:fight bot client at 60 ms, the blend off, with a rocket of its own the server never fires
   (`GTA2_NET_TESTGHOSTSHOT`): the shots it predicted keep their keys (no more than one in five made or removed within
-  the reach; a burning debris made is the server's, of a car's blast or one beyond the reach), it makes the server's own, and the ghost goes at the next snapshot and never shows again. Red with
-  `GTA2_NET_SHOTSKEW=1`.
+  the reach; a burning debris made is the server's, of a car's blast or one beyond the reach), it makes the server's own, and the ghost goes at the next snapshot and never shows again
+  (one that hit a wall at once is gone by itself). The game's random stream is the server's at every snapshot but the
+  first (`GTA2_NET_COMPARE`), with blasts on the server's screen and not the client's. Red with `GTA2_NET_SHOTSKEW=1`.
 - **replay**: recorded sessions replayed against their saved logs: the same, or nondeterministic (a second replay
   differs too), else a regression. `--record` makes new ones; `--save` takes the current build's logs as the baseline
   after an intended change.
@@ -846,13 +851,15 @@ left held) an alarm ends the process with its signal after 5 s.
 **The comparison check** (`GTA2_NET_COMPARE=1` on a client): on each snapshot, with the game restored to the
 snapshot's tick and before it is applied, every mapped entity is captured here and compared with the server's, field
 by field; every 300 frames the fields that differ most and how often (the cops apart, and the paramedics on a line of their own). A measure, not a pass: remote players and AI
-peds are predicted, so they differ.
+peds are predicted, so they differ. A line of its own counts the snapshots at which the game's random stream was the
+server's: it should be all of them.
 
 **The divergence check** (`GTA2_NET_DIVERGE=<server tick>[:<ticks>]`, 300 by default): the client reconciles up to that
 tick, then runs on its own; each later snapshot is compared with its save of that tick, and at the end it prints per
 field after how many ticks each entity first differed. Below the fields, `GTA2_NET_DUMPPEDS` dumps every ped's bytes
 on both ends (`port/net/scripts/ped_diff.py` names the members that differ) and `GTA2_NET_RANDLOG` each `rand()` draw's
-caller (`port/net/scripts/rand_diff.py` counts them per tick and function).
+caller and whether an owner drew it (`port/net/scripts/rand_diff.py` counts them per tick and function, `--stream` the
+game's stream's only).
 
 ### Environment variables
 
@@ -937,9 +944,9 @@ own (`single`) and rollback in scenes with explosions (`explode`).
 ## Open
 
 - **Typing on the network page with a gamepad**: the address and name take the keyboard only.
-- **A blast's particles** are drawn only on screen and while the particle pool has room, and they take random draws
-  and set the debris' way: the two ends differ there until the snapshot (it brings the debris and the game's stream). The game's
-  other on-screen tests spawn or despawn (traffic, peds, buses, roadblocks): a client runs none of them.
+- **A blast's particles** are drawn only on screen and while the particle pool has room, and they set the debris'
+  way: the two ends differ there until the snapshot (it brings the debris). The game's other on-screen tests spawn or
+  despawn (traffic, peds, buses, roadblocks): a client runs none of them.
 - **Other players at car doors**: most of the remaining large corrections of other players are with the server at a
   door. Next: a remote player the server has at a door put there at once instead of walked there by its predicted
   inputs, measured on recorded sessions (`GTA2_NET_COMPARE`, `GTA2_NET_JERKLOG`).
