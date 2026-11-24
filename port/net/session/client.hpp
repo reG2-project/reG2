@@ -135,6 +135,7 @@ class Client
     void StartOver(); // a new game (the next map): synced again from its first snapshot
     void Resync(const Snapshot& snap);
     void Reconcile(const Snapshot& snap);
+    void Resimulate(uint32_t s);
     void MeasureShownError(const Snapshot& snap);
     void TakePlayerStates(const Snapshot& snap);
     void Blend(const std::vector<engine::Pose>& shown);

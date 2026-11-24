@@ -159,7 +159,12 @@ void net::engine::RestoreGame(const SavedWorld& in)
     memcpy((unsigned char*)&gSound_obj + radio, sRadio, sizeof(sRadio));
     gSound_obj.mnActiveSamples = active;
     RestoreReplicas(in.mImpl->replicas);
-    SoundLogRestored(in.tick);
+    ResimFrom(in.tick);
+}
+
+void net::engine::ResimFrom(uint32_t tick)
+{
+    SoundLogRestored(tick);
     sFirstResim = true;
 }
 

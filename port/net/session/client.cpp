@@ -558,9 +558,10 @@ void net::Client::Reconcile(const Snapshot& snap)
         mProbe.CompareAlone(snap, saved, *mSaves[mTick % kSaves]);
         return;
     }
-    if (!saved || !saved->valid || saved->tick != s || !engine::Restorable(*saved))
+    const bool restore = saved && saved->valid && saved->tick == s && engine::Restorable(*saved);
+    if (!saved)
     {
-        engine::Apply(snap); // too old (or too new, or saved with another rollback set) to reconcile: take it as it is
+        engine::Apply(snap); // too old (or too new) to reconcile: take it as it is
         mProbe.AfterPlainApply(snap);
         mStats.plainApplies += mSynced;
         engine::ApplyScores(snap);
@@ -574,15 +575,48 @@ void net::Client::Reconcile(const Snapshot& snap)
         return (double)std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
     };
     const Clock::time_point start = Clock::now();
-    mStats.staleRestores += mStale[s % kSaves];
-    engine::RestoreGame(*saved);
-    mProbe.AfterRestore(snap);
-    mStats.changed += engine::Differs(snap);
+    if (restore)
+    {
+        mStats.staleRestores += mStale[s % kSaves];
+        engine::RestoreGame(*saved);
+        mProbe.AfterRestore(snap);
+        mStats.changed += engine::Differs(snap);
+    }
+    else
+    {
+        // Its save lost (a jump) or taken with another rollback set: the server's state on the game as it is, and its
+        // ticks since run again, so the game stays at our tick
+        engine::ResimFrom(s);
+        mStats.plainApplies += mSynced;
+    }
     engine::Apply(snap);
+    if (!restore)
+    {
+        mProbe.AfterPlainApply(snap);
+    }
     engine::ApplyScores(snap); // the resimulated ticks and their saves carry the server's scores
     mProbe.AfterApply(snap, mTick);
     Clock::time_point mark = Clock::now();
     mStats.restoreUs += us(start, mark);
+    Resimulate(s);
+    mark = Clock::now();
+    const double total = us(start, mark);
+    mStats.reconcileWorstUs = total > mStats.reconcileWorstUs ? total : mStats.reconcileWorstUs;
+    engine::PutLocalChat(chat);
+    mStats.reconciles++;
+    mLink.reconciles++;
+    engine::ApplyScores(snap);
+    Blend(before);
+}
+
+// The ticks after <s> again, to ours, with the inputs we used (other players: their last known input)
+void net::Client::Resimulate(uint32_t s)
+{
+    using Clock = std::chrono::steady_clock;
+    const auto us = [](Clock::time_point a, Clock::time_point b) {
+        return (double)std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
+    };
+    Clock::time_point mark = Clock::now();
     std::vector<uint32_t> buttons(mRemote);
     for (uint32_t t = s + 1; t <= mTick; t++)
     {
@@ -616,13 +650,6 @@ void net::Client::Reconcile(const Snapshot& snap)
         mStats.resimTicks++;
         mLink.resimTicks++;
     }
-    const double total = us(start, mark);
-    mStats.reconcileWorstUs = total > mStats.reconcileWorstUs ? total : mStats.reconcileWorstUs;
-    engine::PutLocalChat(chat);
-    mStats.reconciles++;
-    mLink.reconciles++;
-    engine::ApplyScores(snap);
-    Blend(before);
 }
 
 // The correction in steps: what is shown moves from where it was a part of the way to the corrected state each frame
@@ -1104,6 +1131,11 @@ void net::Client::Resync(const Snapshot& snap)
     }
     engine::Apply(snap);
     engine::ApplyScores(snap);
+    if (mTick > snap.tick && mTick - snap.tick < (uint32_t)kSaves)
+    {
+        engine::ResimFrom(snap.tick); // on to our tick: the saves from here on are worlds of their ticks
+        Resimulate(snap.tick);
+    }
 }
 
 // When time is short, on the HUD (who won is the server's notice)

@@ -252,6 +252,7 @@ class SavedWorld
 void SaveGame(SavedWorld& out, uint32_t tick);
 void RestoreGame(const SavedWorld& in);
 bool Restorable(const SavedWorld& in); // saved with the rollback set as it is now
+void ResimFrom(uint32_t tick); // the ticks after <tick> are run again from the game as it is (no save restored)
 // The game restored to the snapshot's tick: whether any state it predicts differs from the snapshot's (compare.cpp)
 bool Differs(const Snapshot& snap);
 // One tick without drawing or sound, with every player's buttons (count: players)
