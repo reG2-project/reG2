@@ -310,12 +310,14 @@ void net::engine::DebugPhase(int player, int what)
             {
                 Fix16 scale;
                 scale.mValue = 0x4000;
-                Car* car = gCarManager_6C->SpawnCarAt(ped->get_cam_x() + Fix16(2 << 14, 0), ped->get_cam_y(), ped->get_cam_z(), 0, car_model_enum::MERC, scale);
+                const Fix16 x = victim->get_cam_x(), y = victim->get_cam_y(), z = victim->get_cam_z();
+                Car* car = gCarManager_6C->SpawnCarAt(x + Fix16(2 << 14, 0), y, z, 0, car_model_enum::MERC, scale);
                 if (car)
                 {
                     printf("net: test phase 4: player %d jacks player %d\n", player, i);
                     car->IncrementCarStats(car_kind::recycled_1);
                     ForceIntoCar(victim, car);
+                    MovePed(ped, x, y, z, Angle(0)); // where the victim stood
                     StartEntering(ped, car);
                     sJacked = true;
                 }
