@@ -464,7 +464,10 @@ class RamBot : public DecidingBot
                 mWalker.GiveUp(v, v.car);
             }
         }
-        if (mWedged >= 4)
+        // Well armed: out to shoot someone on foot near, or with rockets a car (a car runs people over, but a gun
+        // hits them as they dodge)
+        const bool outToShoot = WellArmed(v) && target && (target->inCar ? (v.gunMask >> 2 & 1) && d < 8 : d < 6);
+        if (mWedged >= 4 || outToShoot)
         {
             return v.frame % 20 < 2 ? net::kBtnEnterExit : 0;
         }
@@ -482,8 +485,8 @@ class RamBot : public DecidingBot
     uint32_t mBackUntil = 0;
     net::BotWalker mWalker;
 };
-// The fighter on foot and the rammer in a car: takes a car when one is near and nobody is close, drives at people,
-// and fights on foot otherwise (a teacher for the trained bots: one brain, so what it shows is consistent)
+// The fighter on foot and the rammer in a car: takes a car when one is near, nobody is close and it has the weapon it
+// wants, drives at people, and fights on foot otherwise (a teacher for the trained bots: one brain, so what it shows is consistent)
 class HunterBot : public DecidingBot
 {
   public:
@@ -498,7 +501,12 @@ class HunterBot : public DecidingBot
         float enemy = 0, car = 0;
         Nearest(v, net::BotView::Seen::kPlayer, &enemy);
         Nearest(v, net::BotView::Seen::kCar, &car);
-        mDriving = v.car != 0 || (car < 10 && enemy > 8);
+        if (!v.car && mWasInCar)
+        {
+            mNoCarUntil = v.frame + 300; // out to fight: on foot for a while
+        }
+        mWasInCar = v.car != 0;
+        mDriving = v.car != 0 || (car < 10 && enemy > 8 && v.frame >= mNoCarUntil && !mFoot.WantsWeapon(v));
         // Both see every tick, so their timers and stuck checks stay right whichever decides
         const uint32_t foot = mFoot.Think(v), drive = mCar.Think(v);
         return mDriving ? drive : foot;
@@ -506,7 +514,8 @@ class HunterBot : public DecidingBot
 
     SimpleBot mFoot;
     RamBot mCar;
-    bool mDriving = false;
+    bool mDriving = false, mWasInCar = false;
+    uint32_t mNoCarUntil = 0;
 };
 // The whole round: a weapon first, then a car, then along its route to the nearest player, and there whatever suits:
 // runs it over when coming at it fast and head on, else gets out and shoots. Pinned against someone in a car, it gets
