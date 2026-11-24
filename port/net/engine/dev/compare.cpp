@@ -213,9 +213,8 @@ bool net::engine::Differs(const Snapshot& snap)
         const size_t fields = NetSchema().types[s.type].fields.size();
         for (size_t f = 0; f < fields && !differs; f++)
         {
-            // Not what a resimulation changes: the local player's buttons (it runs with its own), a car's colour (a
-            // remap the apply can't give a model without remaps stays the snapshot's alone)
-            const bool kept = (s.type == kEntityPlayer && s.id == self && f == kPlayerButtons) || (s.type == kEntityCar && f == kCarRemap);
+            // Not what a resimulation changes: the local player's buttons (it runs with its own)
+            const bool kept = s.type == kEntityPlayer && s.id == self && f == kPlayerButtons;
             differs = !kept && Predicted(s.type, f) && h.f[f] != s.f[f];
         }
     });
