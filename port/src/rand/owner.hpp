@@ -26,6 +26,7 @@ enum Service
     kAmbulance,
     kPolice,
     kFireEngines,
+    kSnapshotApply, // a client's apply of a snapshot, once the stream is the server's
 };
 
 // Set by the netcode: the owner key of a ped or a car, the server's net id (0: none, the game's stream)

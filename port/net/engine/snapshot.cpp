@@ -392,6 +392,8 @@ void net::engine::Apply(const Snapshot& snap)
     {
         ApplyWorld(*w);
     }
+    // What the apply starts (a throw's object, a drowning, a death's voice) draws its own numbers, not the server's stream
+    const PortRand::Scope scope(PortRand::kSnapshotApply);
     const s16 zoneTurn = ZoneTurn(); // the server's: a player put in the game here takes a restart zone in its turn
     ApplySlots(snap);
     ZoneTurn() = zoneTurn;
