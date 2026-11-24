@@ -14,6 +14,7 @@
 #include "Source/WeaponManager.hpp"
 #include "Source/sound_obj.hpp"
 #include "Source/Ped.hpp"
+#include "Source/rng.hpp"
 #include "Source/SoundObject.hpp"
 #include "Source/TagGame.hpp"
 #include "port/src/net_hooks.hpp"
@@ -166,10 +167,8 @@ void net::engine::RestoreGame(const SavedWorld& in)
     ResimFrom(in.tick);
 }
 
-void net::engine::ResimFrom(uint32_t tick)
+void net::engine::ResimFrom(uint32_t)
 {
-    SoundLogRestored(tick);
-    ShotVisRollback(tick);
     sFirstResim = true;
 }
 
@@ -183,6 +182,10 @@ void net::engine::ResimTick(const uint32_t* buttons, int count)
     Game* g = gGame_0x40;
     if (sFirstResim)
     {
+        // By the game's cycle, as the logs stamp their ticks: a map change starts it again, not the network's tick
+        const uint32_t cycle = (uint32_t)gpRng->get_cur_rng();
+        SoundLogRestored(cycle);
+        ShotVisRollback(cycle);
         SoundLogResimTick(true); // what the snapshot's Apply left for the sound
         sFirstResim = false;
     }
