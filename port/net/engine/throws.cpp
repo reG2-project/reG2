@@ -188,5 +188,11 @@ void net::engine::GuardThrow(int i, Ped* ped)
     {
         gThrownTick[i] = Tick();
         ped->mPedState2 = ClientOutcome(ped->mPedState2);
+        // Its timeout, counted twice a tick, makes the landing fatal at 0: only a snapshot ends a long throw
+        Char* c = ped->mGameObject;
+        if (c->mTimeout < 3)
+        {
+            c->mTimeout = 3;
+        }
     }
 }
