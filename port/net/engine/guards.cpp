@@ -12,6 +12,7 @@
 #include "Source/Object_3C.hpp"
 #include "Source/Object_5C.hpp"
 #include "Source/sprite.hpp"
+#include "Source/map_0x370.hpp"
 #include "Source/debug.hpp"
 #include "Source/Police.hpp"
 #include "Source/Hud.hpp"
@@ -43,6 +44,26 @@ bool InPassengerList(Car* car, Ped* ped)
     }
     return false;
 }
+
+// A player on foot at the map's bottom (z 1) with no block under it has fallen through the floor, and would walk there
+// for good: onto its column's ground
+void LiftFromUnderMap(Ped* ped)
+{
+    Sprite* s = ped && !ped->mCar && ped->mGameObject ? ped->mGameObject->mSpritePtr : NULL;
+    const s32 state = ped ? ped->mPedState1 : 0;
+    if (!s || !gMap_0x370 || state == ped_state_1::immobilized_8 || state == ped_state_1::dead_9 || s->mZpos.ToInt() > 1)
+    {
+        return;
+    }
+    const s32 x = s->mXy.x.ToInt(), y = s->mXy.y.ToInt();
+    gmp_block_info* floor = gMap_0x370->GetBlock(x, y, 0);
+    s32 z = 0;
+    gmp_block_info* top = gMap_0x370->FindHighestBlockForCoord(x, y, &z);
+    if ((!floor || IS_AIR_TYPE(floor->mSlopeType)) && top && !IS_AIR_TYPE(top->mSlopeType) && z >= 1 && z < 7)
+    {
+        net::engine::MovePed(ped, s->mXy.x, s->mXy.y, Fix16(z + 1), s->mRotation);
+    }
+}
 } // namespace
 
 void net::engine::GuardPeds()
@@ -61,6 +82,7 @@ void net::engine::GuardPeds()
     for (int i = 0; i < PlayerCount(); i++)
     {
         Ped* ped = InGamePed(i);
+        LiftFromUnderMap(ped);
         Car* car = ped ? ped->mCar : NULL;
         if (car && ped->mPedState1 == ped_state_1::in_car_10 && car->mDriver != ped && !InPassengerList(car, ped))
         {
