@@ -4,6 +4,9 @@
 #include "Function.hpp"
 #include "ang16.hpp"
 #include "fix16.hpp"
+#if defined(GTA2_PORT)
+    #include "../port/src/net_hooks.hpp" // gPortGroundedObjects
+#endif
 
 EXTERN_GLOBAL(u32, gObj3C_live_count);
 EXTERN_GLOBAL(u32, gObj3C_dealloc_count);
@@ -83,8 +86,11 @@ class Object_3C
         mbOnSlope = false;
         mbSkipAnim = false;
 #if defined(GTA2_PORT)
-        // Port: airborne only once made so, not by the slot's previous object: a network game's ends start it alike
-        mbAirborne = 0;
+        // Port: in a network game airborne only once made so, not by the slot's previous object (both ends alike)
+        if (gPortGroundedObjects)
+        {
+            mbAirborne = 0;
+        }
 #endif
     }
 

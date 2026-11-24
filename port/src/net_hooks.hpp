@@ -125,6 +125,9 @@ extern bool gPortServerKillAwards;
 // A network game's: the tag game counts the fugitive's seconds (TagGame::ExecuteGamemodeTick) though the game has no
 // time limit (the netcode ends the rounds), whose flag the original counts by
 extern bool gPortTagTimeCounts;
+// A network game's: a new object (Object_3C::PoolAllocate) isn't airborne by its pool slot's previous one, which the
+// server and a client don't share
+extern bool gPortGroundedObjects;
 // A network server's: the character a player's client typed with the key <dik> this tick, in its keyboard's layout
 // (0: none), for its chat line (Hud_ChatInput::HandleChatInputKey); the server's own table is a US keyboard's
 extern u16 (*gPortChatChar)(Player* pPlayer, s32 dik);

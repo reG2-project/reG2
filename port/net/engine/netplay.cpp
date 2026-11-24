@@ -93,6 +93,7 @@ void net::engine::StartNetworkGame(const NetworkGame& game)
     gPortNextNetworkGame = NextNetworkGame;
     gPortWorldStill = WorldStill;
     gPortTagTimeCounts = true;
+    gPortGroundedObjects = true;
     gPortScoreBonusHook = net::engine::ScoreBonus;
     gPortKillCamTicks = KillCamTicks;
     gPortDeathViewPed = DeathCamera;
@@ -136,6 +137,7 @@ void net::engine::StopNetworkGame()
     gPortWorldStill = NULL;
     SoundLogStop();
     gPortTagTimeCounts = false;
+    gPortGroundedObjects = false;
     gPortChatChar = NULL;
     gPortScoreBonusHook = NULL;
     gPortKillCamTicks = NULL;

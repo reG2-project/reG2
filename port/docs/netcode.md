@@ -794,6 +794,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
 | `Player.cpp` | `gPortKillCamTicks`, `gPortDeathViewPed` | the kill cam: a player wasted by another has a longer death countdown (`Player::Wasted`), whose end its view spends on the killer (`Player::Service`, camera mode 2) |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
+| `Object_3C.hpp` | `gPortGroundedObjects` | a new object isn't airborne by its pool slot's previous one, which the server and a client don't share |
 | `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
 | `Pool.hpp`, `Car.cpp`, `Char_Pool.cpp`, `Game.cpp` | `PortRand::Scope` (`port/src/rand/owner.hpp`) | who a random draw belongs to, and who makes a shot |
 | `sound_obj.*`, `ParticleManager.cpp`, `Particle_4C.cpp`, `Explosion.cpp`, `Weapon.cpp` (`DrawElectricArc`) | `port/src/rand/sound.hpp`, `particle.hpp` | their own random streams; `SoundPosEntry` from the pool; `sound_obj`'s state public for the rollback |
