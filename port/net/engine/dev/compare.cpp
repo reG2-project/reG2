@@ -83,13 +83,11 @@ int32_t ServerCarRef(int32_t ref, const std::unordered_map<int32_t, int32_t>& to
 
 namespace
 {
-// Each entity of the snapshot this game has too, with this game's state of it as captured here (its references
-// into the server's ids): fn(server's, here's, its group: 0, 1 a cop, 2 a paramedic)
-template <class Fn> void ForEachPair(const Snapshot& snap, Fn fn)
+// Each entity of <snap> with this game's state of it in <here> (its references as the server's ids): fn(server's, here's,
+// group: 0, 1 a cop, 2 a paramedic); missing[type] counts those mapped but not in <here>, <tally> the cars asleep on one side
+template <class Fn> void ForEachPair(const Snapshot& snap, const Snapshot& here, Fn fn, uint64_t* missing, bool tally)
 {
     using namespace net::engine;
-    Snapshot here;
-    Capture(here);
     std::unordered_map<uint32_t, const EntityState*> byId;
     for (const EntityState& e : here.entities)
     {
@@ -145,11 +143,11 @@ template <class Fn> void ForEachPair(const Snapshot& snap, Fn fn)
         auto it = byId.find(local);
         if (it == byId.end())
         {
-            gMissing[s.type]++;
+            missing[s.type]++;
             continue;
         }
         EntityState h = *it->second;
-        if (s.type == kEntityCar && CarHasPhysics(h) != CarHasPhysics(s))
+        if (tally && s.type == kEntityCar && CarHasPhysics(h) != CarHasPhysics(s))
         {
             (CarHasPhysics(s) ? gAsleepHere : gAsleepThere)++;
         }
@@ -204,12 +202,42 @@ bool Predicted(uint32_t type, size_t f)
 }
 } // namespace
 
+// The players and the cars they sit in (and the world): what the user sees corrected, a few entities to capture
 bool net::engine::Differs(const Snapshot& snap)
 {
-    const uint64_t missing = std::accumulate(gMissing, gMissing + 8, (uint64_t)0);
+    Snapshot players, here;
+    std::vector<uint32_t> cars;
+    for (const EntityState& e : snap.entities)
+    {
+        if (e.type == kEntityWorld || e.type == kEntityPlayer)
+        {
+            players.entities.push_back(e);
+            cars.push_back(e.type == kEntityPlayer ? PlayerCarId(e) : 0);
+        }
+    }
+    for (const EntityState& e : snap.entities)
+    {
+        if (e.type == kEntityCar && std::find(cars.begin(), cars.end(), e.id) != cars.end())
+        {
+            players.entities.push_back(e);
+        }
+    }
+    CaptureWorld(here);
+    for (int i = 0; i < PlayerCount(); i++)
+    {
+        CapturePlayer(i, here);
+    }
+    for (uint32_t id : cars)
+    {
+        if (Car* c = id ? ReplicaCar(id) : NULL)
+        {
+            CaptureCar(c, here);
+        }
+    }
+    uint64_t missing[8] = {};
     const uint32_t self = (uint32_t)LocalPlayer() + 1;
     bool differs = false;
-    ForEachPair(snap, [&](const EntityState& s, const EntityState& h, int) {
+    ForEachPair(players, here, [&](const EntityState& s, const EntityState& h, int) {
         const size_t fields = NetSchema().types[s.type].fields.size();
         for (size_t f = 0; f < fields && !differs; f++)
         {
@@ -217,14 +245,16 @@ bool net::engine::Differs(const Snapshot& snap)
             const bool kept = s.type == kEntityPlayer && s.id == self && f == kPlayerButtons;
             differs = !kept && Predicted(s.type, f) && h.f[f] != s.f[f];
         }
-    });
-    return differs || std::accumulate(gMissing, gMissing + 8, (uint64_t)0) != missing; // or one it has that this game lacks
+    }, missing, false);
+    return differs || std::accumulate(missing, missing + 8, (uint64_t)0) != 0; // or one it has that this game lacks
 }
 
 void net::engine::ComparePrediction(const Snapshot& snap)
 {
     EnsureTally(gTally);
-    ForEachPair(snap, [](const EntityState& s, const EntityState& h, int group) {
+    Snapshot here;
+    Capture(here);
+    ForEachPair(snap, here, [](const EntityState& s, const EntityState& h, int group) {
         if (s.type == kEntityWorld && gStreamSnaps++) // the first: drawn before this client had any of the server's
         {
             gStreamSame += h.f[kWorldRand] == s.f[kWorldRand];
@@ -246,7 +276,7 @@ void net::engine::ComparePrediction(const Snapshot& snap)
                 tally[f].absSum += fabs((double)h.f[f] - (double)s.f[f]);
             }
         }
-    });
+    }, gMissing, true);
 }
 
 // --- The divergence check (GTA2_NET_DIVERGE, port/docs/netcode.md "Checks"): the server's state applied once, then this
@@ -291,7 +321,9 @@ void net::engine::CompareDivergence(const Snapshot& snap, uint32_t age)
         gDiverged.back().resize(schema.types[kEntityPed].fields.size());
     }
     const uint64_t missingBefore = gMissing[kEntityCar] + gMissing[kEntityPed];
-    ForEachPair(snap, [&](const EntityState& s, const EntityState& h, int group) {
+    Snapshot here;
+    Capture(here);
+    ForEachPair(snap, here, [&](const EntityState& s, const EntityState& h, int group) {
         const size_t t = group == 1 ? gDiverged.size() - 1 : s.type;
         gComparedEntities[(uint32_t)t * 0x10000000u + (s.id & 0x0FFFFFFF)] = 1;
         std::vector<Divergence>& d = gDiverged[t];
@@ -309,7 +341,7 @@ void net::engine::CompareDivergence(const Snapshot& snap, uint32_t age)
                 x.first[AgeBucket(age)]++;
             }
         }
-    });
+    }, gMissing, true);
     gDivergeMissing[kEntityCar] += gMissing[kEntityCar] + gMissing[kEntityPed] - missingBefore; // Cars and peds together
     gMissing[kEntityCar] = gMissing[kEntityPed] = 0;
 }
