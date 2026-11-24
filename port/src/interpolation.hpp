@@ -27,6 +27,8 @@ void LaidMoving(Sprite* pSprite, s32 dx, s32 dy);
 void Correcting(const Sprite* pSprite);
 // Around a draw; alpha in [0, 1] is the fraction of the next step already elapsed.
 void Apply(f32 alpha);
+// In its place at the original's 30 fps, nothing drawn in between: the shots sliding from a gun alone
+void ApplySlidesOnly(f32 alpha);
 void Restore();
 // Whether a sprite turned no further this step than a car steers (its attached objects are then drawn on it)
 bool Steered(const Sprite* pSprite);

@@ -684,6 +684,19 @@ void Apply(f32 alpha)
     }
 }
 
+void ApplySlidesOnly(f32 alpha)
+{
+    sSaved.clear();
+    memset(sSavedAt, 0xFF, sizeof(sSavedAt));
+    spAppliedCamera = NULL;
+    sArrowsApplied = false;
+    sDrawTime = sSteps + static_cast<f64>(alpha);
+    if (gSpritePool)
+    {
+        ApplySlides();
+    }
+}
+
 void Restore()
 {
     for (s32 i = 0; sArrowsApplied && i < kNumArrows; i++)
