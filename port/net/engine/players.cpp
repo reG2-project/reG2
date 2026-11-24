@@ -438,7 +438,7 @@ void net::engine::CapturePlayer(int i, Snapshot& out)
     }
     e.f[kPlayerCar] = CarRef(ped->mCar);
     e.f[kPlayerState] = (InCarTransition(ped) ? kPlayerTransition : 0) | (ped->isDead() ? kPlayerDead : 0) | (LeavingCar(ped) ? kPlayerLeaving : 0) |
-                         (ped->mBf21C.bOnFire ? kPlayerOnFire : 0);
+                         (ped->mBf21C.bOnFire ? kPlayerOnFire : 0) | PhaseBits(ped);
     e.f[kPlayerTarget] = ped->get_objective() == objectives_enum::enter_car_as_driver_35 ? CarRef(ped->mTargetObjectiveCar) : 0;
     PackName(p, e);
     PackChat(p, e);
@@ -516,6 +516,7 @@ void net::engine::ApplyPlayer(const EntityState& e)
     }
     ShowServerHit(i, ped, e);
     ApplyThrow(ped, e); // first: a death carried out on a thrown ped takes at its landing, as the server's
+    ApplyPhases(ped, e);
     if (CarryOutDeath(i, p, ped, e))
     {
         return;

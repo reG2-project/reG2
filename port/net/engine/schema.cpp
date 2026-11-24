@@ -33,7 +33,7 @@ net::Schema BuildSchema()
                                          {"frags", 12, true}, {"points", 32, true}}};
     AppendNumbered(player.fields, "ammo", kPlayerWeapons, 16);
     player.fields.push_back(FieldDesc{"car", 25, false}); // kPlayerCar
-    player.fields.push_back(FieldDesc{"state", 4, false}); // kPlayerState
+    player.fields.push_back(FieldDesc{"state", 6, false}); // kPlayerState
     player.fields.push_back(FieldDesc{"target", 25, false}); // kPlayerTarget
     AppendNumbered(player.fields, "name", kPlayerNameEnd - kPlayerName, 32);
     AppendNumbered(player.fields, "power", kPowerUps, 16);
