@@ -4,6 +4,7 @@
 // Local cars and peds the server doesn't know (other than the players' own) are removed.
 #include "internal.hpp"
 #include "dev/dev.hpp"
+#include "port/src/interpolation.hpp"
 #include "port/src/rand/owner.hpp"
 #include "Source/Car.hpp"
 #include "Source/Char_Pool.hpp"
@@ -876,6 +877,7 @@ void net::engine::SetReplicaPose(const Pose& p)
         Ped* ped = ReplicaPed(p.id);
         if (ped && !ped->mCar)
         {
+            PortInterp::Correcting(CharSprite(ped));
             MovePed(ped, Raw(p.x), Raw(p.y), Raw(p.z), Angle(p.rot));
         }
     }
@@ -883,6 +885,7 @@ void net::engine::SetReplicaPose(const Pose& p)
     {
         if (car->mCarSprite)
         {
+            PortInterp::Correcting(car->mCarSprite);
             MoveCar(car, Raw(p.x), Raw(p.y), Raw(p.z), Angle(p.rot));
         }
     }

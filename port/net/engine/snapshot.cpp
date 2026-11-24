@@ -6,6 +6,7 @@
 #include <algorithm>
 #include "port/src/rand/owner.hpp"
 #include "port/src/menu.hpp"
+#include "port/src/interpolation.hpp"
 #include "port/src/net_hooks.hpp"
 #include "port/src/pause_menu.hpp"
 #include "port/src/rand/state.hpp"
@@ -445,6 +446,7 @@ void net::engine::SetPose(const Pose& pose)
         // Thrown, its char follows the throw's object: the object goes the same way
         if (const Sprite* s = CharSprite(ped))
         {
+            PortInterp::Correcting(s);
             MoveThrow(ped, pose.x - s->mXy.x.mValue, pose.y - s->mXy.y.mValue);
         }
         MovePed(ped, Raw(pose.x), Raw(pose.y), Raw(pose.z), Angle(pose.rot));
