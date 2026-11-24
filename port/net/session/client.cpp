@@ -528,8 +528,9 @@ void net::Client::TakePlayerStates(const Snapshot& snap)
     }
 }
 
-// The server's forwarded controls for that tick if it sent them, else the held input. With no snapshot for a while the
-// held one is let go: the fire after 5 ticks, the rest after 10 (nobody runs on or shoots on through a stall)
+// The server's forwarded controls for that tick if it sent them, else the held input without fire: another player's
+// shots past what the server forwarded come from the resimulation of its forwarded ticks, never from a guess. With no
+// snapshot for a while the rest of the held input is let go after 10 ticks (nobody runs on through a stall)
 uint32_t net::Client::RemoteInput(int player, uint32_t tick) const
 {
     const uint32_t k = tick - mKnownTick - 1;
@@ -542,7 +543,8 @@ uint32_t net::Client::RemoteInput(int player, uint32_t tick) const
     {
         printf("net: frame %u, no snapshot for 10 ticks: player %d's held input 0x%x let go\n", mFrame, player, mRemote[player]);
     }
-    return stalled > 10 ? 0 : stalled > 5 ? mRemote[player] & ~(uint32_t)kBtnAttack : mRemote[player];
+    const bool fire = Env().holdFire && stalled <= 5;
+    return stalled > 10 ? 0 : fire ? mRemote[player] : mRemote[player] & ~(uint32_t)kBtnAttack;
 }
 
 // A snapshot of tick S: back to the game as it was after S, the server's state on top, then the ticks since then
