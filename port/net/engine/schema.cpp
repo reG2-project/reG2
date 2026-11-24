@@ -104,6 +104,7 @@ net::Schema BuildSchema()
     AppendNumbered(world.fields, "pursuit_timer", 4, 16);
     AppendNumbered(world.fields, "pursuit_crews", 4, 3);
     AppendNumbered(world.fields, "pursuit_chased", 4, 1);
+    AppendNumbered(world.fields, "lead", MAX_PLAYERS, 5); // kWorldLead
     net::EntityType object = {"object", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"model", 9, false}, {"idx", 8, false},
                                          {"age", 6, false}}};
     net::EntityType train = {"train", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"wagons", 4, false},

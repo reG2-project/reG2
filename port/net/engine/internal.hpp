@@ -137,6 +137,7 @@ enum WorldField
     kWorldPursuitTimer = kWorldPursuitState + 4,
     kWorldPursuitCrews = kWorldPursuitTimer + 4,
     kWorldPursuitChased = kWorldPursuitCrews + 4,
+    kWorldLead = kWorldPursuitChased + 4, // each player's lead (SpawnLead): its view is the same on both ends
 };
 enum CarField
 {
