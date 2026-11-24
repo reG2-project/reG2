@@ -1482,6 +1482,7 @@ void net::Client::Frame()
     engine::GuardPeds(); // again: the snapshot this frame applied comes before the next tick
     engine::GuardFatalPhases(); // a fatal throw of the frame's last tick is drawn knocked down
     engine::AnchorAttachments(); // the frame is drawn next
+    engine::ShotVisFrame();
     mProbe.FrameEnd();
 }
 

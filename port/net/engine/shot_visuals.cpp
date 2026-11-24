@@ -1,0 +1,200 @@
+// port/net (port/docs/netcode.md, "Other players' shots shown"): a client's bullets of other players come from the ticks the
+// server forwarded, made in a resimulation, so already in flight when first drawn, or born and gone before any frame.
+// The first slide from the shooter's gun (PortInterp::SlideFrom), the others leave a flash and a tracer
+// (PortShotTrails). Display only: what is simulated and hit stays as it is.
+#include "internal.hpp"
+#include "port/src/interpolation.hpp"
+#include "port/src/rand/owner.hpp"
+#include "port/src/shot_trails.hpp"
+#include "Source/Game.hpp"
+#include "Source/Object_3C.hpp"
+#include "Source/Object_5C.hpp"
+#include "Source/Ped.hpp"
+#include "Source/Player.hpp"
+#include "Source/enums.hpp"
+#include "Source/rng.hpp"
+#include "Source/sprite.hpp"
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <map>
+#include <tuple>
+#include <unordered_map>
+
+unsigned port_FrameCount(); // port/compat/src/video_port.cpp
+
+namespace
+{
+using namespace net::engine;
+
+const float kMuzzle = 0.25f; // blocks ahead of the ped a gun's shot starts (Weapon::pistol and the others)
+const uint32_t kMostAge = 64; // ticks a record is kept at most
+
+// GTA2_NET_SHOTVIS=0: only measured (comfort.cpp), to compare
+bool On()
+{
+    static const char* v = getenv("GTA2_NET_SHOTVIS");
+    return !v || *v != '0';
+}
+
+// GTA2_NET_SHOTLOG: each shown so, by the frame it is first drawn at (GTA2GL_CAPTURE's)
+bool LogOn()
+{
+    static const bool on = getenv("GTA2_NET_SHOTLOG") != NULL;
+    return on;
+}
+
+bool GunShot(int model)
+{
+    return model == objects::pistol_bullet_265 || model == objects::machine_gun_bullet_254 || model == objects::shotgun_bullet_192 ||
+           model == objects::rocket_bullet_128;
+}
+
+uint32_t Cycle()
+{
+    return gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+}
+
+// A shot as the shooter made it: the same in every resimulation of its tick
+typedef std::tuple<const Ped*, uint32_t, int> Key; // its shooter, tick and number in that tick
+
+struct Record
+{
+    Object* o;
+    Sprite* s;
+    s16 id; // its sprite's instance id
+    int model;
+    const Ped* shooter;
+    uint32_t tick;
+    float x, y, z; // where it started
+    float lx, ly, lz; // where a tick last left it
+    float dx, dy; // a tick's way
+    bool seen; // at the end of a tick
+    bool drawn; // at the end of a frame
+    bool ended;
+    bool pending; // its tick resimulated since, not made again yet
+};
+
+std::map<Key, Record> gRecords;
+std::unordered_map<const Ped*, int> gMadeThisTick;
+
+bool Alive(const Record& r)
+{
+    return r.o->mSprite == r.s && r.s->mInstanceId == r.id && GunShot(r.o->mModel);
+}
+
+void See(Record& r)
+{
+    if (r.pending || r.ended)
+    {
+        return;
+    }
+    if (!Alive(r))
+    {
+        r.ended = true;
+        return;
+    }
+    r.lx = r.s->mXy.x.ToFloat(), r.ly = r.s->mXy.y.ToFloat(), r.lz = r.s->mZpos.ToFloat();
+    r.seen = true;
+    r.ended = r.o->mRemovalState != 0; // a hit: where it stops
+}
+} // namespace
+
+void net::engine::ShotVisMade(Object* o)
+{
+    const Ped* p = PortRand::gLastPed; // the ped whose update runs: its weapon fires (Ped::ManageWeapon)
+    const Player* local = gGame_0x40 ? gGame_0x40->mLocalPlayer : NULL;
+    if (!GunShot(o->mModel) || !o->mSprite || !p || !p->mPlayer || (local && local->mPlayerPed == p) || p->mCar)
+    {
+        return;
+    }
+    const Sprite* ps = CharSprite(p);
+    const float x = o->mSprite->mXy.x.ToFloat(), y = o->mSprite->mXy.y.ToFloat();
+    if (!ps || fabsf(x - ps->mXy.x.ToFloat()) > 2 * kMuzzle || fabsf(y - ps->mXy.y.ToFloat()) > 2 * kMuzzle)
+    {
+        return; // not its gun's
+    }
+    const Key key(p, Cycle(), gMadeThisTick[p]++);
+    Record& r = gRecords[key];
+    const bool again = r.o != NULL;
+    const bool drawn = r.drawn;
+    r = Record();
+    r.o = o, r.s = o->mSprite, r.id = o->mSprite->mInstanceId, r.model = o->mModel, r.shooter = p, r.tick = Cycle();
+    r.x = r.lx = x, r.y = r.ly = y, r.z = r.lz = o->mSprite->mZpos.ToFloat();
+    const float speed = o->mObj3c ? o->mObj3c->mSpeed.ToFloat() : 0;
+    r.dx = o->mObj3c ? speed * Ang16::sine(o->mObj3c->mAngle).ToFloat() : 0;
+    r.dy = o->mObj3c ? speed * Ang16::cosine(o->mObj3c->mAngle).ToFloat() : 0;
+    r.drawn = again && drawn;
+}
+
+void net::engine::ShotVisTick()
+{
+    gMadeThisTick.clear();
+    for (auto& kv : gRecords)
+    {
+        See(kv.second);
+    }
+}
+
+void net::engine::ShotVisRollback(uint32_t tick)
+{
+    for (auto& kv : gRecords)
+    {
+        Record& r = kv.second;
+        if ((int32_t)(r.tick - tick) > 0)
+        {
+            r.pending = true;
+        }
+        else
+        {
+            r.ended = false; // the restored world has it again
+        }
+    }
+}
+
+void net::engine::ShotVisFrame()
+{
+    const uint32_t now = Cycle();
+    for (auto it = gRecords.begin(); it != gRecords.end();)
+    {
+        Record& r = it->second;
+        See(r);
+        const Sprite* ps = CharSprite(r.shooter);
+        if (r.pending || now - r.tick > kMostAge)
+        {
+            it = gRecords.erase(it); // never fired in the corrected game
+            continue;
+        }
+        if (!r.ended)
+        {
+            if (!r.drawn && ps)
+            {
+                PortInterp::SlideFrom(r.s, ps, kMuzzle, On());
+                if (LogOn())
+                {
+                    printf("net: SHOTVIS slide frame %u tick %u: model %d %u ticks old\n", port_FrameCount() + 1, now, r.model, now - r.tick);
+                }
+            }
+            r.drawn = true;
+            ++it;
+            continue;
+        }
+        if (On() && !r.drawn && r.model != objects::rocket_bullet_128)
+        {
+            // To where it hit: a tick on from where the last tick left it
+            PortShotTrails::Add(ps, kMuzzle, r.x, r.y, r.z, r.lx + r.dx, r.ly + r.dy, r.lz);
+            if (LogOn())
+            {
+                printf("net: SHOTVIS trail frame %u tick %u: model %d made %u, %s\n", port_FrameCount() + 1, now, r.model, r.tick,
+                       r.seen ? "seen at a tick" : "gone in its first");
+            }
+        }
+        it = gRecords.erase(it);
+    }
+}
+
+void net::engine::ClearShotVis()
+{
+    gRecords.clear();
+    gMadeThisTick.clear();
+}

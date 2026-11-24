@@ -81,6 +81,8 @@ void ClientModeFrame();
 // Cars' attached objects (a tank's turret, a fire engine's cannon) back on their cars, after the client moved the cars
 // (a snapshot, the blend): the game puts them there in the car's own update, before that (Object::UpdateMovementAndEffects)
 void AnchorAttachments();
+// Before a client's frame is drawn: its other players' shots first shown slid from the gun, or flashed (shot_visuals.cpp)
+void ShotVisFrame();
 // After every tick, on the server too: what the game's own logic can leave behind that crashes it later (guards.cpp)
 void GuardPeds();
 void GuardFatalPhases(); // a client's: the server's peds' fatal phase steps held (also before each tick)

@@ -810,6 +810,7 @@ void ClientTickStart()
     ProtectPlayers(); // before every tick, live or resimulated: a frame may run several
     DebugGhostShot();
     DebugLocalPhase();
+    ShotVisTick();
 }
 } // namespace
 

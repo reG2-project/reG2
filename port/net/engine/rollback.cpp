@@ -168,6 +168,7 @@ void net::engine::RestoreGame(const SavedWorld& in)
 void net::engine::ResimFrom(uint32_t tick)
 {
     SoundLogRestored(tick);
+    ShotVisRollback(tick);
     sFirstResim = true;
 }
 

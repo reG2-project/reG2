@@ -229,6 +229,10 @@ std::vector<std::pair<Object*, uint32_t>>* gCatchUpMade; // while a made shot is
 void ObjectMade(Object* o)
 {
     SetKey(o, KeyedModel(o->mModel) ? PortRand::NextObjectKey() ^ gKeySkew : 0);
+    if (gClient)
+    {
+        ShotVisMade(o);
+    }
     if (gCatchUpMade && KeyOf(o))
     {
         gCatchUpMade->push_back(std::make_pair(o, KeyOf(o)));
@@ -434,6 +438,7 @@ void net::engine::ClearShots()
 {
     gStarts.clear();
     gMadeHere.clear();
+    ClearShotVis();
 }
 
 void net::engine::CaptureShots(Snapshot& out)

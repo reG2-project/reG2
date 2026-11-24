@@ -471,6 +471,11 @@ void ApplyShots(const Snapshot& snap);
 void InstallShots(bool on, bool client); // the game's hooks for the keys and a client's blasts
 uint32_t ShotKey(const Object* o); // its prediction key, 0: none
 void ClearShots(); // a new game
+// Other players' gun shots as a client shows them (shot_visuals.cpp): each made, each tick's start, a rollback to <tick>
+void ShotVisMade(Object* o);
+void ShotVisTick();
+void ShotVisRollback(uint32_t tick);
+void ClearShotVis();
 extern int gShotsKept, gShotsMade, gShotsRemoved, gShotsBeyond; // for the log
 
 // This game's live cars and peds (a mapped one may have been removed by the game since; stats.cpp)
