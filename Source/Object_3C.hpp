@@ -82,6 +82,10 @@ class Object_3C
         mUnused24 = 0;
         mbOnSlope = false;
         mbSkipAnim = false;
+#if defined(GTA2_PORT)
+        // Port: airborne only once made so, not by the slot's previous object: a network game's ends start it alike
+        mbAirborne = 0;
+#endif
     }
 
     // 9.6f 0x482B80
