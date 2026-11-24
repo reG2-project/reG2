@@ -16,7 +16,7 @@
 #           random stream is the server's at every snapshot (cosmetics draw from their own)
 #   replay  recorded client sessions replayed against their saved logs: the same, or nondeterministic (it differs
 #           from itself too), else a regression
-# usage: port/net/scripts/net_check.sh [--quick] [--record] [--save] [arena|live|churn|maps|rounds|soak|throws|shots|replay ...]
+# usage: port/net/scripts/net_check.sh [--quick] [--record] [--save] [arena|live|churn|maps|rounds|soak|throws|peds|shots|replay ...]
 #   --record  new fixtures (recorded sessions) and their logs; --save: the current build's replay logs as the baseline
 # Fixtures and logs: $BUILD/net_check/. Exit 1 if anything failed.
 for v in BUILD GAME BIN; do # given as relative paths: from here (the games run in $GAME)
@@ -40,7 +40,7 @@ for a in "$@"; do
     *) STEPS+=("$a") ;;
   esac
 done
-[ ${#STEPS[@]} -eq 0 ] && STEPS=(arena live churn maps rounds soak throws shots replay)
+[ ${#STEPS[@]} -eq 0 ] && STEPS=(arena live churn maps rounds soak throws peds shots replay)
 [ -x "$BIN" ] && [ -d "$GAME/data" ] || { echo "no build or game: the port built in $BUILD (cmake -S port -B build_mac -G Ninja), and a game folder with data/ in $GAME"; exit 1; }
 mkdir -p "$OUT"
 trap 'kill $(jobs -p) 2>/dev/null' EXIT # our games end with us (most jobs exec their game; an arena match's subshell waits for it)
@@ -233,16 +233,20 @@ soak() {
 }
 
 throws() {
-  local p=$((BASE + 207)) blasts="" t
+  local p=$((BASE + 207)) blasts="" own="" t
+  for t in $(seq 900 50 1700); do # the client's own player drowned and electrocuted in turns (when on foot)
+    own="$own,$t:$(( (t / 50) % 2 ))"
+  done
   for t in $(seq 300 90 1400); do # at the feet (a flying death) and a block away (knocked down), in turns
     blasts="$blasts,$t:0:$(( (t / 90) % 2 ? 0 : 9 ))"
   done
   rm -f "$OUT"/throws_*.log
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_TESTBLAST=${blasts#,} GTA2_NET_TESTFIRE=1500:1 GTA2_NET_TESTPHASE=400:1:1,1000:1 exec "$BIN" --server --port $p \
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_TESTBLAST=${blasts#,} GTA2_NET_TESTFIRE=1500:1 GTA2_NET_TESTPHASE=400:1:1,1000:1,700:1:2,730:1:3 exec "$BIN" --server --port $p \
     --map mp1-6p --players 6 --arena simple,simple > "$OUT/throws_server.log" 2>&1) &
   sleep 2
-  # The blend off: what the client shows at a tick is its prediction of it, the server's state there to the bit
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_SELFLOG=1 GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
+  # The blend off: what the client shows at a tick is its prediction of it, the server's state there to the bit. Its own
+  # player drowned and electrocuted on its own at times (the server never has it)
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_SELFLOG=1 GTA2_NET_TESTLOCALPHASE=${own#,} GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
     exec "$BIN" --connect 127.0.0.1:$p --name c_watch --bot carhop --lag 60 --jitter 5 > "$OUT/throws_client.log" 2>&1) &
   sleep 60
   kill $(jobs -p) 2>/dev/null
@@ -255,28 +259,84 @@ throws() {
     /hit on the server at tick/ && $3 == 1 && burning[$10 + 0] { hits++ }
     /THROW server tick [0-9]+: p1 / { sp[$5 + 0] = $12 }
     /THROW client tick [0-9]+: p1 / { cp[$5 + 0] = $12 }
+    /THROW server tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ { delete own[$5 + 0]; sown[$5 + 0] = 1 }
+    /THROW client tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ && !(($5 + 0) in sown) { own[$5 + 0] = 1 }
     END {
       for (k in s) { thrown++; if (s[k] == "8/26") fatal++ }
       # A client never lands a player fatally itself (GuardThrow): a flying death of the server shows knocked down there
       for (k in c) { shown++; if (s[k] == "8/26") shownFatal++; if ((s[k] == "8/26" ? "8/25" : s[k]) != c[k]) wrong++ }
       # Electrocuted or sinking to a death on the server: the client still shows that tick alive in it
       for (t in sp) if (sp[t] ~ /^9\// && sp[t - 1] ~ /^8\/2[07]$/) { phased++; if (cp[t] !~ /^8\/2[07]$/) early++ }
-      printf "%d %d %d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], hits, phased, early
+      # Pulled out of its car (8/17): the client starts it from the server alone, never while the server has it seated or walking
+      for (t in sp) if (sp[t] == "8/17") pulled++
+      for (t in cp) if (cp[t] == "8/17") { pullShown++; if (!(t in sp)) pullWrong++ }
+      # The own player of the client (p2) drowned or electrocuted there alone: cancelled by the next snapshots
+      for (t in own) { ownTicks++; run = 0; for (u = t; u in own; u--) run++; if (run > ownRun) ownRun = run }
+      printf "%d %d %d %d %d %d %d %d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], hits, phased, early, pulled, pullShown, pullWrong, ownTicks, ownRun
     }' "$OUT/throws_server.log" "$OUT/throws_client.log")
-  local thrown fatal shown shownFatal wrong burnt hits phased early
-  read -r thrown fatal shown shownFatal wrong burnt hits phased early <<< "$result"
+  local thrown fatal shown shownFatal wrong burnt hits phased early pulled pullShown pullWrong ownTicks ownRun
+  read -r thrown fatal shown shownFatal wrong burnt hits phased early pulled pullShown pullWrong ownTicks ownRun <<< "$result"
   echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's; $hits hits shown on a player burning $burnt ticks; $phased deaths electrocuted or sinking, $early of them the client's own"
-  if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ $((hits * 10)) -ge "$burnt" ] || [ "${phased:-0}" = 0 ] || [ "${early:-1}" != 0 ]; then
+  echo "  pulled out of a car: $pulled server ticks, $pullShown client ticks, $pullWrong of them while the server's sat or walked; the client's own phases: $ownTicks ticks, $ownRun at most in a row"
+  if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ $((hits * 10)) -ge "$burnt" ] || [ "${phased:-0}" = 0 ] || [ "${early:-1}" != 0 ] ||
+    [ "${pulled:-0}" = 0 ] || [ "${pullShown:-0}" = 0 ] || [ "${pullWrong:-1}" != 0 ] || [ "${ownTicks:-0}" = 0 ] || [ "${ownRun:-99}" -gt 20 ]; then
     fail "throws: the client's throws or burning aren't the server's ($BUILD/net_check/throws_*.log)"
   else
-    pass "throws: every throw the client showed was the server's at that tick, flying deaths included; burning didn't bleed; electrocution and sinking deaths were the server's"
+    pass "throws: every throw the client showed was the server's at that tick, flying deaths included; burning didn't bleed; electrocution and sinking deaths were the server's; a pull out of a car the server's; the client's own phases cancelled"
+  fi
+}
+
+peds() {
+  local p=$((BASE + 208)) ev="" k=0 t
+  for t in $(seq 600 40 1700); do # the ambient ped nearest the client's player drowned, electrocuted, knocked down, blown up
+    ev="$ev,$t:2:$((10 + k % 4))"
+    k=$((k + 1))
+  done
+  rm -f "$OUT"/peds_*.log
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_PEDLOG=2 GTA2_NET_TESTPHASE=${ev#,} exec "$BIN" --server --port $p --map mp1-6p --players 6 \
+    --arena simple,simple > "$OUT/peds_server.log" 2>&1) &
+  sleep 2
+  # The blend off; the client drives into peds (its own predicted deaths, held for the server's)
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_PEDLOG=2 GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
+    exec "$BIN" --connect 127.0.0.1:$p --name c_peds --bot carhop --lag 60 --jitter 5 > "$OUT/peds_client.log" 2>&1) &
+  sleep 60
+  kill $(jobs -p) 2>/dev/null
+  wait 2>/dev/null
+  # Per tick and ped: its states and phase. At each snapshot tick, as the apply left it: the server state there; at a live
+  # tick, never dead before the server has it dead
+  local result
+  result=$(awk '
+    function phase(v) { return v % 8 }
+    /PEDPHASE server tick/ { k = $5 " " $6; s[k] = $7 " " phase($9); dead[k] = ($7 ~ /^9\//); car[k] = $15; if ($9 % 8) phased++ }
+    # On foot on both sides, not on the way to a car (cars go by the seats), a fatal throw shown knocked down, a flight to
+    # a death of the server as a flight
+    function foot(st, inCar) { return st !~ /^(3|4|5|10)\// && !inCar }
+    /PEDPHASE applied tick/ {
+      k = $5 " " $6; a = $7 " " phase($9)
+      if ((k in s) && foot(s[k], car[k]) && foot($7, $15) && !(dead[k] && $7 ~ /^8\/2[456]$/)) {
+        applied++; b = s[k]; sub(/^8\/26/, "8/25", b)
+        if (a != b) { wrong++; if (wrong <= 5) print "  at " k ": server " s[k] ", applied " a > "/dev/stderr" }
+      }
+    }
+    /PEDPHASE client tick/ { k = $5 " " $6; if ((k in s) && $7 ~ /^9\// && !dead[k]) early++ }
+    /corpses of this game.s own made again/ { remade += $2 }
+    /deaths of this game.s own held/ { held += $2 }
+    END { printf "%d %d %d %d %d %d", phased, applied, wrong, early, remade, held }' "$OUT/peds_server.log" "$OUT/peds_client.log")
+  local phased applied wrong early remade held checks
+  read -r phased applied wrong early remade held <<< "$result"
+  checks=$(cat "$OUT"/peds_*.log | grep -c "net: CHECK")
+  echo "  server: $phased ped ticks in a phase; client: $applied ped states applied, $wrong not the server's at that tick, $early ticks dead early; $remade corpses of its own, $held deaths held; $checks CHECK lines"
+  if [ "${phased:-0}" = 0 ] || [ "${applied:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${early:-1}" != 0 ] || [ "${remade:-1}" != 0 ] || [ "$checks" != 0 ]; then
+    fail "peds: the client's peds aren't the server's ($BUILD/net_check/peds_*.log)"
+  else
+    pass "peds: every ped state and phase applied was the server's at that tick; no death of the client's own"
   fi
 }
 
 # Rockets, grenades and molotovs (shots.cpp): armed bots fire their own, the server throws its own beside player 0
 # every 60 ticks, and the client makes a rocket the server never has at tick 900
 shots() {
-  local p=$((BASE + 208)) list="" t
+  local p=$((BASE + 209)) list="" t
   for t in $(seq 300 60 1500); do
     list="$list,$t:0:$(( (t / 60) % 3 == 0 ? 128 : (t / 60) % 3 == 1 ? 183 : 138 ))"
   done
@@ -378,8 +438,8 @@ replay() {
 
 for s in "${STEPS[@]}"; do
   case $s in
-    arena | live | churn | maps | rounds | soak | throws | shots | replay) $s ;;
-    *) echo "no step $s (arena, live, churn, maps, rounds, soak, throws, shots, replay)"; FAILED=1 ;;
+    arena | live | churn | maps | rounds | soak | throws | peds | shots | replay) $s ;;
+    *) echo "no step $s (arena, live, churn, maps, rounds, soak, throws, peds, shots, replay)"; FAILED=1 ;;
   esac
 done
 exit $FAILED
