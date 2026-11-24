@@ -47,7 +47,13 @@ class GridCheck
 void DebugKill(int victim, int killer);
 void DebugArm(int player, int weapon, int ammo); // Player::AddWeaponWithAmmo
 void DebugFire(int player); // the player's ped set on fire (Ped::SetOnFire)
-void DebugPhase(int player, int shock); // on foot, the player's ped drowned (Char::DrownPed) or electrocuted (1)
+// On foot, the player's ped drowned (Char::DrownPed, 0) or electrocuted (1); seated in a car beside it (2), pulled out of the
+// car it sits in (3, StartPulledOut); 10 + 0..3: the nearest ambient ped on foot drowned, electrocuted, knocked down, or
+// thrown by a blast at its feet
+void DebugPhase(int player, int what);
+// GTA2_NET_TESTLOCALPHASE=<tick>:<what>[,...] on a client, before each run of that tick (live and resimulated): its own
+// player drowned (0), electrocuted (1) or knocked down (2), which the server never has
+void DebugLocalPhase();
 // That many ambient peds nearest the player, at least that many blocks from it, set on fire: their corpses call the ambulance
 void DebugPatients(int player, int count, int fromBlocks);
 void DebugBlast(int player, int tenths); // an explosion (a grenade's) that far east of the player
@@ -67,6 +73,9 @@ void TrainLog(bool server); // GTA2_NET_TRAINLOG: every train's place and state 
 void FireLog(bool server); // GTA2_NET_FIRELOG: every fire (cars', loose, peds on fire) at every 30th tick of the game's cycle
 void ThrowLog(bool server); // GTA2_NET_THROWLOG: every tick, the players thrown, down, dead or on fire, and new explosions
 void ShotLog(bool server); // GTA2_NET_SHOTLOG: every tick, the rockets, grenades, molotovs and blasts by key (shots.cpp)
+// GTA2_NET_PEDLOG=<player>: the peds within 12 blocks of that player, their states and phase; end "server", "client" (a live
+// tick) or "applied" (a snapshot's tick, as its apply left them)
+void PedLog(const char* end);
 // GTA2_NET_CARDIFF: where this game's prediction of the local player's car differs from the snapshot's (call after
 // restoring the snapshot's tick, before applying it)
 void DebugOwnCarDiff(const Snapshot& snap);

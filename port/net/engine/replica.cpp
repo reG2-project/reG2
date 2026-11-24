@@ -786,6 +786,7 @@ void ClientTickStart()
 {
     ProtectPlayers(); // before every tick, live or resimulated: a frame may run several
     ShotsTickStart();
+    DebugLocalPhase();
     // Made again every tick (a few hundred entries); the maps change with every apply and restore
     gPedKeys.clear();
     gCarKeys.clear();

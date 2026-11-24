@@ -1181,3 +1181,46 @@ void net::engine::ThrowLog(bool server)
         }
     }
 }
+
+void net::engine::PedLog(const char* end)
+{
+    static const char* on = getenv("GTA2_NET_PEDLOG");
+    static uint32_t sLast[2];
+    const uint32_t tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+    const bool live = strcmp(end, "applied") != 0; // a live tick once; an apply each time
+    Ped* watched = on ? InGamePed(atoi(on)) : NULL;
+    const Sprite* w = watched ? PedSprite(watched) : NULL;
+    if (!w || (live && tick == sLast[end[0] == 's']))
+    {
+        return;
+    }
+    if (live)
+    {
+        sLast[end[0] == 's'] = tick;
+    }
+    auto log = [&](uint32_t id, Ped* p) {
+        const Sprite* s = CharSprite(p);
+        if (!s || p->mPlayer || !Near(s, w->mXy.x.mValue, w->mXy.y.mValue, 12 << 14))
+        {
+            return;
+        }
+        EntityState e = Entity(id, kEntityPed);
+        CapturePhases(p, e, kPedPhase);
+        printf("net: PEDPHASE %s tick %u: %u %d/%d phase %d timer %d health %d car %d\n", end, tick, id, (int)p->mPedState1,
+               (int)p->mPedState2, e.f[kPedPhase + kPhase], e.f[kPedPhase + kPhaseTimer], (int)p->mHealth, InCarTransition(p) ? 1 : 0);
+    };
+    if (end[0] == 's')
+    {
+        for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
+        {
+            log(PedNetId(p), p);
+        }
+    }
+    else
+    {
+        for (const auto& kv : ReplicaPeds())
+        {
+            log(kv.first, kv.second);
+        }
+    }
+}

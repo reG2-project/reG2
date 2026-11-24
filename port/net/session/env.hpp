@@ -31,7 +31,7 @@ struct SessionEnv
     const char* testPowerUp; // <tick>:<player>:<power-up>[,...]: server test power-ups
     const char* testStreak; // <tick>:<player>[,...]: server test kill streaks
     const char* testFire; // <tick>:<player>[,...]: server test players set on fire
-    const char* testPhase; // <tick>:<player>[:1][,...]: server test players drowned, or electrocuted
+    const char* testPhase; // <tick>:<player>[:<what>][,...]: server test phases (engine/dev/dev.hpp, DebugPhase)
     const char* testBlast; // <tick>:<player>:<tenths of a block>[,...]: an explosion that far east of a server test player
     const char* testShot; // <tick>:<player>:<model>[,...]: a rocket, molotov or grenade thrown from beside a server test player
     const char* testPatients; // <tick>:<player>:<n>[:<blocks>][,...]: the n ambient peds nearest the player (that far at least) set on fire

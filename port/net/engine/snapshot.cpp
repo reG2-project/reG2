@@ -3,6 +3,7 @@
 // (pickups.cpp) do the parts. Also the helpers the engine's files share, the game's controls the session uses
 // (running, the player count, the inputs, the tick) and a client's view of what is shown.
 #include "internal.hpp"
+#include "dev/dev.hpp"
 #include <algorithm>
 #include "port/src/rand/owner.hpp"
 #include "port/src/menu.hpp"
@@ -404,6 +405,7 @@ void net::engine::Apply(const Snapshot& snap)
     ApplyCarsAndPeds(snap);
     ApplyPickups(snap);
     ApplyShots(snap); // after the cars and peds: owners and what a catch-up hits are the server's
+    PedLog("applied");
 }
 
 // --- A client's view ---

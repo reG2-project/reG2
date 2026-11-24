@@ -32,7 +32,7 @@ void net::ServerProbe::Start()
     Parse(Env().testStreak, TestEvent::kStreak, 2, 0, v); // <tick>:<player>: a kill streak's bonus (its 20th kill)
     Parse(Env().testFire, TestEvent::kFire, 2, 0, v); // <tick>:<player>: set on fire
     Parse(Env().testBlast, TestEvent::kBlast, 2, 0, v); // <tick>:<player>[:<tenths of a block>]: an explosion beside it
-    Parse(Env().testPhase, TestEvent::kPhase, 2, 0, v); // <tick>:<player>[:1]: drowned, or electrocuted
+    Parse(Env().testPhase, TestEvent::kPhase, 2, 0, v); // <tick>:<player>[:<what>]: a phase (DebugPhase)
     Parse(Env().testShot, TestEvent::kShot, 3, 0, v); // <tick>:<player>:<model>: a rocket (128), molotov (138) or grenade (183) beside it
     // <tick>:<player>:<n>[:<blocks>]: the n ambient peds nearest it (at least that far) set on fire
     for (const char* k = Env().testPatients; k && *k; k = strchr(k, ','), k = k ? k + 1 : NULL)
@@ -102,7 +102,7 @@ void net::ServerProbe::Tests(uint32_t tick, int players)
                 engine::DebugBlast(e.player, e.arg);
                 break;
             case TestEvent::kPhase:
-                printf("net: test %s of player %d at tick %u\n", e.arg ? "electrocution" : "drowning", e.player, tick);
+                printf("net: test phase %d of player %d at tick %u\n", e.arg, e.player, tick);
                 engine::DebugPhase(e.player, e.arg);
                 break;
             case TestEvent::kShot:
@@ -140,6 +140,7 @@ void net::ServerProbe::Captured(uint32_t tick, const Snapshot& world)
     engine::FireLog(true);
     engine::ThrowLog(true);
     engine::ShotLog(true);
+    engine::PedLog("server");
     if (Env().snapCheck)
     {
         Snapshot copy = world;
