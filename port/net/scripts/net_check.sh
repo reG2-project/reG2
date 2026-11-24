@@ -241,7 +241,7 @@ throws() {
     blasts="$blasts,$t:0:$(( (t / 90) % 2 ? 0 : 9 ))"
   done
   rm -f "$OUT"/throws_*.log
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_TESTBLAST=${blasts#,} GTA2_NET_TESTFIRE=1500:1 GTA2_NET_TESTPHASE=400:1:1,1000:1,700:1:2,730:1:3 exec "$BIN" --server --port $p \
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_TESTBLAST=${blasts#,} GTA2_NET_TESTFIRE=1500:1 GTA2_NET_TESTPHASE=400:1:1,1000:1,700:1:2,730:1:3,830:2:4,850:2:4,870:2:4,890:2:4,910:2:4,930:2:4,950:2:4,970:2:4,990:2:4,1010:2:4,1030:2:4,1050:2:4,1070:2:4,1090:2:4,1110:2:4,1130:2:4,1150:2:4,1170:2:4,1190:2:4 exec "$BIN" --server --port $p \
     --map mp1-6p --players 6 --arena simple,simple > "$OUT/throws_server.log" 2>&1) &
   sleep 2
   # The blend off: what the client shows at a tick is its prediction of it, the server's state there to the bit. Its own
@@ -257,6 +257,9 @@ throws() {
     /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) { burn[$6]++} }
     /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { c[$5 $6] = $12 }
     /THROW server tick [0-9]+: p1 / { sp[$5 + 0] = $12 }
+    # The client player jacks p0 or p1 (from 830): pulled out on both sides, here only when the server has it so
+    /THROW server tick [0-9]+: p[01] / && $5 + 0 > 830 && $12 == "8/17" { jackServer++; sjack[$5 $6] = 1 }
+    /THROW client tick [0-9]+: p[01] / && $5 + 0 > 830 && $12 == "8/17" { jackClient++; if (!(($5 $6) in sjack)) pullWrong++ }
     /THROW client tick [0-9]+: p1 / { cp[$5 + 0] = $12 }
     /THROW server tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ { delete own[$5 + 0]; sown[$5 + 0] = 1 }
     /THROW client tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ && !(($5 + 0) in sown) { own[$5 + 0] = 1 }
@@ -268,20 +271,21 @@ throws() {
       for (t in sp) if (sp[t] ~ /^9\// && sp[t - 1] ~ /^8\/2[07]$/) { phased++; if (cp[t] !~ /^8\/2[07]$/) early++ }
       # Pulled out of its car (8/17): the client starts it from the server alone, never while the server has it seated or walking
       for (t in sp) if (sp[t] == "8/17") pulled++
-      for (t in cp) if (cp[t] == "8/17") { pullShown++; if (!(t in sp)) pullWrong++ }
+      for (t in cp) if (cp[t] == "8/17") { pullShown++; if ((t in sp) && sp[t] != "8/17") pullWrong++ }
       # The own player of the client (p2) drowned or electrocuted there alone: cancelled by the next snapshots
       for (t in own) { ownTicks++; run = 0; for (u = t; u in own; u--) run++; if (run > ownRun) ownRun = run }
-      printf "%d %d %d %d %d %d %d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], phased, early, pulled, pullShown, pullWrong, ownTicks, ownRun
+      printf "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], phased, early, pulled, pullShown, pullWrong, ownTicks, ownRun, jackServer, jackClient
     }' "$OUT/throws_server.log" "$OUT/throws_client.log")
-  local thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun
-  read -r thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun <<< "$result"
+  local thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient
+  read -r thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient <<< "$result"
   echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's; a player burning $burnt ticks; $phased deaths electrocuted or sinking, $early of them the client's own"
-  echo "  pulled out of a car: $pulled server ticks, $pullShown client ticks, $pullWrong of them while the server's sat or walked; the client's own phases: $ownTicks ticks, $ownRun at most in a row"
+  echo "  pulled out of a car: $pulled server ticks, $pullShown client ticks, $pullWrong of them while the server's sat or walked; the client's own phases: $ownTicks ticks, $ownRun at most in a row; its player's jack: pulled out $jackServer server ticks, $jackClient client ticks"
   if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ "${phased:-0}" = 0 ] || [ "${early:-1}" != 0 ] ||
-    [ "${pulled:-0}" = 0 ] || [ "${pullShown:-0}" = 0 ] || [ "${pullWrong:-1}" != 0 ] || [ "${ownTicks:-0}" = 0 ] || [ "${ownRun:-99}" -gt 20 ]; then
+    [ "${pulled:-0}" = 0 ] || [ "${pullShown:-0}" = 0 ] || [ "${pullWrong:-1}" != 0 ] || [ "${ownTicks:-0}" = 0 ] || [ "${ownRun:-99}" -gt 20 ] ||
+    [ "${jackServer:-0}" = 0 ] || [ "${jackClient:-0}" = 0 ]; then
     fail "throws: the client's throws or burning aren't the server's ($BUILD/net_check/throws_*.log)"
   else
-    pass "throws: every throw the client showed was the server's at that tick, flying deaths included; electrocution and sinking deaths were the server's; a pull out of a car the server's; the client's own phases cancelled"
+    pass "throws: every throw the client showed was the server's at that tick, flying deaths included; electrocution and sinking deaths were the server's; a pull out of a car the server's; the client's own phases cancelled; its player's jack of another player's car done"
   fi
 }
 

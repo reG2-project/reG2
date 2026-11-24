@@ -291,6 +291,38 @@ void net::engine::DebugPhase(int player, int what)
         const Sprite* cs = ped->mCar->mCarSprite;
         StartPulledOut(ped, ped->mCar, 0, cs->mXy.x + Fix16(1), cs->mXy.y, cs->mZpos);
     }
+    static bool sJacked; // code 4 once: tried at several ticks for one the jacker is on foot
+    if (what == 4 && sJacked)
+    {
+        return;
+    }
+    else if (what == 4 && ped->mCar && ped->mCar->mCarSprite && ped->mCar->mDriver == ped)
+    {
+        const Sprite* cs = ped->mCar->mCarSprite;
+        ForceOutOfCar(ped, cs->mXy.x + Fix16(1), cs->mXy.y, cs->mZpos, cs->mRotation); // on foot for the next try
+    }
+    else if (what == 4 && !ped->mCar && ped->mGameObject && !ped->isDead() && gCarManager_6C)
+    {
+        for (int i = 0; i < PlayerCount(); i++)
+        {
+            Ped* victim = InGamePed(i);
+            if (victim && victim != ped && !victim->mCar && victim->mGameObject && !victim->isDead())
+            {
+                Fix16 scale;
+                scale.mValue = 0x4000;
+                Car* car = gCarManager_6C->SpawnCarAt(ped->get_cam_x() + Fix16(2 << 14, 0), ped->get_cam_y(), ped->get_cam_z(), 0, car_model_enum::MERC, scale);
+                if (car)
+                {
+                    printf("net: test phase 4: player %d jacks player %d\n", player, i);
+                    car->IncrementCarStats(car_kind::recycled_1);
+                    ForceIntoCar(victim, car);
+                    StartEntering(ped, car);
+                    sJacked = true;
+                }
+                break;
+            }
+        }
+    }
 }
 
 void net::engine::DebugLocalPhase()
