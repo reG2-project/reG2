@@ -29,7 +29,7 @@ def parse(path):
             elif kind == "synced":
                 last[("synced",)] = [int(f[4])]
             continue
-        m = re.search(r"a rollback takes ([\d.]+) ms on average \(worst ([\d.]+)\).* ([\d.]+) ticks resimulated", line)
+        m = re.search(r"a (?:rollback|reconciliation) takes ([\d.]+) ms on average \(worst ([\d.]+)\).* ([\d.]+) ticks resimulated", line)
         if m:
             rollback.append(tuple(float(v) for v in m.groups()))
         m = re.search(r"frame \d+, ping (\d+) ms", line)
