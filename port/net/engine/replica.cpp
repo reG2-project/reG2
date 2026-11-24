@@ -49,7 +49,6 @@ int gRefusedCars;
 int gEvicted;
 int gOccupiedKept;
 int gPedsRemade;
-int gPedsRemadeTotal; // for the first ones' log
 int gPedsKept; // deallocations of the server's peds refused (ClientPedMayGo)
 
 template <class T> int FreeSlots(T* head)
@@ -458,11 +457,6 @@ void ApplyPed(Pass& a, const EntityState& e)
     {
         // A corpse of this game's own (a death predicted that the server didn't have): it goes, and the next snapshot
         // makes the ped again
-        if (gPedsRemadeTotal++ < 20)
-        {
-            printf("net: ped %u dead here only (%s, cause %d, %s, objective %d)\n", e.id, ped->mBf21C.bActive ? "killed" : "removed",
-                   (int)ped->mDeathCause, ped->mCar ? "in a car" : "on foot", (int)ped->mObjective);
-        }
         RemovePed(ped);
         gPeds.erase(e.id);
         a.mapped.erase(ped);
