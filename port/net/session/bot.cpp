@@ -511,7 +511,8 @@ void net::FillBotView(BotView& view, const Snapshot& snap, int self, uint32_t fr
         s.rot = e.f[3];
         s.health = 0;
         s.inCar = false;
-        s.model = engine::CarModel(e);
+        s.held = -1;
+        s.model = e.type == engine::kEntityObject ? engine::PickupModel(e) : engine::CarModel(e);
         s.weapon = engine::PickupModel(e) >= 200 && engine::PickupModel(e) <= 227; // Ped::HandlePickupCollision
         uint32_t buttons = 0;
         if (engine::PlayerOf(e, &s.player, &buttons))
@@ -519,6 +520,7 @@ void net::FillBotView(BotView& view, const Snapshot& snap, int self, uint32_t fr
             s.kind = BotView::Seen::kPlayer;
             s.health = engine::PlayerHealth(e);
             s.inCar = engine::PlayerCarId(e) != 0;
+            s.held = engine::PlayerWeapon(e);
             if (s.player == self)
             {
                 view.health = s.health;
@@ -526,9 +528,11 @@ void net::FillBotView(BotView& view, const Snapshot& snap, int self, uint32_t fr
                 view.weapon = engine::PlayerWeapon(e);
                 view.ammo = engine::PlayerAmmo(e, view.weapon);
                 view.guns = 0;
+                view.gunMask = 0;
                 for (int w = 0; w < 15; w++)
                 {
                     view.guns += engine::PlayerAmmo(e, w) > 0;
+                    view.gunMask |= engine::PlayerAmmo(e, w) > 0 ? 1u << w : 0;
                 }
                 continue;
             }

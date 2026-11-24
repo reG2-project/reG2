@@ -44,6 +44,7 @@ struct BotView
     uint32_t car = 0; // the car it drives (a Seen kCar id), 0 on foot
     int weapon = -1, ammo = 0; // the weapon in hand (Source/Weapon.hpp, 0..14; -1: fists) and its ammo
     int guns = 0; // the weapons it has ammo for (on foot)
+    uint32_t gunMask = 0; // bit w: ammo for weapon w (0..14)
     struct Seen
     {
         enum Kind
@@ -61,7 +62,8 @@ struct BotView
         int health; // for kPlayer
         bool weapon; // for kPickup: a weapon (else a power-up)
         bool inCar; // for kPlayer: it drives
-        int model; // for kCar: its model (car_model_enum: 11 a bus, 54 the tank, 59..61 and 6 a train's)
+        int model; // for kCar: its model (car_model_enum: 11 a bus, 54 the tank, 59..61 and 6 a train's); for kPickup: its object model (a weapon: 200 + weapon)
+        int held; // for kPlayer: the weapon in hand, -1 fists
     };
     std::vector<Seen> seen; // what the client's snapshot has, others only
     const engine::NavMap* map = nullptr;
