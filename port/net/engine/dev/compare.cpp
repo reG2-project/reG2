@@ -207,12 +207,16 @@ bool Predicted(uint32_t type, size_t f)
 bool net::engine::Differs(const Snapshot& snap)
 {
     const uint64_t missing = std::accumulate(gMissing, gMissing + 8, (uint64_t)0);
+    const uint32_t self = (uint32_t)LocalPlayer() + 1;
     bool differs = false;
     ForEachPair(snap, [&](const EntityState& s, const EntityState& h, int) {
         const size_t fields = NetSchema().types[s.type].fields.size();
         for (size_t f = 0; f < fields && !differs; f++)
         {
-            differs = Predicted(s.type, f) && h.f[f] != s.f[f];
+            // Not what a resimulation changes: the local player's buttons (it runs with its own), a car's colour (a
+            // remap the apply can't give a model without remaps stays the snapshot's alone)
+            const bool kept = (s.type == kEntityPlayer && s.id == self && f == kPlayerButtons) || (s.type == kEntityCar && f == kCarRemap);
+            differs = !kept && Predicted(s.type, f) && h.f[f] != s.f[f];
         }
     });
     return differs || std::accumulate(gMissing, gMissing + 8, (uint64_t)0) != missing; // or one it has that this game lacks
