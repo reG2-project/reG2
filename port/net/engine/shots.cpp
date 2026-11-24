@@ -48,16 +48,23 @@ const Member kMotion[] = {
 const size_t kMotionCount = sizeof(kMotion) / sizeof(kMotion[0]);
 const uint32_t kMostCatchUp = 64; // ticks a made shot is brought on at most (a snapshot's lag)
 
+// 0x28..0x2A: the key, 0x2B: the keyed objects it made (PortRand::gObjectMade); nothing of the game's reads them
 uint32_t KeyOf(const Object* o)
 {
     uint32_t k;
-    memcpy(&k, &o->mUnused28, sizeof(k)); // 0x28..0x2B: nothing of the game's reads them
-    return k;
+    memcpy(&k, &o->mUnused28, sizeof(k));
+    return k & 0xFFFFFF;
 }
 
-void SetKey(Object* o, uint32_t k)
+void SetKey(Object* o, uint32_t k, uint8_t made = 0)
 {
-    memcpy(&o->mUnused28, &k, sizeof(k));
+    const uint32_t v = (k & 0xFFFFFF) | (uint32_t)made << 24;
+    memcpy(&o->mUnused28, &v, sizeof(v));
+}
+
+unsigned char* MadeCount(const Object* o)
+{
+    return (unsigned char*)const_cast<char*>(&o->mUnused2B);
 }
 
 // And a loose fire: the burning debris a large blast throws (Explosion::UpdateExplosion_18_19_20_32_33), sent as it is
@@ -360,6 +367,7 @@ void net::engine::InstallShots(bool on, bool client)
     PortRand::gObjectKey = on ? ObjectCreator : NULL;
     gPortBlastHurts = on && client ? BlastHurts : NULL;
     gPortBlastDebris = !on ? NULL : client ? ClientBlastDebris : ServerBlastDebris;
+    PortRand::gObjectMade = on ? MadeCount : NULL;
     gKeySkew = on && client ? DebugShotSkew() : 0;
 }
 
