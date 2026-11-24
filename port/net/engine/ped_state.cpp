@@ -529,7 +529,8 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
     const bool dyingThere = e.f[kStates + kState1] == ped_state_1::immobilized_8 && e.f[kStates + kStored1] == ped_state_1::dead_9;
     const bool deadThere = e.f[kStates + kState1] == ped_state_1::dead_9 || (dyingThere && (e.f[kEnd + kPhase] & 7) == kPhaseThrown);
     const bool deadHere = p->isDead();
-    if (deadThere && !deadHere)
+    const int shownAge = ShownDeathAge(p);
+    if (deadThere && (!deadHere || shownAge >= 0))
     {
         ApplyPhases(p, e, kEnd, true, NULL); // a throw on to its landing, or over
         if (!ThrowOf(p) || p->mStoredPedState1 != ped_state_1::dead_9)
@@ -552,6 +553,11 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
         {
             return true; // the server's death to come, carried out a tick early here
         }
+        if (shownAge >= 0 && shownAge < kShownDeathTicks)
+        {
+            return true; // shown dead here (ShowDeath), the server's may yet come
+        }
+        ForgetShownDeath(p);
         if (!p->mGameObject || !p->IsActive())
         {
             return false; // gone here: the ped is made again

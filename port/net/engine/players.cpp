@@ -13,6 +13,8 @@
 #include "Source/Game.hpp"
 #include "Source/GameSession.hpp"
 #include "Source/Hud.hpp"
+#include "Source/ParticleManager.hpp"
+#include "Source/debug.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
 #include "Source/TextTable.hpp"
@@ -49,11 +51,72 @@ bool gWasDead[MAX_PLAYERS];
 // A client's: the deaths it has carried out, by the server's game count, and whether it has seen the player yet (it
 // takes the count as it finds it the first time: a joiner doesn't carry out the deaths before it came), in the
 // rollback set
+// The ambient peds its own simulation killed, shown dead until the server's death (KillNow): their id and the game's cycle
+const int kShownDeaths = 32;
+struct ShownDeath
+{
+    uint32_t mPedId;
+    uint32_t mCycle;
+};
 struct
 {
     uint8_t mDone[MAX_PLAYERS];
     bool mKnown[MAX_PLAYERS];
+    ShownDeath mShown[kShownDeaths];
 } gNetDeaths;
+
+ShownDeath* FindShownDeath(const Ped* ped)
+{
+    for (ShownDeath& d : gNetDeaths.mShown)
+    {
+        if (d.mPedId && d.mPedId == ped->mId)
+        {
+            return &d;
+        }
+    }
+    return NULL;
+}
+
+// Dead to the eye as Ped::Kill makes it (its state, cry, corpse's sprite layer, blood); its corpse, dropped weapon, score
+// and the AI's reactions wait for KillNow
+void ShowDeath(Ped* ped)
+{
+    Char* c = ped->mGameObject;
+    if (ped->mBf21C.bOnFire)
+    {
+        c->mAnimationState = Char_Anim_state::Charred_Corpse_21;
+        ped->PutOutFire();
+    }
+    ped->SetObjective2(objectives_enum::no_obj_0);
+    if (ped->mPedState2 == ped_state_2::lying_on_floor_22)
+    {
+        ped->mPedState1 = ped_state_1::dead_9;
+        ped->mPedState2 = ped_state_2::ped2_dead_15;
+    }
+    else
+    {
+        ped->ChangeNextPedState1(ped_state_1::dead_9);
+        ped->ChangeNextPedState2(ped_state_2::ped2_dead_15);
+    }
+    ped->SetVoiceEventIfNotOnFire(4);
+    ped->mHealth = ped->mHealth > 0 ? ped->mHealth : 1;
+    ped->SetStateInitPending();
+    c->SetSpriteNum(6);
+    if (bDo_blood && c->mAnimationState != Char_Anim_state::Electrocuted_17)
+    {
+        gParticle_8->SpawnBlood(ped->mCam.x, ped->mCam.y, ped->mCam.z);
+    }
+    ShownDeath* slot = FindShownDeath(ped);
+    for (ShownDeath& d : gNetDeaths.mShown)
+    {
+        if (!slot || (slot->mPedId != ped->mId && slot->mPedId && (!d.mPedId || (int32_t)(d.mCycle - slot->mCycle) < 0)))
+        {
+            slot = &d; // its own, a free one, else the oldest
+        }
+    }
+    slot->mPedId = ped->mId;
+    slot->mCycle = gpRng->get_cur_rng();
+}
 
 // The kill cam: after the original's 70 ticks on its corpse, a player killed by another sees its killer this long
 // before it respawns. The killer's slot + 1 (0: none) per player, set as it is wasted, in the rollback set
@@ -607,6 +670,21 @@ bool gServerDeath; // in KillNow
 
 int net::engine::gDeathsHeld;
 
+int net::engine::ShownDeathAge(const Ped* ped)
+{
+    const ShownDeath* d = ped->isDead() ? FindShownDeath(ped) : NULL;
+    const int32_t age = d ? (int32_t)(gpRng->get_cur_rng() - d->mCycle) : -1;
+    return d && age < 0 ? 0 : age;
+}
+
+void net::engine::ForgetShownDeath(const Ped* ped)
+{
+    if (ShownDeath* d = FindShownDeath(ped))
+    {
+        d->mPedId = 0;
+    }
+}
+
 void net::engine::KillNow(Ped* ped)
 {
     // Electrocuted or sinking to its death, it ends as the game ends them (Char::UpdateImmobilized): a charred corpse, a
@@ -627,9 +705,27 @@ void net::engine::KillNow(Ped* ped)
             ped->mPlayer->SetDeathType(4);
         }
     }
+    // Shown dead already (ShowDeath): the rest of Ped::Kill, its char's dying, cry and blood as they are
+    const bool shown = ShownDeathAge(ped) >= 0;
+    ForgetShownDeath(ped);
+    const bool initPending = c && c->mStateInitPending;
+    const s32 voice = ped->mVoiceEvent;
+    const bool blood = bDo_blood;
+    if (shown)
+    {
+        ped->mPedState1 = ped_state_1::walking_0;
+        ped->mPedState2 = ped_state_2::ped2_walking_0;
+        bDo_blood = false;
+    }
     gServerDeath = true;
     ped->Kill();
     gServerDeath = false;
+    if (shown && c)
+    {
+        c->mStateInitPending = initPending;
+        ped->mVoiceEvent = voice;
+        bDo_blood = blood;
+    }
     // Knocked down (a blast threw it), the game keeps the ped's state until it gets up (Ped::ChangeNextPedState1), so
     // the server's death didn't take and the next snapshot carried it out again: its cry, its killer's points. A
     // thrown ped's death takes when it lands: the landing restores the dead_9 Ped::Kill stored
@@ -657,9 +753,16 @@ bool net::engine::ClientPedMayDie(Ped* ped)
     {
         return true; // in a car, its car's state (an explosion) is the server's; this game's own ped, its own
     }
+    gDeathsHeld++;
+    // An ambient ped dies to the eye at once, as Ped::Kill takes it (on its feet, or lying)
+    if (!ped->mPlayer && !InCarTransition(ped) &&
+        (ped->mPedState1 != ped_state_1::immobilized_8 || ped->mPedState2 == ped_state_2::lying_on_floor_22))
+    {
+        ShowDeath(ped);
+        return false;
+    }
     // Held: alive, and on its feet knocked down until the server's state says what became of it (getting into or out
     // of a car, it goes on: the door's states are the entering's and leaving's)
-    gDeathsHeld++;
     ped->mHealth = ped->mHealth > 0 ? ped->mHealth : 1;
     if (ped->mPedState1 != ped_state_1::immobilized_8 && !InCarTransition(ped))
     {

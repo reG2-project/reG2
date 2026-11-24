@@ -342,7 +342,11 @@ void ApplyThrow(Ped* ped, const EntityState& e, int base);
 void MoveThrow(Ped* ped, int32_t dx, int32_t dy); // raw Fix16
 void GuardThrow(Ped* ped);
 // gPortPedMayDie on a client: only the server's death (KillNow), or one in a car; another is held, the ped knocked down
+// (an ambient ped shown dead, ShowDeath)
 bool ClientPedMayDie(Ped* ped);
+int ShownDeathAge(const Ped* ped); // ticks since an ambient ped was shown dead here, -1: not shown dead
+void ForgetShownDeath(const Ped* ped);
+const int kShownDeathTicks = 15; // a death shown here the server's snapshots still don't have after this: undone
 // gPortPedMayGo on a client: a server's ped goes by the snapshots (RemoveUnsent), a death of the server's or with its car
 bool ClientPedMayGo(Ped* ped);
 bool IsServerPed(const Ped* p); // a player's, or mapped to a snapshot's ped (a client's own one isn't)

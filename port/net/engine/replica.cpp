@@ -439,7 +439,7 @@ void ApplyPed(Pass& a, const EntityState& e)
             ForceOutOfCar(ped, Raw(e.f[kPedX]), Raw(e.f[kPedY]), Raw(e.f[kPedZ]), Angle(e.f[kPedRot]));
         }
     }
-    else
+    else if (ShownDeathAge(ped) < 0) // shown dead here, it lies where it fell until the server's death
     {
         MovePed(ped, Raw(e.f[kPedX]), Raw(e.f[kPedY]), Raw(e.f[kPedZ]), Angle(e.f[kPedRot]));
     }
