@@ -279,6 +279,10 @@ void net::engine::DebugPhase(int player, int what)
         {
             gObject_5C->CreateExplosion(s->mXy.x, s->mXy.y, s->mZpos, Ang16((s16)0, (u8)0), explosion_type::small_18, 0);
         }
+        else if (what == 14)
+        {
+            p->Kill();
+        }
         else
         {
             StartPhase(p, what - 10);
@@ -391,7 +395,15 @@ void net::engine::DebugLocalPhase()
     {
         unsigned t = 0;
         int what = 0;
-        if (sscanf(k, "%u:%d", &t, &what) == 2 && t == tick)
+        if (sscanf(k, "%u:%d", &t, &what) == 2 && t == tick && what == 3)
+        {
+            if (Ped* p = NearestAmbient(InGamePed(LocalPlayer())))
+            {
+                printf("net: test local death of ped at tick %u\n", tick);
+                p->Kill();
+            }
+        }
+        else if (t == tick)
         {
             StartPhase(InGamePed(LocalPlayer()), what);
         }

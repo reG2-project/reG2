@@ -313,18 +313,19 @@ peds() {
     ev="$ev,$t:2:$((10 + k % 4))"
     k=$((k + 1))
   done
+  ev="$ev,1725:2:14" # killed there 5 ticks after the client killed it; the client's second death (1760) the server never has
   rm -f "$OUT"/peds_*.log
   (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_PEDLOG=2 GTA2_NET_TESTPHASE=${ev#,} exec "$BIN" --server --port $p --map mp1-6p --players 6 \
     --arena simple,simple > "$OUT/peds_server.log" 2>&1) &
   sleep 2
   # The blend off; the client drives into peds (its own predicted deaths, held for the server's)
   (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_PEDLOG=2 GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
-    exec "$BIN" --connect 127.0.0.1:$p --name c_peds --bot carhop --lag 60 --jitter 5 > "$OUT/peds_client.log" 2>&1) &
+    GTA2_NET_TESTLOCALPHASE=1720:3,1760:3 exec "$BIN" --connect 127.0.0.1:$p --name c_peds --bot carhop --lag 60 --jitter 5 > "$OUT/peds_client.log" 2>&1) &
   sleep 60
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
-  # Per tick and ped: its states and phase. At each snapshot tick, as the apply left it: the server state there; at a live
-  # tick, never dead before the server has it dead
+  # Per tick and ped: its states and phase. At each snapshot tick, as the apply left it: the server state there, or an
+  # ambient ped shown dead ahead of the server (health above 0: no corpse, drop or score yet) that dies there or gets up
   local result
   result=$(awk '
     function phase(v) { return v % 8 }
@@ -335,25 +336,35 @@ peds() {
     function foot(st, inCar) { return st !~ /^(3|4|5|10)\// && !inCar }
     /PEDPHASE applied tick/ {
       k = $5 " " $6; a = $7 " " phase($9)
-      if ((k in s) && foot(s[k], car[k]) && foot($7, $15) && !(dead[k] && $7 ~ /^8\/2[456]$/)) {
+      shownHere = $7 ~ /^9\// && $13 > 0 && !dead[k]
+      if ((k in s) && foot(s[k], car[k]) && foot($7, $15) && !(dead[k] && $7 ~ /^8\/2[456]$/) && !shownHere) {
         applied++; b = s[k]; sub(/^8\/26/, "8/25", b)
         if (a != b) { wrong++; if (wrong <= 5) print "  at " k ": server " s[k] ", applied " a > "/dev/stderr" }
       }
     }
     # Not a corpse a paramedic revived (AmbulanceService, on the server alone), until the revival reaches the client
     /PEDPHASE server tick/ { if (!dead[k] && wasDead[$6] && $5 + 0 == lastS[$6] + 1) revived[$6, $5 + 0] = 1; wasDead[$6] = dead[k]; lastS[$6] = $5 + 0 }
-    /PEDPHASE client tick/ { k = $5 " " $6; if ((k in s) && $7 ~ /^9\// && !dead[k] && !justRevived($6, $5 + 0)) early++ }
+    /PEDPHASE server tick/ { sd[$5 + 0, $6] = dead[k] }
+    /PEDPHASE client tick/ {
+      k = $5 " " $6; cd[$5 + 0, $6] = ($7 ~ /^9\//)
+      if ((k in s) && $7 ~ /^9\// && !dead[k] && !justRevived($6, $5 + 0)) { if ($13 > 0) { shown++; se[$5 + 0, $6] = 1 } else early++ }
+    }
     /corpses of this game.s own made again/ { remade += $2 }
     /deaths of this game.s own held/ { held += $2 }
-    END { printf "%d %d %d %d %d %d", phased, applied, wrong, early, remade, held }' "$OUT/peds_server.log" "$OUT/peds_client.log")
-  local phased applied wrong early remade held checks
-  read -r phased applied wrong early remade held <<< "$result"
+    # A death shown ahead of the server, still shown 40 ticks later without the server killing the ped: never undone
+    function settled(t, id,   d) { for (d = 0; d <= 40; d++) if (sd[t + d, id] || ((t + d, id) in cd && !cd[t + d, id])) return 1; return !((t + 40, id) in cd) }
+    END {
+      for (x in se) { split(x, f, SUBSEP); if (!settled(f[1] + 0, f[2])) stuck++ }
+      printf "%d %d %d %d %d %d %d %d", phased, applied, wrong, early, remade, held, shown, stuck
+    }' "$OUT/peds_server.log" "$OUT/peds_client.log")
+  local phased applied wrong early remade held shown stuck checks
+  read -r phased applied wrong early remade held shown stuck <<< "$result"
   checks=$(cat "$OUT"/peds_*.log | grep -c "net: CHECK")
-  echo "  server: $phased ped ticks in a phase; client: $applied ped states applied, $wrong not the server's at that tick, $early ticks dead early; $remade corpses of its own, $held deaths held; $checks CHECK lines"
-  if [ "${phased:-0}" = 0 ] || [ "${applied:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${early:-1}" != 0 ] || [ "${remade:-1}" != 0 ] || [ "$checks" != 0 ]; then
+  echo "  server: $phased ped ticks in a phase; client: $applied ped states applied, $wrong not the server's at that tick, $early ticks a corpse early; $shown ticks shown dead early, $stuck never settled; $remade corpses of its own, $held deaths held; $checks CHECK lines"
+  if [ "${phased:-0}" = 0 ] || [ "${applied:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${early:-1}" != 0 ] || [ "${shown:-0}" = 0 ] || [ "${stuck:-1}" != 0 ] || [ "${remade:-1}" != 0 ] || [ "$checks" != 0 ]; then
     fail "peds: the client's peds aren't the server's ($BUILD/net_check/peds_*.log)"
   else
-    pass "peds: every ped state and phase applied was the server's at that tick; no death of the client's own"
+    pass "peds: every ped state and phase applied was the server's at that tick; a death of the client's own only shown"
   fi
 }
 
