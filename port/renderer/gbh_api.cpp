@@ -1356,7 +1356,7 @@ void port_FreePictures()
 namespace
 {
 // The port's particle textures (port/src/fire_smoke.cpp), by slot.
-const s32 kNumParticleTextures = 2;
+const s32 kNumParticleTextures = 3;
 RTexture* gParticleTextures[kNumParticleTextures];
 u32 gParticleVersions[kNumParticleTextures];
 IRenderer* gParticleTexturesOwner;

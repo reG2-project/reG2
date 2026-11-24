@@ -10,6 +10,7 @@
 #include "frame_loop.hpp"
 #include "lights.hpp"
 #include "settings.hpp"
+#include "shot_trails.hpp"
 #include "sprite.hpp"
 #include "view.hpp"
 #include <math.h>
@@ -657,6 +658,7 @@ void DrawLayer(s32 layer)
 {
     static bool sEmberTexture;
     static bool sSmoke;
+    PortShotTrails::DrawLayer(layer); // with the same layers, whatever FIRE EFFECTS is set to
     if (!PortSettings::FireEffects() || !gGame_0x40 || !gGame_0x40->mDrawPlayer || layer < 1 || layer > 7)
     {
         Clear();
