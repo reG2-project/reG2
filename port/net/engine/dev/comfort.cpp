@@ -344,6 +344,7 @@ Moves gMoves;
 Response gResponse;
 Corrections gCorr[3]; // others, the local player and its car, another player placed over 2 blocks off (a respawn)
 uint32_t gSyncedFrames;
+uint32_t gSeen[3]; // frames of other players, cars and peds within kSeen of the local player
 int gSlot = -1;
 
 uint32_t ServerOwner(const Object* o)
@@ -466,6 +467,10 @@ void net::engine::ComfortClientFrame(uint32_t frame, uint32_t tick, int slot, ui
     {
         const float dx = Blocks(p.x) - lx, dy = Blocks(p.y) - ly;
         const bool inView = dx * dx + dy * dy < kView * kView;
+        if (dx * dx + dy * dy < kSeen * kSeen && p.id != (uint32_t)slot + 1 && !(IsCarId(p.id) && me && me->mCar && ReplicaCar(p.id) == me->mCar))
+        {
+            gSeen[IsPlayerId(p.id) ? 0 : IsCarId(p.id) ? 1 : 2]++;
+        }
         if (p.id == (uint32_t)slot + 1)
         {
             gMoves.Feed(kOwnPlayer, p.id, Blocks(p.x), Blocks(p.y), frame);
@@ -506,6 +511,7 @@ void net::engine::ComfortClientFrame(uint32_t frame, uint32_t tick, int slot, ui
         {
             printf("comfort: C corr %u %s %u %u %u\n", frame, i == 2 ? "placed" : i ? "self" : "others", gCorr[i].n, gCorr[i].over[0], gCorr[i].over[1]);
         }
+        printf("comfort: C seen %u %u %u %u\n", frame, gSeen[0], gSeen[1], gSeen[2]);
         printf("comfort: C synced %u %u\n", frame, gSyncedFrames);
         fflush(stdout);
     }
