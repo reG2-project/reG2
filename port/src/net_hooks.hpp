@@ -76,6 +76,9 @@ extern bool (*gPortWorldStill)();
 // Asked as a car would blow up (Car::HandleCarExplosion): false, and it doesn't. NULL but on a network client, whose cars
 // the server sends blow up when the server's do (a prediction can't be taken back)
 extern bool (*gPortCarMayExplode)(Car* pCar);
+// Car::TryHonkHorn's id, whose low bits pick the cars that honk and shout: NULL but on a network client, whose cars the
+// server sends go by the server's id
+extern s32 (*gPortCarHornId)(const Car* pCar);
 // Called as Object_5C::CreateObject makes an object, its model set: a network game keys the ones it predicts
 // (port/net/engine/shots.cpp). NULL but in a network game
 extern void (*gPortObjectMade)(Object* pObject);

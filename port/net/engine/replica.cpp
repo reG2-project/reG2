@@ -5,6 +5,7 @@
 #include "internal.hpp"
 #include "dev/dev.hpp"
 #include "port/src/interpolation.hpp"
+#include "port/src/net_hooks.hpp"
 #include "port/src/rand/owner.hpp"
 #include "Source/Car.hpp"
 #include "Source/Char_Pool.hpp"
@@ -809,6 +810,13 @@ unsigned int ClientCarKey(const Car* c)
     return it != gCarKeys.end() ? it->second : kOwnCarKey + c->mCarId;
 }
 
+// gPortCarHornId: a car the server sends, the server's Car::mCarId
+s32 ClientCarHornId(const Car* c)
+{
+    const uint32_t key = ClientCarKey(c);
+    return key >= net::engine::kCarIdBase && key < kOwnPedKey ? (s32)(key - net::engine::kCarIdBase) : c->mCarId;
+}
+
 void ClientTickStart()
 {
     MakeKeys();
@@ -825,6 +833,7 @@ void net::engine::SetRandOwners(bool client)
     PortRand::gPedKey = client ? ClientPedKey : ServerPedKey;
     PortRand::gCarKey = client ? ClientCarKey : ServerCarKey;
     PortRand::gTickHook = client ? ClientTickStart : NULL;
+    gPortCarHornId = client ? ClientCarHornId : NULL;
     InstallShots(true, client);
 }
 
@@ -834,6 +843,7 @@ void net::engine::ClearRandOwners()
     PortRand::gPedKey = NULL;
     PortRand::gCarKey = NULL;
     PortRand::gTickHook = NULL;
+    gPortCarHornId = NULL;
     InstallShots(false, false);
 }
 

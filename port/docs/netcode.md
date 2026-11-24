@@ -834,6 +834,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `ScriptThread.cpp` | `gPortScriptCommandRuns` | a client runs the level start's look and sound commands, and steps over the rest |
 | `Car.cpp` | `gPortUpdateCars` | the car pool's update, a car ahead of one following it first ("Cars in turn") |
 | `Car.cpp` | `gPortCarMayExplode` | a client's car the server sends blows up when a snapshot says the server's did, not on its own prediction |
+| `Car.cpp` | `gPortCarHornId` | a client's car the server sends honks and its driver shouts by the server's id (`Car::TryHonkHorn` picks the cars by its low bits) |
 | `Object_5C.cpp` | `gPortObjectMade` | an object made: a network game keys the shots it predicts (`engine/shots.cpp`) |
 | `Explosion.cpp` | `gPortBlastHurts` | a client's blast made from a snapshot hurts nothing: the server's did |
 | `char.cpp` | `gPortCharSolid` | a client's player whose death it holds collides with nothing, as the server's corpse |

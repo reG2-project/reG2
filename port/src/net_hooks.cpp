@@ -22,6 +22,7 @@ bool (*gPortSpawnBlock)(Ped*, gmp_map_zone*, s32*, s32*, s32*);
 void (*gPortUpdateCars)();
 bool (*gPortWorldStill)();
 bool (*gPortCarMayExplode)(Car* pCar);
+s32 (*gPortCarHornId)(const Car* pCar);
 void (*gPortObjectMade)(Object* pObject);
 bool (*gPortBlastHurts)(Explosion* pExplosion);
 bool (*gPortBlastDebris)(Explosion* pExplosion);

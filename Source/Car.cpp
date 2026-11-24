@@ -4900,7 +4900,12 @@ void Car::TryHonkHorn(s32 horn_mode)
     {
         if (!this->mHornCooldown)
         {
+#if defined(GTA2_PORT)
+            // Port: a network client honks as the server does (port/net/engine/replica.cpp)
+            if (!IsTrainModel() && !IsTank() && ((gPortCarHornId ? gPortCarHornId(this) : mCarId) & 7) == 0)
+#else
             if (!IsTrainModel() && !IsTank() && (this->mCarId & 7) == 0)
+#endif
             {
                 if (horn_mode == 2)
                 {
@@ -4929,8 +4934,13 @@ void Car::TryHonkHorn(s32 horn_mode)
         }
         else if (!this->mHornCooldown || bHornStarted)
         {
+#if defined(GTA2_PORT)
+            if (IsFireTruck() || IsCopCar() || IsMediCar() || IsSwatVan() || IsTank() || IsFbiCar() || IsTrainModel() ||
+                ((gPortCarHornId ? gPortCarHornId(this) : mCarId) & 3) == 0)
+#else
             if (IsFireTruck() || IsCopCar() || IsMediCar() || IsSwatVan() || IsTank() || IsFbiCar() || IsTrainModel() ||
                 (this->mCarId & 3) == 0)
+#endif
             {
                 this->mHorn = 45;
                 this->mHornCooldown = -1;
