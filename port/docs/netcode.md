@@ -764,6 +764,22 @@ Bots are players whose input comes from a brain (`session/bot.hpp`), on the same
 `BotView` built from what its client knows (its own body as predicted, the snapshot's players, cars and peds, and the
 map as plain data: `engine::NavMap`, the walking height and the ways between cells) and returns the input bits a
 person would press. It uses no game logic: no route finder, no ped AI. Navigation is A* (`session/bot_nav.cpp`).
+The map's cells joined by ways are labelled in parts once per map: a goal in another part than the bot's (a pickup on
+a roof, a player behind a wall) is not chosen, and a search between parts fails at once. A body's cell is the one
+whose height fits its z, or the nearest within 2 that does (under a roof, the ground beside it). Routes head for the
+farthest of the next ten cells walkable in a straight line with room either side, and leave water out. On foot the
+brains walk with a `BotWalker`: stuck (under 0.3 blocks in 1.5 s), it backs off and turns; stuck again at the same
+cell within 10 s, it tries the next way out (the other side with the way it was crossing left out for 20 s, a jump,
+then the goal given up for 30 s). A goal its route gets no shorter to for 10 s (3 s with no route) is given up for
+30 s. Bots draw no random numbers and their searches are bounded in cells, so an arena match repeats for a seed.
+
+**Stuck meter**: each arena bot's line `net: arena <slot> <brain> stuck S s longest L s searches N failed F giveups G
+recoveries R in a car C s` counts the time it spent alive pressing on without getting anywhere (under 0.3 blocks in
+1.5 s on foot, 0.5 in 2 s in a car), and the match's `search cells per tick`. `port/net/scripts/bot_bench.sh` (`BIN`,
+`DATA`, `MAPS`, `SEEDS`) plays headless matches on downtown, mp1 and Industrial, two at a time, and sums them per map
+and brain. With 10 seeds and hunter, soldier and simple twice each, stuck seconds per bot and 5 minutes went from 118,
+104 and 60 (the three brains summed, downtown, mp1, Industrial) to 60, 74 and 68, frags about doubled, and search
+cells per tick fell from 2200..15000 to 15..230 on average; most of what is left is the hunter wedged in a car.
 A bot client still takes the keyboard's key events (Escape and the pause menu, the chat), so `GTA2_INPUT` can press
 them in a test.
 
