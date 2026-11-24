@@ -145,6 +145,7 @@ void net::WriteHello(BitWriter& w, const Hello& m)
     w.Bits(m.carInfo, 32);
     w.Bits(m.session, 32);
     w.Bits(m.token, 32);
+    w.Bits(m.bot, 1);
 }
 
 bool net::ReadHello(BitReader& r, Hello& m)
@@ -157,6 +158,7 @@ bool net::ReadHello(BitReader& r, Hello& m)
         m.session = r.Bits(32);
         m.token = r.Bits(32);
     }
+    m.bot = r.BitsLeft() >= 1 && r.Bits(1);
     return ok && !r.Overflow();
 }
 

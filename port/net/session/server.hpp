@@ -58,6 +58,7 @@ class Server
         bool used = false;
         uint32_t peer = 0;
         std::string name;
+        bool bot = false; // a bot client's (its hello): it plays but doesn't vote
         uint32_t token = 0; // the welcome's: a reconnect shows it to have this slot back as it was
         uint32_t leftTick = 0; // the tick its connection went (a map change keeps the slot of one that may come back)
         uint32_t lastCmdTick = 0; // the newest command tick received (late ones too)

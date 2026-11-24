@@ -33,7 +33,7 @@ struct RoundRules
 struct RoundPlayer
 {
     bool in = false; // in the game
-    bool voter = false; // a person (an arena bot doesn't vote)
+    bool voter = false; // a person (a bot, an arena's or a client's, doesn't vote)
     bool alwaysReady = false; // an arena bot
     std::string name;
     int score = 0; // frags, or points in a points game

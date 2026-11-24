@@ -165,7 +165,6 @@ class Client
     int PeerPing(int slot) const; // PlayerRow::ping's: -1 unknown, -2 an arena bot
     std::string RoundCorner() const;
     void BotRound(); // a bot readies up and votes
-    uint32_t BotMapChoice() const; // the map a bot votes for in the results (1-based)
     bool TakePong(const TransportEvent& e); // a pong (the ping's round trip measured): not for the frame
     void SendPing();
 

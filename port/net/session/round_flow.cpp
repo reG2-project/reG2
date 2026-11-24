@@ -423,6 +423,11 @@ void net::RoundFlow::Command(uint32_t tick, int slot, const std::string& text, c
     }
     const std::string& name = players[slot].name;
     const SlotMask bit = (SlotMask)(1u << slot);
+    if (!players[slot].voter && (line == "/yes" || line == "/no" || line == "/start" || line == "/map" || line == "/kick"))
+    {
+        out.notices.push_back({slot, "Bots don't vote"});
+        return;
+    }
     if (line == "/ready")
     {
         if (mState.phase != kPhaseWarmup || !mRules.enabled)
@@ -496,7 +501,7 @@ void net::RoundFlow::Command(uint32_t tick, int slot, const std::string& text, c
         int target = -1;
         for (size_t i = 0; i < players.size(); i++)
         {
-            target = players[i].in && players[i].voter && Lower(players[i].name) == arg ? (int)i : target;
+            target = players[i].in && !players[i].alwaysReady && Lower(players[i].name) == arg ? (int)i : target; // not an arena bot
         }
         if (target < 0 || target == slot)
         {

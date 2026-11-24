@@ -152,6 +152,7 @@ int net::Client::PollConnect(engine::NetworkGame* pGame, std::string* error)
             hello.build = mConfig.build;
             hello.name = mConfig.name;
             hello.carInfo = engine::DataFileCrc("nyc.gci");
+            hello.bot = !mConfig.bot.empty() && !Env().botVoteMap2;
             BitWriter w;
             WriteHello(w, hello);
             mTransport->Send(0, kChannelReliable, w.Data().data(), w.ByteCount(), true);
@@ -1019,6 +1020,7 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
             hello.build = mConfig.build;
             hello.name = mConfig.name;
             hello.carInfo = engine::DataFileCrc("nyc.gci");
+            hello.bot = !mConfig.bot.empty() && !Env().botVoteMap2;
             hello.session = mSession; // the server gives us our slot back by them, with its score
             hello.token = mToken;
             BitWriter w;
@@ -1968,30 +1970,6 @@ void net::Client::ShowScoreboard(const std::vector<engine::PlayerRow>& players, 
     engine::SetScoreboard(&board);
 }
 
-// A bot's map in the results: one of the others, picked by its slot and the frame (a vote among bots isn't always the
-// same map); map 2 for a test (GTA2_NET_BOTMAP2)
-uint32_t net::Client::BotMapChoice() const
-{
-    if (Env().botVoteMap2 || mMaps.size() < 2)
-    {
-        return mMaps.size() > 1 ? 2 : 1;
-    }
-    auto lower = [](std::string t) {
-        std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) { return (char)tolower(c); });
-        return t;
-    };
-    const std::string now = lower(mScr.substr(0, mScr.rfind('.')));
-    std::vector<uint32_t> others;
-    for (size_t m = 0; m < mMaps.size(); m++)
-    {
-        if (lower(mMaps[m]) != now)
-        {
-            others.push_back((uint32_t)m + 1);
-        }
-    }
-    return others.empty() ? 1 : others[(mSlot * 7 + mFrame) % others.size()];
-}
-
 void net::Client::BotRound()
 {
     // Not synced: the round is the last game's still, its flags by the slots before a map change renumbered them
@@ -2005,11 +1983,11 @@ void net::Client::BotRound()
     {
         SendCommand("/ready");
     }
-    else if (r.phase == kPhaseResults && !mMaps.empty() && mSlot < kRoundSlots && !r.mapChoice[mSlot])
+    else if (Env().botVoteMap2 && r.phase == kPhaseResults && !mMaps.empty() && mSlot < kRoundSlots && !r.mapChoice[mSlot])
     {
-        SendCommand("/map " + std::to_string(BotMapChoice()));
+        SendCommand("/map " + std::to_string(mMaps.size() > 1 ? 2 : 1));
     }
-    else if (r.voteKind != kVoteNone && mSlot < kRoundSlots && !((r.voteYes | r.voteNo) >> mSlot & 1))
+    else if (Env().botVoteMap2 && r.voteKind != kVoteNone && mSlot < kRoundSlots && !((r.voteYes | r.voteNo) >> mSlot & 1))
     {
         SendCommand(r.voteKind == kVoteKick && r.voteArg == mSlot ? "/no" : "/yes"); // anything but its own kick
     }

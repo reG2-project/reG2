@@ -247,7 +247,8 @@ player's name, as far as all that fit agree; when several fit they show over the
 
 **Votes**: `/start` (end the warmup), `/map N` (change now; a round ends without a winner), `/kick NAME` (out, and the
 name turned away for 10 minutes). One at a time, open 20 s, decided by a majority of the people in the game (not
-voting counts as no; the caller votes yes); Y or N while it shows (the keys that type them, so QWERTZ works), F1 for
+voting counts as no; the caller votes yes). Bots don't vote, nor choose the next map: an arena's, and a client's
+(`--bot`, its hello says so), are left out of the count and refused ("Bots don't vote"), and a client's can be kicked; Y or N while it shows (the keys that type them, so QWERTZ works), F1 for
 yes, or the pause menu's VOTE YES and VOTE NO. On a gamepad the warmup's and the vote's hints and notices point to the
 Start menu (`PadNotice`). `--votes` sets which are allowed.
 
@@ -896,8 +897,8 @@ them in a test.
 | `human` | for crash hunts, what people do and the others don't, in turns: cars, buses and the tank (in, about, out at speed), trains (on at a station, a ride, off), every weapon it has, pickups, into water, its own blasts (`session/bot_human.cpp`) |
 | `nn:<file>` | a trained network (`session/bot_nn.cpp`): 62 inputs (`BotFeatures`), a choice in six groups of outputs |
 
-In the round flow bots ready up, vote for one of the other maps in the results (map 2 with `GTA2_NET_BOTMAP2=1`, for a
-test) and yes on any vote but their own kick.
+In the round flow bots ready up and don't vote. With `GTA2_NET_BOTMAP2=1` (a test) a bot client joins as a person: it
+votes map 2 in the results and yes on any vote but its own kick.
 
 **Training** (`port/net/scripts/rl_bots.py`, PPO with torch): an **arena** (`--server --arena ... --ticks N`, bots
 on the server itself, `port/net/dev/arena.cpp`) plays the trainer's `remote:<port>` slots over a local socket, a
@@ -1168,7 +1169,7 @@ off by default:
 | `GTA2_NET_TESTARM=<weapon>:<ammo>[,...]`, `GTA2_NET_TESTWANTED=<points>` | server | every player kept armed (car weapons from 15: the car it drives), or at least that wanted (600: a star) |
 | `GTA2_NET_SCOREBOARD=1` | client | the scoreboard shown all the time, as if SCORES were held (captures) |
 | `GTA2_NET_BOTIDLE=<tick>:<tick>` | client bot, server | the bot (a server's: its arena bots) presses nothing from the first tick to before the second (net_check's throws step: the server's test phases and jacks) |
-| `GTA2_NET_BOTMAP2=1` | client bot | it votes map 2 in the results (net_check's rounds step) |
+| `GTA2_NET_BOTMAP2=1` | client bot | it joins as a person and votes map 2 in the results (net_check's rounds step) |
 | `GTA2_NET_BOTCARFIRE=1` | both | bots fire their car weapons while driving (a second in three) |
 | `GTA2_NET_BOTTURRET=1` | both | bots turn their roof turret while driving (a second in three) |
 | `GTA2_NET_SAY=<frame>:<command>;...` | client | commands sent at those frames |

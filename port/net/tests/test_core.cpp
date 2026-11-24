@@ -295,7 +295,12 @@ void TestMessages()
     net::BitReader hr2(hw2.Data().data(), hw2.ByteCount());
     net::Hello hgot;
     CHECK(hr2.Bits(8) == net::kMsgHello && net::ReadHello(hr2, hgot) && hgot.version == net::kProtocolVersion && hgot.build == hello.build &&
-          hgot.name == "me" && hgot.carInfo == 0xFFFFFFFF && hgot.session == hello.session && hgot.token == hello.token);
+          hgot.name == "me" && hgot.carInfo == 0xFFFFFFFF && hgot.session == hello.session && hgot.token == hello.token && !hgot.bot);
+    hello.bot = true;
+    net::BitWriter hw3;
+    net::WriteHello(hw3, hello);
+    net::BitReader hr3(hw3.Data().data(), hw3.ByteCount());
+    CHECK(hr3.Bits(8) == net::kMsgHello && net::ReadHello(hr3, hgot) && hgot.bot && hgot.token == hello.token);
 
     // A command and a notice: a line of text each, cut at 120 characters
     for (net::MsgType type : {net::kMsgCommand, net::kMsgNotice})

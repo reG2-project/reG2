@@ -57,6 +57,7 @@ struct Hello
     std::string name; // empty, too long or taken: the server gives one
     uint32_t carInfo = 0; // data/nyc.gci's CRC-32 (the cars' physics, every map's)
     uint32_t session = 0, token = 0; // a reconnect: the welcome's, so the server gives the slot back as it was (0: a join)
+    bool bot = false; // a bot client (--bot): it plays but doesn't vote
 };
 
 // What a client needs to start the same network game as the server

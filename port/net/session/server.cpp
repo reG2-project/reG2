@@ -358,6 +358,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
             s.peer = peer;
             s.name = name;
             s.token = token;
+            s.bot = hello.bot;
             Welcome welcome;
             welcome.slot = (uint8_t)slot;
             welcome.players = (uint8_t)mSlots.size();
@@ -1010,7 +1011,7 @@ std::vector<net::RoundPlayer> net::Server::RoundPlayers(const Snapshot& world) c
     for (size_t i = 0; i < mSlots.size(); i++)
     {
         players[i].in = mSlots[i].used && (engine::MapChangePending() || engine::SlotInGame((int)i)); // the pause: the next game's slots
-        players[i].voter = mSlots[i].used && mSlots[i].peer != kArenaPeer;
+        players[i].voter = mSlots[i].used && mSlots[i].peer != kArenaPeer && !mSlots[i].bot;
         players[i].alwaysReady = mSlots[i].peer == kArenaPeer;
         players[i].name = mSlots[i].name;
         // A client has the game once it acknowledged one of its snapshots (it was loading the map till then)
