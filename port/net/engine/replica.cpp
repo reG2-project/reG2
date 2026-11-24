@@ -763,6 +763,7 @@ unsigned int ClientCarKey(const Car* c)
 
 void ClientTickStart()
 {
+    ProtectPlayers(); // before every tick, live or resimulated: a frame may run several
     // Made again every tick (a few hundred entries); the maps change with every apply and restore
     gPedKeys.clear();
     gCarKeys.clear();
