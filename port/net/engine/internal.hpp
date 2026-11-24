@@ -283,6 +283,16 @@ class ReachArea
     Foci mFoci;
     float mReach;
 };
+// A pool's free entries from its free list's head, up to 64
+template <class T> int FreeSlots(T* head)
+{
+    int n = 0;
+    for (; head && n < 64; head = head->mpNext)
+    {
+        n++;
+    }
+    return n;
+}
 // The one dummy ped every traffic car shares as its driver (Car::SpawnDriverPed, CarManager::mSpareDriver): no
 // ped of its own, never sent, moved, forced or removed
 bool IsSpareDriver(const Ped* ped);

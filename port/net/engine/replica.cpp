@@ -51,16 +51,6 @@ int gOccupiedKept;
 int gPedsRemade;
 int gPedsKept; // deallocations of the server's peds refused (ClientPedMayGo)
 
-template <class T> int FreeSlots(T* head)
-{
-    int n = 0;
-    for (; head && n < 64; head = head->mpNext)
-    {
-        n++;
-    }
-    return n;
-}
-
 // Room to create a car or a ped without running a pool dry (Pool::Allocate doesn't check, and SpawnPedAt leaks its
 // ped when no char is left): a margin for the game's own allocations
 bool RoomForCar()

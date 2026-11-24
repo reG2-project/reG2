@@ -57,6 +57,7 @@ const Rule kRules[] = {
     {kEntityTrain, "y", kRange, kMapMin, kMapMax},
     {kEntityShot, "x", kRange, kMapMin, kMapMax},
     {kEntityShot, "y", kRange, kMapMin, kMapMax},
+    {kEntityShot, "z", kRange, 0, 15 << 14}, // a grenade thrown from the highest roof starts above the 8 levels
     // The input's key event: a DirectInput code of 0..255 (KeyboardLayout::mKeys[256], read by the chat), its press bit
     {kEntityPlayer, "buttons", kMask, 0x2FFFFF, 0},
     {kEntityPlayer, "money", kRange, 0, 999999999}, // the HUD's "%09d" into its 10 bytes (RollingDigitCounter)

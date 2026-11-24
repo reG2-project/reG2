@@ -12,7 +12,9 @@
 #include "Source/CollisionSoundQueue.hpp"
 #include "Source/Explosion.hpp"
 #include "Source/Object_3C.hpp"
+#include "Source/Object_3C_Pool.hpp"
 #include "Source/Object_5C.hpp"
+#include "Source/Object_8_Pool.hpp"
 #include "Source/ObjectPool.hpp"
 #include "Source/Ped.hpp"
 #include "Source/PedRefTable.hpp"
@@ -49,6 +51,7 @@ const Member kMotion[] = {
 };
 const size_t kMotionCount = sizeof(kMotion) / sizeof(kMotion[0]);
 const uint32_t kMostCatchUp = 64; // ticks a made shot is brought on at most (a snapshot's lag)
+const int kMostMade = 32; // shots made from one snapshot (a busy fight makes a few)
 
 // 0x28..0x2A: the key, 0x2B: the keyed objects it made (PortRand::gObjectMade); nothing of the game's reads them
 uint32_t KeyOf(const Object* o)
@@ -232,6 +235,13 @@ void ObjectMade(Object* o)
     }
 }
 
+// Room for a shot and what comes with it (Pool::Allocate doesn't check): a margin for the game's own
+bool RoomForShot()
+{
+    return FreeSlots(gObject_2C_Pool->mpStart) > 32 && FreeSlots(gObject_3C_Pool->mpHead) > 16 && FreeSlots(gObject_8_Pool->mpHead) > 16 &&
+           FreeSlots(gSpritePool->mPool.mpHead) > 32;
+}
+
 // Brought on <ticks> ticks to the snapshot's, each numbered for the draws as the server ran it; what it hits makes no
 // blast, sound or rumble here (the server's blast comes with the next snapshot). False: gone on the way
 bool CatchUp(Object* o, uint32_t ticks, uint32_t cycle)
@@ -339,7 +349,7 @@ Object* MakeShot(const EntityState& e, uint32_t key, uint32_t cycle)
         {
             return NULL;
         }
-        o->mpAny.pExplosion->mTimer = (u16)e.f[kShotTimer];
+        o->mpAny.pExplosion->mTimer = (u16)std::min(e.f[kShotTimer], (int32_t)explosion_timer::start_100);
         gMadeHere.insert(key);
     }
     else
@@ -477,6 +487,7 @@ void net::engine::ApplyShots(const Snapshot& snap)
     }
     std::set<uint32_t> wanted;
     const ReachArea area(snap, 0.0f);
+    int made = 0;
     for (const EntityState& e : snap.entities)
     {
         if (e.type != kEntityShot)
@@ -507,6 +518,10 @@ void net::engine::ApplyShots(const Snapshot& snap)
         {
             continue; // a model or blast the server never sends (sanitize.cpp's rule: CreateExplosion takes any type)
         }
+        if (made >= kMostMade || !RoomForShot())
+        {
+            continue; // a server making more than a fight does: what it can't have here
+        }
         if (area.DistanceTo(Blocks(e.f[kShotX]), Blocks(e.f[kShotY])) > SnapshotReach(snap))
         {
             gShotsBeyond++; // where this game's world is a guess
@@ -518,6 +533,7 @@ void net::engine::ApplyShots(const Snapshot& snap)
             continue;
         }
         Object* o = MakeShot(e, key, cycle);
+        made++;
         gShotsMade += o != NULL;
         if (ShotLogOn())
         {
