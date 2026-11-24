@@ -320,15 +320,15 @@ void SettleCar(Player* p, Ped* ped, const net::EntityState& e)
     }
 }
 
-// Its place: its car's, or its own on foot. True: a jump of the local player (its first snapshot, a respawn), which
-// the camera follows at once instead of panning across the map, as PutInGame and the game's respawn place it
-bool MovePlayer(int i, Ped* ped, const net::EntityState& e)
+// Its place: its car's, or its own on foot. True: a jump (its first snapshot, a respawn), which the camera follows at
+// once instead of panning across the map, as PutInGame and the game's respawn place it: the server's is there too
+bool MovePlayer(Ped* ped, const net::EntityState& e)
 {
     const Fix16 x = Raw(e.f[kPlayerX]), y = Raw(e.f[kPlayerY]), z = Raw(e.f[kPlayerZ]);
     const Ang16 rot = Angle(e.f[kPlayerRot]);
     const GridCheck check("moving a player", ped->mCar);
     Sprite* was = PedSprite(ped);
-    const bool jump = i == LocalPlayer() && was && (abs(was->mXy.x.mValue - x.mValue) > (8 << 14) || abs(was->mXy.y.mValue - y.mValue) > (8 << 14));
+    const bool jump = was && (abs(was->mXy.x.mValue - x.mValue) > (8 << 14) || abs(was->mXy.y.mValue - y.mValue) > (8 << 14));
     if (ped->mCar)
     {
         // A train's carriage is where its train puts it (trains.cpp): moved to a player the server has elsewhere, its
@@ -516,7 +516,7 @@ bool net::engine::ApplyPlayer(const EntityState& e)
     Car* serverTarget = RefCar(e.f[kPlayerTarget]);
     RetargetEntering(ped, serverTarget, e);
     SettleCar(p, ped, e);
-    const bool jump = MovePlayer(i, ped, e);
+    const bool jump = MovePlayer(ped, e);
     StartTransition(p, ped, serverTarget, e);
     if (jump)
     {
