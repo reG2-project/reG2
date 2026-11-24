@@ -409,6 +409,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   the server's. An ambient driver's pull is predicted and corrected as its phase. A ped jacking a driver on foot
   (`Ped::PullDriverOutOfCarStateMachine`, the carjacking animation) gets the server's states with its char at the
   victim's car here, or keeps its own while that car isn't here.
+- **A leave the server cut short ends here too** (`EndLeaving`): a player getting out of a car here while the server's is
+  on foot and not leaving is put on foot at once, so that whatever the server's does next (a jack) starts here as well.
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
   server's world. It carries every player, the car each sits in, gets into or is pulled out of, and every train wherever they are, and everything
   within the reach (the interest area, 24 blocks around the client's player's foci as the server has them), each entity the
