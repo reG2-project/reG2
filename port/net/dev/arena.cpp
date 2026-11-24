@@ -324,7 +324,7 @@ void net::Arena::Score(const Snapshot& world)
             bot.pickups += took;
             bot.reward += took ? kPickupReward : 0;
             bot.cars += me.car && !bot.last.car;
-            if (me.throwables < bot.last.throwables && me.health > 0 && !me.car)
+            if (me.throwables < bot.last.throwables && me.health > 0 && bot.last.health > 0 && !me.car)
             {
                 bot.throws++;
                 bot.closeThrows += nearest < 1.8f;
