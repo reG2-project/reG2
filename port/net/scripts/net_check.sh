@@ -162,7 +162,7 @@ maps() {
     # every change but perhaps the last, still under way at the end
     [ $(grep -c "a new game" "$OUT/maps_$b.log") -ge $((changes - 1)) ] || followed=0
     # the sound log plays the resimulated ticks' sounds on a later map too (its ticks are that map's game cycle)
-    awk '/a new game/ { n++ } /sounds of the resimulated ticks played/ && n { ok = 1 } END { exit !ok }' "$OUT/maps_$b.log" || heard=0
+    awk '/a new game/ { n++ } /net: [1-9][0-9]* sounds of the resimulated ticks played/ && n { ok = 1 } END { exit !ok }' "$OUT/maps_$b.log" || heard=0
   done
   if [ "$changes" -lt 3 ] || [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $followed = 0 ] || [ $heard = 0 ]; then
     fail "maps: $changes map changes, clients followed: $followed, resimulated sounds on a later map: $heard, $crashes crashed, $checks CHECK lines ($BUILD/net_check/maps_*.log)"

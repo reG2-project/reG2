@@ -178,8 +178,10 @@ void GiveOwed()
         {
             continue;
         }
+        net::engine::gSoundStats[0]++;
         if (Heard(w))
         {
+            net::engine::gSoundStats[1]++;
             sHeard.push_back(w); // the same sound asked for again (a held one, a death a snapshot carries out again)
             continue;
         }
@@ -204,6 +206,7 @@ void GiveOwed()
             continue;
         }
         const int ent = EntityOf(w);
+        net::engine::gSoundStats[2] += ent <= 0;
         if (ent > 0)
         {
             if (BangSize(w.mSample))
@@ -253,13 +256,14 @@ void LiveRequests(bool requested)
 } // namespace
 
 int net::engine::gSoundsGiven;
+int net::engine::gSoundStats[4];
 
 void net::engine::SoundLogRestored(uint32_t tick)
 {
     gPortSoundRequestsHook = LiveRequests;
     sSnapTick = tick;
     sRestored = true;
-    if (sSettled > tick + kKeep || sSettled + kKeep < tick) // a new game, or a jump
+    if (sSettled > tick + kKeep || sSettled + kKeep < tick) // a jump
     {
         sSettled = tick;
     }
@@ -273,6 +277,7 @@ void net::engine::SoundLogResimTick(bool applied)
     sound_obj& s = gSound_obj;
     if (!s.mbSoundInitialized || !s.mServiceEnabled || !s.mType5Idx || !gPortSoundRequestsHook)
     {
+        net::engine::gSoundStats[3] += gPortSoundRequestsHook != NULL;
         return;
     }
     // The channels and queues mirror the mixer (RestoreGame keeps them over a restore): as they were
@@ -313,11 +318,16 @@ void net::engine::SoundLogResimTick(bool applied)
     memcpy((unsigned char*)&s + from, sChannels, to - from);
 }
 
-void net::engine::SoundLogStop()
+void net::engine::SoundLogNewGame()
 {
-    gPortSoundRequestsHook = NULL;
     sHeard.clear();
     sWould.clear();
     sRestored = false;
     sSettled = 0;
+}
+
+void net::engine::SoundLogStop()
+{
+    gPortSoundRequestsHook = NULL;
+    SoundLogNewGame();
 }

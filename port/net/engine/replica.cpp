@@ -16,6 +16,7 @@
 #include "Source/sprite.hpp"
 #include <algorithm>
 #include <stdio.h>
+#include <string.h>
 #include <set>
 #include <unordered_map>
 #include <vector>
@@ -687,10 +688,13 @@ void net::engine::PrintReplicaLog()
         printf("net: %d deaths of this game's own held for the server's\n", gDeathsHeld);
         gDeathsHeld = 0;
     }
-    if (gSoundsGiven)
+    if (gSoundsGiven || gSoundStats[0] || gSoundStats[3])
     {
-        printf("net: %d sounds of the resimulated ticks played\n", gSoundsGiven);
+        printf("net: %d sounds of the resimulated ticks played (of %d asked for in settled ticks: %d heard live, %d without their "
+               "entity; %d resimulated ticks without sound)\n",
+               gSoundsGiven, gSoundStats[0], gSoundStats[1], gSoundStats[2], gSoundStats[3]);
         gSoundsGiven = 0;
+        memset(gSoundStats, 0, sizeof(gSoundStats));
     }
     if (gOccupiedKept)
     {

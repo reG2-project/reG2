@@ -616,7 +616,7 @@ entity's owner (a car or a ped by its id, as a resimulation can make it again el
 by place, as a snapshot's blast is made again with another id; anything else by its pointer), which of its sounds it is
 (`sound_0x68::mSampleIndex`; an object's sample; the collision queue's impacts by place; an AI driver's shouts and
 beeps, which take the next of a shared count, as one), the place and the tick, the game's cycle (`Rng::get_cur_rng`),
-which every map starts anew: a restore learns which snapshot tick it is. A resimulated tick runs the same entities
+which every map starts anew (so do the logs, `SoundLogNewGame`): a restore learns which snapshot tick it is. A resimulated tick runs the same entities
 without the mixer (`SoundLogResimTick`: the queues and channels as they were, no radio, vocal stream or pager) and notes
 what they would have asked for; their progress moves on with the world as on a live frame (entity ages, `SoundPosEntry`,
 the frame counter, the events they take). Once a snapshot settles a tick (its tick and the next, which runs with the
