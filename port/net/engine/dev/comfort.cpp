@@ -86,65 +86,63 @@ class Shots
   public:
     template <typename OwnerF> void Frame(const char* end, uint32_t tick, float lx, float ly, bool local, OwnerF owner)
     {
-        std::unordered_map<uint32_t, Shot> now;
+        // Keyed by its slot: a restore puts an object back in it, while its id can differ after a resimulation
+        std::unordered_map<const Object*, Shot> now;
+        std::vector<const Object*> fresh;
         for (Object& o : gObject_2C_Pool->mPool)
         {
             if (!o.mSprite || !o.mDefinition || o.mRemovalState || !ShotModel(o.mModel))
             {
                 continue;
             }
-            const uint32_t key = (uint32_t)o.mId;
             Shot s = {o.mModel, owner(&o), o.mSprite->mXy.x.ToFloat(), o.mSprite->mXy.y.ToFloat(), 0, 0, 0};
-            auto it = mShots.find(key);
-            if (it != mShots.end() && it->second.model == s.model)
+            auto it = mShots.find(&o);
+            if (it != mShots.end() && Error(it->second, s) < 1.0f)
             {
                 s.vx = s.x - it->second.x;
                 s.vy = s.y - it->second.y;
                 s.printed = it->second.printed;
+                it->second.printed = 0; // taken
             }
-            now[key] = s;
+            else
+            {
+                fresh.push_back(&o);
+            }
+            now[&o] = s;
         }
-        // Made again under another key (a client's restore, its resimulation): the same shot
-        std::vector<uint32_t> gone;
-        for (auto& g : mShots)
+        // Made again in another slot (a client's resimulation): the same shot, the one nearest where it would be
+        for (const Object* k : fresh)
         {
-            if (!now.count(g.first) || now[g.first].model != g.second.model)
+            Shot& s = now[k];
+            Shot* best = NULL;
+            float bestError = 0;
+            for (auto& g : mShots)
             {
-                gone.push_back(g.first);
-            }
-        }
-        for (auto& n : now)
-        {
-            auto it = mShots.find(n.first);
-            if (it != mShots.end() && it->second.model == n.second.model)
-            {
-                continue;
-            }
-            Shot& s = n.second;
-            for (size_t i = 0; i < gone.size(); i++)
-            {
-                const Shot& g = mShots[gone[i]];
-                const float ex = g.x + g.vx - s.x, ey = g.y + g.vy - s.y, reach = g.vx || g.vy ? 2.0f : 4.0f;
-                if (g.model == s.model && g.owner == s.owner && ex * ex + ey * ey < reach * reach)
+                const float e = Error(g.second, s), reach = g.second.vx || g.second.vy ? 1.0f : 2.0f;
+                if (g.second.printed && e < reach && (!best || e < bestError))
                 {
-                    s.printed = g.printed;
-                    s.vx = g.vx;
-                    s.vy = g.vy;
-                    gone.erase(gone.begin() + i);
-                    break;
+                    best = &g.second, bestError = e;
                 }
             }
-            if (!s.printed)
+            if (best)
             {
-                s.printed = ++mCount;
-                const float dx = s.x - lx, dy = s.y - ly;
-                printf("comfort: %s shot+ %u %u %d %u %.2f %.2f %.1f\n", end, tick, s.printed, s.model, s.owner, s.x, s.y,
-                       local ? sqrtf(dx * dx + dy * dy) : 0.0f);
+                s.printed = best->printed;
+                s.vx = best->vx;
+                s.vy = best->vy;
+                best->printed = 0;
+                continue;
             }
+            s.printed = ++mCount;
+            const float dx = s.x - lx, dy = s.y - ly;
+            printf("comfort: %s shot+ %u %u %d %u %.2f %.2f %.1f\n", end, tick, s.printed, s.model, s.owner, s.x, s.y,
+                   local ? sqrtf(dx * dx + dy * dy) : 0.0f);
         }
-        for (uint32_t k : gone)
+        for (const auto& g : mShots)
         {
-            printf("comfort: %s shot- %u %u\n", end, tick, mShots[k].printed);
+            if (g.second.printed)
+            {
+                printf("comfort: %s shot- %u %u\n", end, tick, g.second.printed);
+            }
         }
         mShots.swap(now);
     }
@@ -157,7 +155,13 @@ class Shots
         float x, y, vx, vy;
         uint32_t printed; // its number in the log
     };
-    std::unordered_map<uint32_t, Shot> mShots;
+    // How far <s> is from where <g> would be a tick on (of another model or owner: far)
+    static float Error(const Shot& g, const Shot& s)
+    {
+        const float ex = g.x + g.vx - s.x, ey = g.y + g.vy - s.y;
+        return g.model == s.model && g.owner == s.owner ? sqrtf(ex * ex + ey * ey) : 1e9f;
+    }
+    std::unordered_map<const Object*, Shot> mShots;
     uint32_t mCount = 0;
 };
 
