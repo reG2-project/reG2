@@ -426,7 +426,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   `mId`), so a pool slot the client's game freed and handed out again isn't taken for the old entity.
 - **Players in cars** (`engine/car_entry.cpp`): a client gets into and out of cars by its own predicted input. When
   both sides have settled and the server has the player elsewhere, the client puts the ped into the server's car, or
-  out of its own, at once, ending the way the game's own entering and leaving end. Another player's enter key reaches
+  out of its own, at once, ending the way the game's own entering and leaving end; a car the same snapshot makes
+  (one new to the client) once the cars are applied, so the ped never stands on foot where its car appears. Another player's enter key reaches
   a client after its tick, so when the server's player is on its way into a car and the client's isn't, the client
   starts it as the key does.
 - **Guards** (`engine/guards.cpp`, on the server too): what a network game breaks in the game's own logic is made
@@ -827,13 +828,15 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
 - **rounds**: two bot clients ready up, play a round, vote for map 2 and follow the server there (a check of where
   the players stand: on the new map); a third joins during the results and plays round 2.
 - **soak**: a server and three bot clients at 10 times the clock: 10 minutes of play in 60 s, no crash.
-- **throws**: blasts at a server bot's feet and a block away (`GTA2_NET_TESTBLAST`), another bot set on fire, a bot
+- **throws**: blasts at a server bot's feet and a block away (`GTA2_NET_TESTBLAST`, none while it is invulnerable after a
+  respawn: a test blast is the server's alone, and an invulnerable bot walks into it again and again), another bot set on fire, a bot
   client watching with the blend off: every tick it shows a player thrown, the server had it thrown there with the
   same outcome (a flying death shows knocked down until the server's death).
   The burning bot is also electrocuted and drowned (`GTA2_NET_TESTPHASE`): the client still shows it in that state at
   the tick the server's dies. It is also put in a car and pulled out of it: the client shows it at the door only on ticks the
   server has it there, never seated or walking; then the client's player jacks it out of a car (server's
-  `GTA2_NET_TESTPHASE` code 4), which the client shows from the server's pull too. The client's own player is drowned and electrocuted at times
+  `GTA2_NET_TESTPHASE` code 4, the server's pull held for 10 ticks at the door), which the client shows from the server's
+  pull too, its own jacker waiting at the door as the server's does. The client's own player is drowned and electrocuted at times
   where the server never has it (`GTA2_NET_TESTLOCALPHASE`, on every run of that tick, live and resimulated): the
   snapshots cancel it within 20 ticks.
 - **peds**: the ambient ped nearest the client's player drowned, electrocuted, knocked down or blown up in turns
