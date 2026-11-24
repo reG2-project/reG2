@@ -40,6 +40,7 @@ void BackAtDoor(Ped* ped, Char* c, const int32_t* f)
     c->mTargetCar = car;
     c->mAnimationState = Char_Anim_state::Getting_pulled_out_of_car_8;
     c->mAnimationFrame = (u8)(f[kPhaseTimer] & 3);
+    c->mFrameTimer = (s8)(f[kPhaseTimer] >> 4 & 7);
     c->mStateInitPending = (f[kPhase] & kPhaseInit) != 0;
     c->mSpritePtr->SetDrawLayer(6);
 }
@@ -113,7 +114,7 @@ void net::engine::CapturePhases(const Ped* ped, EntityState& e, int base)
             f[kPhaseTimer] = c->mTimer;
             break;
         case kPhaseDoor:
-            f[kPhaseTimer] = (c->mAnimationFrame & 3) | (ped->mTargetCarDoor & 3) << 2;
+            f[kPhaseTimer] = (c->mAnimationFrame & 3) | (ped->mTargetCarDoor & 3) << 2 | (c->mFrameTimer & 7) << 4;
             f[kPhaseCar] = CarRef(c->mTargetCar);
             break;
     }
@@ -218,6 +219,7 @@ void net::engine::ApplyPhases(Ped* ped, const EntityState& e, int base, bool dea
                 if (Car* car = RefCar(f[kPhaseCar]))
                 {
                     c->mAnimationFrame = (u8)(timer & 3);
+                    c->mFrameTimer = (s8)(timer >> 4 & 7);
                     ped->mTargetCarDoor = (u8)(timer >> 2 & 3);
                     c->mTargetCar = car;
                 }

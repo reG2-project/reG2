@@ -29,7 +29,7 @@ enum PhaseField
 {
     kPhase, // PhaseCode | kPhaseInit
     kPhaseTimer, // what ends it: thrown Char::mTimeout, lying mLyingOnFloorTimer, sinking and electrocuted mTimer, at a car
-                 // door mAnimationFrame | Ped::mTargetCarDoor << 2
+                 // door mAnimationFrame | Ped::mTargetCarDoor << 2 | Char::mFrameTimer << 4
     kPhaseCar, // at a car door: the car (CarRef)
     kThrow, // thrown: the outcome (1 back on its feet, 2 knocked down, 3 dead) | airborne << 2 | the object's collision mode
             // (Object_3C::mSpriteCollideMode) << 3, 0 not thrown; then the throw's object:
