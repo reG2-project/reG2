@@ -14,8 +14,8 @@ namespace PortShotTrails
 namespace
 {
 const f64 kTrailSteps = 1.0; // 2 frames at 60 fps, the frame it starts at below that
-const f32 kFlashSize = 0.42f; // blocks
-const f32 kTracerWidth = 0.05f;
+const f32 kFlashSize = 0.55f; // blocks
+const f32 kTracerWidth = 0.07f;
 const s32 kMaxTrails = 32;
 const s32 kTex = 32; // the flash's glow left, the tracer's cross-section right
 
@@ -41,12 +41,11 @@ void MakeTexture()
             if (x < kTex)
             {
                 const f32 u = (x + 0.5f) / kTex * 2.0f - 1.0f, r = sqrtf(u * u + v * v);
-                a = r >= 1.0f ? 0.0f : (1.0f - r) * (1.0f - r);
+                a = r >= 1.0f ? 0.0f : fminf(1.0f, 1.6f * (1.0f - r) * (1.0f - r) + (r < 0.25f ? 0.5f : 0.0f));
             }
             else
             {
-                a = 1.0f - fabsf(v);
-                a *= a;
+                a = fminf(1.0f, 1.5f * (1.0f - fabsf(v)));
             }
             const u32 c = static_cast<u32>(a * 255.0f + 0.5f);
             sPixels[y * kTex * 2 + x] = c | c << 8 | c << 16 | c << 24; // RGBA8, little endian
