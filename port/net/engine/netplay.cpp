@@ -152,6 +152,7 @@ void net::engine::StopNetworkGame()
     bSkip_buses = false;
     gPortNetRoundPad = 0;
     gPortKeepWantedPoints = false;
+    gPortNoOwnBus = false;
     gPortServerKillNotices = false;
     gPortServerKillAwards = false;
     gPortProtectsPlayers = false;

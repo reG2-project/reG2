@@ -110,6 +110,9 @@ extern bool (*gPortNextNetworkGame)();
 // zeroes them nor registers a criminal: zeroed each tick, the HUD would show no cop heads and the cops chasing a player
 // would give up between snapshots
 extern bool gPortKeepWantedPoints;
+// A network client's: no bus of its own (PublicTransport::BusesService); its peds still go for the bus stops as the
+// server's do (Ped::EnterPublicTransport, whose draw bSkip_buses would skip)
+extern bool gPortNoOwnBus;
 // A network client's: the HUD's kill notices (Hud_MpMessage::AnnounceKill) are the server's deaths only, not the ones
 // its prediction starts and a restore undoes
 extern bool gPortServerKillNotices;

@@ -35,6 +35,7 @@ void (*gPortDrawOverlay)();
 bool (*gPortDrawNetStandings)();
 bool (*gPortNextNetworkGame)();
 bool gPortKeepWantedPoints;
+bool gPortNoOwnBus;
 bool gPortServerKillNotices;
 bool gPortServerKillAwards;
 bool gPortTagTimeCounts;
