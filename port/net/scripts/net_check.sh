@@ -247,12 +247,12 @@ throws() {
   # Per tick and player: thrown with an outcome (ped 8/24..26) or not, on fire or not
   local result
   result=$(awk '
-    /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) burn[$6]++ }
+    /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) { burn[$6]++; if ($6 == "p1") burning[$5 + 0] = 1 } }
     /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { c[$5 $6] = $12 }
-    /hit on the server at tick/ && $3 == 1 { hits++ }
+    /hit on the server at tick/ && $3 == 1 && burning[$10 + 0] { hits++ }
     END {
       for (k in s) { thrown++; if (s[k] == "8/26") fatal++ }
-      # A client never lands a player fatally itself (GuardThrow): the server's flying death shows knocked down there
+      # A client never lands a player fatally itself (GuardThrow): a flying death of the server shows knocked down there
       for (k in c) { shown++; if (s[k] == "8/26") shownFatal++; if ((s[k] == "8/26" ? "8/25" : s[k]) != c[k]) wrong++ }
       printf "%d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], hits
     }' "$OUT/throws_server.log" "$OUT/throws_client.log")
