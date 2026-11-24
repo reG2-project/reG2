@@ -189,6 +189,12 @@ bool BlastHurts(Explosion* x)
     return !x->mpObj2C || !gMadeHere.count(KeyOf(x->mpObj2C));
 }
 
+// In a network game a blast throws its debris seen or not, on both ends alike
+bool BlastDebris(Explosion*)
+{
+    return true;
+}
+
 bool ShotLogOn()
 {
     static const bool on = getenv("GTA2_NET_SHOTLOG") != NULL;
@@ -283,6 +289,7 @@ void net::engine::InstallShots(bool on, bool client)
     gPortObjectMade = on ? ObjectMade : NULL;
     PortRand::gObjectKey = on ? ObjectCreator : NULL;
     gPortBlastHurts = on && client ? BlastHurts : NULL;
+    gPortBlastDebris = on ? BlastDebris : NULL;
     const char* ghost = getenv("GTA2_NET_TESTGHOSTSHOT");
     gGhostTick = on && client && ghost ? (uint32_t)atoi(ghost) : 0;
     gKeySkew = on && client && getenv("GTA2_NET_SHOTSKEW") ? 0x800000 : 0;

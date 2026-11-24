@@ -14,7 +14,7 @@
 #include "debug.hpp"
 #include "rng.hpp"
 #if defined(GTA2_PORT)
-#include "../port/src/net_hooks.hpp" // gPortBlastHurts
+#include "../port/src/net_hooks.hpp" // gPortBlastHurts, gPortBlastDebris
 #endif
 
 DEFINE_GLOBAL(ExplosionPool*, gExplosionPool_7A8, 0x6FD5F0);
@@ -730,9 +730,19 @@ void Explosion::UpdateExplosion_18_19_20_32_33()
     }
 
     sExplosionWantsFlash = 0;
+#if defined(GTA2_PORT)
+    // Port: a network game's debris don't depend on the cameras, which differ between its ends; the particles do
+    const bool bDebris = gPortBlastDebris ? gPortBlastDebris(this) : isOnScreen;
+    if (isOnScreen || bDebris)
+#else
     if (isOnScreen)
+#endif
     {
+#if defined(GTA2_PORT)
+        switch (isOnScreen ? this->mType : explosion_type::none_0)
+#else
         switch (this->mType)
+#endif
         {
             case explosion_type::small_18:
             case explosion_type::small_33:
@@ -751,7 +761,11 @@ void Explosion::UpdateExplosion_18_19_20_32_33()
                 break;
         }
 
+#if defined(GTA2_PORT)
+        switch (bDebris ? this->mTimer : 0)
+#else
         switch (this->mTimer)
+#endif
         {
             case 59:
             case 69:
