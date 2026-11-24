@@ -558,6 +558,11 @@ class SoldierBot : public DecidingBot
             return Drive(v, target, d);
         }
         mBackUntil = 0;
+        mPickups.See(v);
+        if (const uint32_t dodge = mDodge.Think(v))
+        {
+            return dodge;
+        }
         const net::BotView::Seen* walkable = Nearest(v, net::BotView::Seen::kPlayer, &d, false, &mWalker);
         target = walkable ? walkable : target;
         // Unarmed and someone drives near: its car, with it pulled out (the game does that on enter)
@@ -567,7 +572,7 @@ class SoldierBot : public DecidingBot
         }
         // Unarmed: to a weapon whatever happens (fistfights between players get stuck, with no harm done)
         float far = 0;
-        const net::BotView::Seen* weapon = v.guns ? NULL : Nearest(v, net::BotView::Seen::kPickup, &far, true, &mWalker);
+        const net::BotView::Seen* weapon = v.guns ? NULL : mPickups.Best(v, mWalker, &far);
         if (weapon)
         {
             return Walk(v, *weapon);
@@ -602,10 +607,14 @@ class SoldierBot : public DecidingBot
         const bool blast = v.weapon == 2 || v.weapon == 4 || v.weapon == 5;
         // A car under fire burns and blows up: from 3 blocks
         const float nearest = blast ? 4 : target.inCar ? 3 : 0.8f, farthest = blast ? 7 : target.inCar ? 4 : 1.5f;
-        b |= d > farthest ? net::kBtnForward : d < nearest ? net::kBtnBack : 0;
-        if (v.weapon < 0)
+        if (d > farthest)
         {
-            return b | Press(v, net::kBtnNextWeapon); // fists in hand: a gun out
+            b = Walk(v, target); // the walker gets it unstuck
+        }
+        b |= d < nearest ? net::kBtnBack : 0;
+        if (v.weapon != WantedWeapon(v, target.inCar, d))
+        {
+            return b | Press(v, net::kBtnNextWeapon);
         }
         return b | (abs(err) <= 80 ? net::kBtnAttack : 0); // held: guns fire while it is
     }
@@ -640,8 +649,8 @@ class SoldierBot : public DecidingBot
         {
             return mStuckTimes >= 3 ? Press(v, net::kBtnEnterExit) : net::kBtnBack | (direct > 0 ? net::kBtnRight : net::kBtnLeft);
         }
-        // Near it, armed, and not coming at it fast and head on: out, to shoot
-        if (v.guns && d < 7 && (mSpeed < 0.12f || abs(direct) > 240))
+        // Near it, armed (rockets for a car), and not coming at it fast and head on: out, to shoot
+        if ((target->inCar ? v.gunMask >> 2 & 1 : v.guns) && d < 7 && (mSpeed < 0.12f || abs(direct) > 240))
         {
             return Press(v, net::kBtnEnterExit);
         }
@@ -660,6 +669,8 @@ class SoldierBot : public DecidingBot
     uint32_t mLastFrame = 0, mStuckCheck = 0, mBackUntil = 0, mSlowFor = 0, mDriveFrame = 0;
     net::BotWalker mWalker;
     int mStuckTimes = 0;
+    PickupMemory mPickups;
+    CarDodge mDodge;
 };
 } // namespace
 
