@@ -138,6 +138,7 @@ void net::ServerProbe::Captured(uint32_t tick, const Snapshot& world)
     engine::StackLog(true);
     engine::TrainLog(true);
     engine::FireLog(true);
+    engine::PoseLog(true);
     engine::ThrowLog(true, 0);
     engine::ShotLog(true);
     engine::PedLog("server");

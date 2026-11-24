@@ -199,7 +199,7 @@ score (`gPortDrawNetStandings`). A replay keeps the original's list and counter.
 
 **Connection.** The ping shows at the bottom right: the network's round trip alone (`kMsgPing`, answered at once,
 both polled between frames). With no snapshot for 0.7 s it shows **Connection interrupted** and plays on, the others'
-last inputs (without fire) held for 10 ticks after the last snapshot, then none. When ENet drops
+last inputs held for 10 ticks (the fire for 5) after the last snapshot, then none. When ENet drops
 the connection (after 5-10 s) it shows **Lost the server, reconnecting** and connects again every 3 s with its slot's
 token (the welcome's): the server gives the slot back with its score and ammo, also while it still has the old
 connection (dropped then, the player stays where it is), else at a restart zone. A game the server went on to
@@ -345,8 +345,10 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   restores S, applies the server's state, and runs the ticks up to its own with its own inputs; other players take
   the controls the snapshot forwards for the ticks after it (the next tick's as the server runs it, then the commands
   it holds, up to 4), then the last of them repeated, a turn only once two in a row have it (a tap repeated turns far
-  past the server's), without fire: another player's shots come only from the ticks the server forwarded, never drawn
-  for a burst it didn't fire (`GTA2_NET_HOLDFIRE=1` repeats the fire too, to compare). `GTA2_NET_NOFORWARD=1` predicts
+  past the server's). A repeated fire is a guess: the shooter's pose shows (`Ped::mBf21C.bAttacking`, the gun raised),
+  but its weapon is not used (`SetFireGuessed`, `gPortPedMayFire` in `Ped::ManageWeapon`): another player's shots come
+  only from the ticks the server forwarded, never drawn for a burst it didn't fire (`GTA2_NET_HOLDFIRE=1` fires the
+  repeated fire too, to compare). `GTA2_NET_NOFORWARD=1` predicts
   by the repeated input alone (to compare on a replay).
   Everything else moves on by the game's own simulation in those ticks. Of the resimulated ticks only the first 4 are
   saved again (the next snapshots restore those; a save of the 3 MB world was three quarters of a rollback's time): the
@@ -862,8 +864,9 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
 
 - **arena**: 24 bot matches of 5 minutes on the server alone (three maps, every brain, random seeds): none may crash.
 - **live**: a server and two bot clients at 100 ms, jitter and 2% loss, police on, with the grid check: no crash and
-  no `net: CHECK` line, and the server's recording replays to the same world at every tick. Prints the corrections and
-  the comparison check's worst fields.
+  no `net: CHECK` line, and the server's recording replays to the same world at every tick. Of the ticks a server bot
+  stands with a gun and the fire held (`GTA2_NET_POSELOG`), a client shows at least 80% in the firing pose. Prints the
+  corrections and the comparison check's worst fields.
 - **churn**: two bot clients stay while two others join and leave four times (stopped by SIGTERM and Ctrl-C): no
   crash, no `CHECK` line, nobody turned away as the server being full.
 - **maps**: a three-map rotation, 15 s rounds at 4 times the clock: both clients follow every change.
@@ -965,6 +968,7 @@ off by default:
 | `GTA2_NET_SHOTLOG=1` | both | every tick, the shots by key (model, blast type and timer, owner, place); on a client each shot made, removed or beyond the reach at a snapshot, and each other player's shot slid or flashed (`SHOTVIS`, by the frame GTA2GL_CAPTURE numbers) |
 | `GTA2_NET_PEDLOG=<player>` | both | the peds within 12 blocks of that player, their states and phase: every tick, and on a client also as each snapshot's apply left them |
 | `GTA2_NET_FIRELOG=1` | both | every fire at every 30th tick of the game's cycle: a car's (its id, wrecked or not, its fire's explosion types), the ones on nothing by place, the peds on fire |
+| `GTA2_NET_POSELOG=1` | both | every tick, each player on foot: its fire held (`Ped::mBf21C.bAttacking`, the firing pose), its weapon, animation and whether it moves |
 | `GTA2_NET_TRAINLOG=1` | both | every train's place and state at every 150th tick of the game's cycle (the same tick on both ends) |
 | `GTA2_NET_CHECKGRID=1` | both | the collision grid checked after every move, a sprite moved off the map reported with the code that moved it, a rollback block whose pointee moved since the set was taken, on a client a ped driving a car that has another driver or leaving it through another car, and on both the weapon pool's lists looping or sharing a weapon and a ped holding a weapon it would free wrongly (a freed one, a player slot's, a car's, another ped's), a tank, fire truck or gun jeep without its roof turret, and a collision grid row that isn't a sorted list of pool cells and links, after every tick, restore and apply (`net: CHECK` lines) |
 | `GTA2_NET_SNAPCHECK=1` | server | every entity's hash in the snapshots, checked by the clients, and the snapshot sanity check run on the server's own world (`net: CHECK` lines) |

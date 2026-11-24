@@ -1135,6 +1135,29 @@ void net::engine::FireLog(bool server)
            me ? me->get_cam_y().ToFloat() : -1.0f);
 }
 
+void net::engine::PoseLog(bool server)
+{
+    static const bool on = getenv("GTA2_NET_POSELOG") != NULL;
+    static uint32_t sLast;
+    const uint32_t tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+    if (!on || tick == sLast)
+    {
+        return;
+    }
+    sLast = tick;
+    for (int i = 0; i < PlayerCount(); i++)
+    {
+        Ped* ped = InGamePed(i);
+        Char* c = ped ? ped->mGameObject : NULL;
+        if (c && !ped->mCar && !ped->isDead())
+        {
+            printf("net: POSE %s tick %u: p%d attack %d weapon %d anim %d moving %d\n", server ? "server" : "client", tick, i,
+                   (int)ped->mBf21C.bAttacking, ped->mSelectedWeapon ? (int)ped->mSelectedWeapon->mWeaponType : -1,
+                   (int)c->mAnimationState, c->mVelocity.mValue != 0);
+        }
+    }
+}
+
 void net::engine::ThrowLog(bool server, uint32_t snap)
 {
     static const bool on = getenv("GTA2_NET_THROWLOG") != NULL;

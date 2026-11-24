@@ -528,12 +528,12 @@ void net::Client::TakePlayerStates(const Snapshot& snap)
     }
 }
 
-// The server's forwarded controls for that tick if it sent them, else the held input without fire: another player's
-// shots past what the server forwarded come from the resimulation of its forwarded ticks, never from a guess. With no
-// snapshot for a while the rest of the held input is let go after 10 ticks (nobody runs on through a stall)
-uint32_t net::Client::RemoteInput(int player, uint32_t tick) const
+// The server's forwarded controls for that tick if it sent them, else the held input (let go 10 ticks into a stall), its
+// fire a guess: the pose shows, the shots come from the forwarded ticks only (PredictedInput)
+uint32_t net::Client::RemoteInput(int player, uint32_t tick, bool* pGuessed) const
 {
     const uint32_t k = tick - mKnownTick - 1;
+    *pGuessed = false;
     if (player < kMaxForwardSlots && tick > mKnownTick && k < mKnown.count[player])
     {
         return mKnown.controls[player][k];
@@ -543,8 +543,18 @@ uint32_t net::Client::RemoteInput(int player, uint32_t tick) const
     {
         printf("net: frame %u, no snapshot for 10 ticks: player %d's held input 0x%x let go\n", mFrame, player, mRemote[player]);
     }
-    const bool fire = Env().holdFire && stalled <= 5;
-    return stalled > 10 ? 0 : fire ? mRemote[player] : mRemote[player] & ~(uint32_t)kBtnAttack;
+    const uint32_t held = stalled > 10 ? 0 : stalled > 5 ? mRemote[player] & ~(uint32_t)kBtnAttack : mRemote[player];
+    *pGuessed = !Env().holdFire && (held & kBtnAttack);
+    return held;
+}
+
+// Another player's input for a tick about to run, its weapon kept from a guessed fire
+uint32_t net::Client::PredictedInput(int player, uint32_t tick)
+{
+    bool guessed;
+    const uint32_t b = RemoteInput(player, tick, &guessed);
+    engine::SetFireGuessed(player, guessed && player != mSlot);
+    return b;
 }
 
 // A snapshot of tick S: back to the game as it was after S, the server's state on top, then the ticks since then
@@ -624,7 +634,7 @@ void net::Client::Resimulate(uint32_t s)
     {
         for (size_t i = 0; i < buttons.size(); i++)
         {
-            buttons[i] = RemoteInput((int)i, t);
+            buttons[i] = PredictedInput((int)i, t);
         }
         buttons[mSlot] = mHist[t % kRing].tick == t ? mHist[t % kRing].buttons : 0;
         if (t == mTick)
@@ -1098,7 +1108,7 @@ void net::Client::FastForward(int ticks)
     {
         for (size_t p = 0; p < buttons.size(); p++)
         {
-            buttons[p] = (int)p == mSlot ? local : RemoteInput((int)p, mTick + 1); // as a live tick would have them
+            buttons[p] = (int)p == mSlot ? local : PredictedInput((int)p, mTick + 1); // as a live tick would have them
         }
         SetNextInputs(local);
         engine::ResimTick(buttons.data(), (int)buttons.size());
@@ -1284,7 +1294,7 @@ void net::Client::SetNextInputs(uint32_t local)
     mHist[next % kRing].typed = engine::TypedChar(local);
     for (size_t i = 0; i < mRemote.size(); i++)
     {
-        engine::SetPlayerInput((int)i, (int)i == mSlot ? local : RemoteInput((int)i, next));
+        engine::SetPlayerInput((int)i, (int)i == mSlot ? local : PredictedInput((int)i, next));
     }
 }
 

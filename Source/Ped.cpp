@@ -11298,6 +11298,13 @@ void Ped::ManageWeapon()
             mAimAngle = mGameObject->mSpritePtr->mRotation;
         }
     }
+#if defined(GTA2_PORT)
+    // Port: a network client's guess of another player's held fire shows its pose only (port/net/engine/players.cpp)
+    if (gPortPedMayFire && !gPortPedMayFire(this))
+    {
+        return;
+    }
+#endif
     if (mBf21C.bAttacking == true)
     {
         if (pWeapon)

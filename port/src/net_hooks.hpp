@@ -84,6 +84,8 @@ extern bool (*gPortBlastDebris)(Explosion* pExplosion);
 // Asked as a ped would die (Ped::Kill): false, and it doesn't. NULL but on a network client, whose peds on foot die by
 // the server's death only
 extern bool (*gPortPedMayDie)(Ped* pPed);
+// Asked as a ped would use its weapon (Ped::ManageWeapon): false, and it does not. NULL but on a network client
+extern bool (*gPortPedMayFire)(Ped* pPed);
 // Asked as a jacker's char pulls a driver out (Char::UpdateCharB4): false, and the jacker waits at the door. NULL but in
 // a network test that holds the server's pull
 extern bool (*gPortMayPullOut)(Ped* pVictim);

@@ -74,6 +74,7 @@ void InstallSpriteCheck(); // GTA2_NET_CHECKGRID: a sprite moved off the map is 
 void StackLog(bool server); // GTA2_NET_STACKLOG: two cars in one place (under 0.4 blocks apart in x and y), once per pair
 void TrainLog(bool server); // GTA2_NET_TRAINLOG: every train's place and state at every 150th tick of the game's cycle
 void FireLog(bool server); // GTA2_NET_FIRELOG: every fire (cars', loose, peds on fire) at every 30th tick of the game's cycle
+void PoseLog(bool server); // GTA2_NET_POSELOG: every tick, each player on foot: its fire held (Ped::mBf21C.bAttacking), weapon, moving
 // GTA2_NET_THROWLOG: every tick, the players thrown, down, dead or on fire, and new explosions; snap: the newest
 // snapshot applied (a client), each player line ends with it
 void ThrowLog(bool server, uint32_t snap);

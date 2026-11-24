@@ -163,6 +163,7 @@ void net::engine::StopNetworkGame()
     gPortProtectsPlayers = false;
     gPortCarMayExplode = NULL;
     gPortPedMayDie = NULL;
+    gPortPedMayFire = NULL;
     gPortMayPullOut = NULL;
     gPortPedMayGo = NULL;
     gPortScriptCommandRuns = NULL;

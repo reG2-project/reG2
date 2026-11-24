@@ -25,6 +25,7 @@ void (*gPortObjectMade)(Object* pObject);
 bool (*gPortBlastHurts)(Explosion* pExplosion);
 bool (*gPortBlastDebris)(Explosion* pExplosion);
 bool (*gPortPedMayDie)(Ped* pPed);
+bool (*gPortPedMayFire)(Ped* pPed);
 bool (*gPortMayPullOut)(Ped* pVictim);
 bool (*gPortPedMayGo)(Ped* pPed);
 bool (*gPortScriptCommandRuns)(u16 type);

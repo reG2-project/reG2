@@ -773,6 +773,23 @@ bool net::engine::ClientPedMayDie(Ped* ped)
     return false;
 }
 
+namespace
+{
+uint32_t gFireGuessed; // by player
+} // namespace
+
+void net::engine::SetFireGuessed(int player, bool guessed)
+{
+    const uint32_t bit = player >= 0 && player < 32 ? 1u << player : 0;
+    gFireGuessed = guessed ? gFireGuessed | bit : gFireGuessed & ~bit;
+}
+
+bool net::engine::ClientPedMayFire(Ped* ped)
+{
+    const int i = ped->mPlayer ? ped->mPlayer->mPlayerIdx : -1;
+    return i < 0 || i >= 32 || !(gFireGuessed >> i & 1);
+}
+
 bool net::engine::InServerDeath()
 {
     return gServerDeath;

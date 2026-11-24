@@ -185,6 +185,7 @@ void net::ClientProbe::FrameEnd()
     engine::StackLog(false);
     engine::TrainLog(false);
     engine::FireLog(false);
+    engine::PoseLog(false);
     engine::ThrowLog(false, mLastSnap);
     engine::ShotLog(false);
     engine::PedLog("client");

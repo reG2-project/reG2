@@ -344,6 +344,7 @@ void GuardThrow(Ped* ped);
 // gPortPedMayDie on a client: only the server's death (KillNow), or one in a car; another is held, the ped knocked down
 // (an ambient ped shown dead, ShowDeath)
 bool ClientPedMayDie(Ped* ped);
+bool ClientPedMayFire(Ped* ped);
 int ShownDeathAge(const Ped* ped); // ticks since an ambient ped was shown dead here, -1: not shown dead
 void ForgetShownDeath(const Ped* ped);
 const int kShownDeathTicks = 15; // a death shown here the server's snapshots still don't have after this: undone
