@@ -149,6 +149,7 @@ int TagSeconds(int slot); // a tag game's: the seconds the slot was "it" (the ga
 int PlayerDeaths(const EntityState& e);
 uint32_t PlayerCarId(const EntityState& e); // the NetId of the car it drives, 0 on foot
 uint32_t PlayerDoorCarId(const EntityState& e); // the car it is pulled out of or on its way into, 0: none
+bool ShotNow(const EntityState& e); // a shot sent as it is at each tick (a burning debris), not as it started
 int PlayerWeapon(const EntityState& e); // its weapon in hand (Player::mCurrWeaponIdx), -1: none
 int PlayerAmmo(const EntityState& e, int weapon); // 0..14 on foot, 15..27 a car's
 // A pickup entity's Object::mModel (objects:: in Source/enums.hpp: 200..227 weapons, 228.. power-ups)

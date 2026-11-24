@@ -425,6 +425,11 @@ uint32_t net::engine::ShotKey(const Object* o)
     return KeyOf(o);
 }
 
+bool net::engine::ShotNow(const EntityState& e)
+{
+    return e.type == kEntityShot && e.f[kShotModel] == objects::explosion_fragments_127;
+}
+
 void net::engine::ClearShots()
 {
     gStarts.clear();
@@ -487,6 +492,7 @@ void net::engine::ApplyShots(const Snapshot& snap)
     }
     std::set<uint32_t> wanted;
     const ReachArea area(snap, 0.0f);
+    const ReachArea inner(snap, 2.0f); // what the server's interest radius surely took in (its foci are its own)
     int made = 0;
     for (const EntityState& e : snap.entities)
     {
@@ -543,7 +549,8 @@ void net::engine::ApplyShots(const Snapshot& snap)
     }
     for (const auto& kv : live)
     {
-        if (!wanted.count(kv.first))
+        // Near the reach's edge or beyond it, the snapshot may have left it out: kept (its world here is a guess anyway)
+        if (!wanted.count(kv.first) && inner.Inside(kv.second->mSprite))
         {
             if (ShotLogOn())
             {

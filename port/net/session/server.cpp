@@ -531,6 +531,7 @@ std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::
         it.pick = 0;
         it.agedBits = 0;
         it.hold = false;
+        it.distance = Distance(*it.now, foci);
         if (it.had)
         {
             it.aged = *it.had;
@@ -550,7 +551,8 @@ std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::
         }
         else
         {
-            it.priority = 9.0f / (1.0f + Distance(*it.now, foci) / 6.0f);
+            // A new shot first: the client predicts its own, and one left out it removes within the reach
+            it.priority = (it.now->type == engine::kEntityShot ? 1000.0f : 9.0f) / (1.0f + Distance(*it.now, foci) / 6.0f);
         }
     }
     return items;
@@ -629,8 +631,13 @@ bool net::Server::Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items,
         Snapshot candidate = fixed;
         candidate.entities.reserve(fixed.entities.size() + items.size());
         size_t fresh = 0;
+        float reach = mConfig.interestRadius;
         for (const Item& it : items)
         {
+            if (it.pick == 0 && it.now->type == engine::kEntityShot)
+            {
+                reach = std::min(reach, it.distance - 1.0f); // a new shot left out: the client keeps what it has there
+            }
             if (it.pick == 2)
             {
                 candidate.entities.push_back(*it.now);
@@ -641,7 +648,7 @@ bool net::Server::Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items,
                 candidate.entities.push_back(it.aged);
             }
         }
-        engine::SetSnapshotReach(candidate, mConfig.interestRadius); // nothing it has goes missing
+        engine::SetSnapshotReach(candidate, reach); // nothing it has goes missing
         SortById(candidate);
         w.Clear();
         SnapshotHeader h = {mTick, base ? base->tick : mTick, s.lastCmdTick, forwarded};
@@ -660,7 +667,7 @@ bool net::Server::Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items,
                     s.lastFresh[it.now->id] = mTick;
                 }
             }
-            return w.ByteCount() <= room;
+            return w.ByteCount() <= room || w.ByteCount() <= (size_t)kMaxParts * (MaxPayload() - kPartHeader); // in more parts then
         }
         budget -= budget / 8; // the estimate was off (ids' gaps): a little less
     }
@@ -691,9 +698,9 @@ void net::Server::Transmit(const Slot& s, const BitWriter& w)
 }
 
 // The client's area: every player and the cars they sit in, get into or are pulled out of (wherever they are: a player
-// far off isn't a ped without its car), every train (a few, and a client's own moves on wherever it is), every shot
-// (sent once each, and then a client knows all the server has), and the cars, peds and pickups near what its view
-// follows and near its ped (PlayerFoci: apart while it is wasted), nearest first
+// far off isn't a ped without its car), every train (a few, and a client's own moves on wherever it is), the burning
+// debris near it (a shot whose state changes: an aged one would be applied as it was), and the cars, peds, pickups and
+// other shots near what its view follows and near its ped (PlayerFoci: apart while it is wasted), nearest first
 void net::Server::SendSnapshot(int slot, Slot& s, const Snapshot& world)
 {
     const engine::Foci foci = engine::PlayerFoci(slot);
@@ -714,12 +721,13 @@ void net::Server::SendSnapshot(int slot, Slot& s, const Snapshot& world)
     for (const EntityState& e : world.entities)
     {
         const bool playersCar = std::find(playersCars.begin(), playersCars.end(), e.id) != playersCars.end();
-        if (e.type == engine::kEntityPlayer || e.type == engine::kEntityWorld || e.type == engine::kEntityTrain || e.type == engine::kEntityShot ||
-            playersCar)
+        const bool near = foci.count && Distance(e, foci) <= mConfig.interestRadius;
+        if (e.type == engine::kEntityPlayer || e.type == engine::kEntityWorld || e.type == engine::kEntityTrain || playersCar ||
+            (near && engine::ShotNow(e)))
         {
             fixed.entities.push_back(e);
         }
-        else if (foci.count && Distance(e, foci) <= mConfig.interestRadius)
+        else if (near)
         {
             area.push_back(&e);
         }
