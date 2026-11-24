@@ -19,31 +19,6 @@ bool InPhase(const Ped* ped, s32 state2)
 {
     return ped->mPedState1 == ped_state_1::immobilized_8 && ped->mPedState2 == state2;
 }
-// On foot here (a pull out of a car predicted ahead of the server's), at the server's car door as the jacker's char left it
-void BackAtDoor(Ped* ped, Char* c, const int32_t* f)
-{
-    Car* car = RefCar(f[kPhaseCar]);
-    if (!car || !car->mCarSprite || AtCarDoor(ped))
-    {
-        return;
-    }
-    if (Object* o = ped->mpObj2C)
-    {
-        o->RequestRemoval();
-        ped->mpObj2C = NULL;
-    }
-    ped->mPedState1 = ped_state_1::immobilized_8;
-    ped->mPedState2 = ped_state_2::ped2_at_car_door_17;
-    ped->mTargetCarDoor = (u8)(f[kPhaseTimer] >> 2 & 3);
-    c->Set_F8_ped_state_1_433910(ped_state_1::immobilized_8);
-    c->mPedState2 = ped_state_2::ped2_at_car_door_17;
-    c->mTargetCar = car;
-    c->mAnimationState = Char_Anim_state::Getting_pulled_out_of_car_8;
-    c->mAnimationFrame = (u8)(f[kPhaseTimer] & 3);
-    c->mFrameTimer = (s8)(f[kPhaseTimer] >> 4 & 7);
-    c->mStateInitPending = (f[kPhase] & kPhaseInit) != 0;
-    c->mSpritePtr->SetDrawLayer(6);
-}
 } // namespace
 
 int32_t net::engine::PhaseOf(const Ped* ped)
@@ -184,7 +159,7 @@ void net::engine::ApplyPhases(Ped* ped, const EntityState& e, int base, bool dea
         ApplyThrow(ped, e, base); // a thrown ped's death takes at its landing; the others' end as KillNow ends them
         return;
     }
-    const int32_t here = PhaseOf(ped);
+    int32_t here = PhaseOf(ped);
     // Held otherwise here (a fall, a throw's state without its object) while the server's has a phase; at a car door here
     // and back in that car there: the seat's (ForceIntoCar)
     const bool held = here == kPhaseNone && there && ped->mPedState1 == ped_state_1::immobilized_8;
@@ -199,8 +174,14 @@ void net::engine::ApplyPhases(Ped* ped, const EntityState& e, int base, bool dea
     }
     if (there == kPhaseDoor && here != kPhaseDoor)
     {
-        BackAtDoor(ped, c, f);
-        return;
+        // On foot here (a pull predicted ahead of the server's): at the server's door, its frame the server's (below)
+        StartPulledOut(ped, RefCar(f[kPhaseCar]), f[kPhaseTimer] >> 2 & 3, Raw(e.f[kPedX]), Raw(e.f[kPedY]), Raw(e.f[kPedZ]));
+        if (PhaseOf(ped) != kPhaseDoor)
+        {
+            return;
+        }
+        c->mStateInitPending = false;
+        here = kPhaseDoor;
     }
     ApplyThrow(ped, e, base);
     if (here == there && there > kPhaseThrown)
