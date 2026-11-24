@@ -470,7 +470,9 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
 - **Guards** (`engine/guards.cpp`, on the server too): what a network game breaks in the game's own logic is made
   safe: peds given on-foot orders while in a car, the HUD arrows to players who joined after the start, objects
   attached to cars the client moved (a tank's turret), a player driving a train that reversed (`Train::ReassignTrainHead`
-  makes the other end the lead and its driver, the ped stays in its old carriage: it goes with the driver's seat).
+  makes the other end the lead and its driver, the ped stays in its old carriage: it goes with the driver's seat), and a
+  player fallen through the floor (on foot at z 1 with no block under it: out of a car at the top of Tiny Town's ramp at
+  67,173 the game puts it one level down, into the slab, and it sinks into the void) put back on its column's ground.
 
 ### Cars in turn
 
@@ -790,7 +792,22 @@ best for its distance (machine guns, shotgun and rockets first); they hold the w
 a car from 4 blocks, nothing that blows up nearer). Fists hit within a quarter block and only knock a player under 30
 health down, so an unarmed bot punches only an unarmed target above that it hurt in the last 4 s, else it fetches a
 weapon. A car coming within a block in the next 20 ticks makes a bot on foot step aside, or jump when it is about to
-hit. A well armed hunter gets out of its car for someone on foot within 6 blocks, or with rockets for a car within 8,
+hit. Cars aren't in the walking map: a car's box (its sprite's size, its heading) within 3 blocks on the way makes the
+walker head for the corner of it that keeps the way shortest and is clear, and jump over it when none is (stuck with a
+car at hand, a jump is its first way out). The pickup memory starts with the weapon pickups the bot's own game has (the
+map script makes them on both ends, listed every 10 s), so a client bot, which sees pickups within its area only, knows
+the map's. Unarmed, a bot never punches near a car nor someone in one: it takes the car of someone driving slowly
+within 8 blocks (the game pulls the driver out), else looks for someone on foot or a weapon. Molotovs and grenades are
+thrown as the game throws them, as far as attack is held (measured standing: a molotov lands 0.68 + 0.0567 blocks per
+tick held, 4.1 at the most from 60 ticks, 33 ticks later; a grenade as far, going off (96 - held) * 0.75 ticks later, in
+the hand at 96): standing, turned to where the target will be when it lands, from 2.2 blocks (3 with a grenade) to
+4.6, backing off holding on when it comes nearer; rockets from 4. A bot looking for a car with none in sight walks
+towards the nearest player. Arena bots see what a client bot would: players and trains everywhere, cars, peds and
+pickups within 24 blocks. The meter's lines `cars punched P s fists near one in a car F s stuck by a car S s round cars
+R s` and `throws N nearer than 1.8 C farther than 5 F` (the nearest player when it threw) measure these. Over 12 seeds
+on downtown, Tiny Town, Industrial and Residential (96 bots per brain): stuck 31.5, 18.9, 19.7 to 21.8, 6.3, 13.3 s per
+5 minutes (hunter, simple, soldier; stuck by a car on foot 11.5, 14.9, 7.1 to 1.8, 1.6, 0.9), frags 535 to 717, throws
+362 to 904 with 9% to 7% of them at someone nearer than 1.8 blocks and 51% to 16% with nobody within 5. A well armed hunter gets out of its car for someone on foot within 6 blocks, or with rockets for a car within 8,
 and stays on foot 10 s; the soldier gets out for a car only with rockets. Over 20 seeds on the three maps: frags 594 to
 754, fistfight time 61, 27, 12 to 18, 17, 14 s per 5 minutes (simple, hunter, soldier), the hunter armed 112 to 208 s and
 in a car near someone on foot 35 to 2 s; against rammers the simple bot's dodge took their frags from 265 to 162.
