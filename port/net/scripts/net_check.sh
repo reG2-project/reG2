@@ -150,7 +150,7 @@ maps() {
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
   local changes crashes checks followed=1 b
-  changes=$(grep -c "the next map" "$OUT/maps_server.log")
+  changes=$(grep -c "net: the next map:" "$OUT/maps_server.log")
   crashes=$(grep -l "crashed" "$OUT"/maps_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/maps_*.log | grep -c "net: CHECK")
   for b in rammer soldier; do
