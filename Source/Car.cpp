@@ -1643,6 +1643,13 @@ void CarManager::CarsService()
 
     mVisibleCarsCount = 0;
 
+#if defined(GTA2_PORT)
+    if (gPortUpdateCars)
+    {
+        gPortUpdateCars();
+    }
+    else
+#endif
     gCar_BC_Pool->mPool.UpdatePool();
 
 #if defined(GTA2_PORT)

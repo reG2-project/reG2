@@ -356,6 +356,7 @@ extern int gDeathsHeld; // for the log
 extern int gPedsRevived; // for the log: corpses here the server has alive (ApplyPedState)
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there
 void EndDeath(Player* p); // a death's or an arrest's countdown over at once, the player's part (slots.cpp)
+void InstallCarTurns(bool on); // a car ahead of one following it moves first (car_turns.cpp)
 void InstallStarts(bool on); // the players' peds past the script's and their start blocks (starts.cpp)
 void ZoneTurnBack(); // the restart zones' turn back one, as before the last respawn (starts.cpp)
 void ResetDeaths(int slot); // the round's death count the snapshots carry (a new round)

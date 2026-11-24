@@ -1,6 +1,7 @@
 // port/net core tests (ctest): no game, no network; a failed CHECK prints and exits 1.
 #include "check.hpp"
 #include "../core/bitstream.hpp"
+#include "../core/car_order.hpp"
 #include "../core/crc32.hpp"
 #include "../core/map_players.hpp"
 #include "../core/protocol.hpp"
@@ -694,6 +695,25 @@ void TestSpawnSpots()
     printf("spawn spots ok\n");
 }
 
+// The cars' order: the pool's, but a car close in front of one moving at it, and moving away from it, goes first
+void TestCarOrder()
+{
+    std::vector<int> order;
+    std::vector<net::CarMotion> cars = {{10, 10, 0.25f, 0}, {11.3f, 10, 0.25f, 0}, {40, 40, 0, 0}};
+    CHECK(net::CarOrder(cars, order) && order == std::vector<int>({1, 0, 2})); // the follower after the car it chases
+    cars[0].vx = -0.25f;
+    CHECK(!net::CarOrder(cars, order) && order == std::vector<int>({0, 1, 2})); // driving apart
+    cars = {{10, 10, 0.25f, 0}, {11.3f, 10, -0.25f, 0}};
+    CHECK(!net::CarOrder(cars, order)); // head on: either way
+    cars = {{10, 10, 0.25f, 0}, {14, 10, 0.25f, 0}};
+    CHECK(!net::CarOrder(cars, order)); // too far apart
+    cars = {{10, 10, 0, 0.2f}, {10, 11.2f, 0, 0.2f}, {10, 12.4f, 0, 0.2f}, {30, 30, 0.1f, 0}};
+    CHECK(net::CarOrder(cars, order) && order == std::vector<int>({2, 1, 0, 3})); // a convoy, its head first
+    cars = {{10, 10, 0.2f, 0.2f}, {11, 10, 0.2f, -0.2f}, {11, 9, -0.2f, -0.2f}, {10, 9, -0.2f, 0.2f}};
+    CHECK(net::CarOrder(cars, order) && order.size() == 4); // a ring: each one once
+    printf("car order ok\n");
+}
+
 int main()
 {
     TestBits();
@@ -712,6 +732,7 @@ int main()
     TestPrintable();
     TestMapPlayers();
     TestSpawnSpots();
+    TestCarOrder();
     printf("messages ok\n");
     printf("net core tests passed\n");
     return 0;

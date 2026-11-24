@@ -458,6 +458,17 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   attached to cars the client moved (a tank's turret), a player driving a train that reversed (`Train::ReassignTrainHead`
   makes the other end the lead and its driver, the ped stays in its old carriage: it goes with the driver's seat).
 
+### Cars in turn
+
+The game moves its cars one at a time in the pool's order, each against the others' places as they are. A car chasing
+another that comes before it in the pool hits it where it was a tick ago: at speed it stops a tick's move (a fifth of a
+car at 0.25 blocks a tick) short of the car it hits as both are drawn after the tick, the sparks, sound and push at a
+gap. A network game (both ends) moves a car first when another close behind it drives at it while it drives away
+(`core/car_order.cpp`, `engine/car_turns.cpp`, the pool's order otherwise and for a ring of them), so the follower hits
+it where it is drawn. Measured on rammer matches (3 seeds, mp1, 10 minutes): same-way hits that leave the hit car over
+0.1 blocks from where it was hit went from 22% to 0.4%. A car hit after its own update reacts in its next one (the game
+reacts in the same tick when the hitter comes first); one freed since is forgotten.
+
 ### Entities
 
 The **net schema** (`engine/schema.cpp`) declares each entity type's fields, by name and width; `Capture` reads them
@@ -813,6 +824,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `port/compat/src` | `gPortIdleHook`, `gPortNoAudio`, `gPortCrashHook` | polling while a frame waits (`window.cpp`), no sound on a server (`miles.cpp`), the crash report (`main.cpp`) |
 | `Ped.cpp` | `gPortKeepWantedPoints` | a client keeps the server's wanted points with its police off |
 | `ScriptThread.cpp` | `gPortScriptCommandRuns` | a client runs the level start's look and sound commands, and steps over the rest |
+| `Car.cpp` | `gPortUpdateCars` | the car pool's update, a car ahead of one following it first ("Cars in turn") |
 | `Car.cpp` | `gPortCarMayExplode` | a client's car the server sends blows up when a snapshot says the server's did, not on its own prediction |
 | `Object_5C.cpp` | `gPortObjectMade` | an object made: a network game keys the shots it predicts (`engine/shots.cpp`) |
 | `Explosion.cpp` | `gPortBlastHurts` | a client's blast made from a snapshot hurts nothing: the server's did |

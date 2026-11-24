@@ -98,6 +98,7 @@ void net::engine::StartNetworkGame(const NetworkGame& game)
     gPortKillCamTicks = KillCamTicks;
     gPortDeathViewPed = DeathCamera;
     InstallStarts(true);
+    InstallCarTurns(true);
     InstallNetworkViews(true);
     gNetPlay.mPlayerIdx = game.localPlayer;
     gNetPlay.mN2.mPlayersCount = 2; // > 1: the game calls SendToAll every frame
@@ -143,6 +144,7 @@ void net::engine::StopNetworkGame()
     gPortKillCamTicks = NULL;
     gPortDeathViewPed = NULL;
     InstallStarts(false);
+    InstallCarTurns(false);
     InstallNetworkViews(false);
     gNetPlay.mPlayerIdx = 0;
     gNetPlay.mN2.mPlayersCount = 0;

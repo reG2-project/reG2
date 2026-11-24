@@ -66,6 +66,9 @@ extern void (*gPortExtraPlayerPeds)();
 // Asked as a ped (re)starts at a restart zone (Ped::SpawnCharInZone): true, and it starts on the block *x, *y at the
 // level *z instead of the zone's first block with ground. NULL but in a network game: a block nobody stands on
 extern bool (*gPortSpawnBlock)(Ped* pPed, gmp_map_zone* pZone, s32* x, s32* y, s32* z);
+// Called in CarManager::CarsService instead of the car pool's update: NULL but in a network game, whose cars move a
+// car ahead of one following it first (port/net/engine/car_turns.cpp)
+extern void (*gPortUpdateCars)();
 // Asked in Game::UpdateGame after the players' tick: true, and nothing else runs this tick but the HUD (a network
 // game's results: the world stands still, the chat goes on)
 extern bool (*gPortWorldStill)();

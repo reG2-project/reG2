@@ -19,6 +19,7 @@ s32 gPortSpawnPlayers = 1;
 void (*gPortAfterPlayersHook)();
 void (*gPortExtraPlayerPeds)();
 bool (*gPortSpawnBlock)(Ped*, gmp_map_zone*, s32*, s32*, s32*);
+void (*gPortUpdateCars)();
 bool (*gPortWorldStill)();
 bool (*gPortCarMayExplode)(Car* pCar);
 void (*gPortObjectMade)(Object* pObject);
