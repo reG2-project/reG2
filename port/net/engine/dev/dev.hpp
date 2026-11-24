@@ -47,6 +47,7 @@ class GridCheck
 void DebugKill(int victim, int killer);
 void DebugArm(int player, int weapon, int ammo); // Player::AddWeaponWithAmmo
 void DebugFire(int player); // the player's ped set on fire (Ped::SetOnFire)
+void DebugPhase(int player, int shock); // on foot, the player's ped drowned (Char::DrownPed) or electrocuted (1)
 // That many ambient peds nearest the player, at least that many blocks from it, set on fire: their corpses call the ambulance
 void DebugPatients(int player, int count, int fromBlocks);
 void DebugBlast(int player, int tenths); // an explosion (a grenade's) that far east of the player

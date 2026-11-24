@@ -32,6 +32,7 @@ void net::ServerProbe::Start()
     Parse(Env().testStreak, TestEvent::kStreak, 2, 0, v); // <tick>:<player>: a kill streak's bonus (its 20th kill)
     Parse(Env().testFire, TestEvent::kFire, 2, 0, v); // <tick>:<player>: set on fire
     Parse(Env().testBlast, TestEvent::kBlast, 2, 0, v); // <tick>:<player>[:<tenths of a block>]: an explosion beside it
+    Parse(Env().testPhase, TestEvent::kPhase, 2, 0, v); // <tick>:<player>[:1]: drowned, or electrocuted
     // <tick>:<player>:<n>[:<blocks>]: the n ambient peds nearest it (at least that far) set on fire
     for (const char* k = Env().testPatients; k && *k; k = strchr(k, ','), k = k ? k + 1 : NULL)
     {
@@ -98,6 +99,10 @@ void net::ServerProbe::Tests(uint32_t tick, int players)
             case TestEvent::kBlast:
                 printf("net: test blast %d tenths of a block from player %d at tick %u\n", e.arg, e.player, tick);
                 engine::DebugBlast(e.player, e.arg);
+                break;
+            case TestEvent::kPhase:
+                printf("net: test %s of player %d at tick %u\n", e.arg ? "electrocution" : "drowning", e.player, tick);
+                engine::DebugPhase(e.player, e.arg);
                 break;
             case TestEvent::kPatients:
                 printf("net: test fire on %d ambient peds %d blocks or more from player %d at tick %u\n", e.arg % 1000, e.arg / 1000, e.player, tick);

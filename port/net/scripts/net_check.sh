@@ -235,7 +235,7 @@ throws() {
     blasts="$blasts,$t:0:$(( (t / 90) % 2 ? 0 : 9 ))"
   done
   rm -f "$OUT"/throws_*.log
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_TESTBLAST=${blasts#,} GTA2_NET_TESTFIRE=1500:1 exec "$BIN" --server --port $p \
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_TESTBLAST=${blasts#,} GTA2_NET_TESTFIRE=1500:1 GTA2_NET_TESTPHASE=400:1:1,1000:1 exec "$BIN" --server --port $p \
     --map mp1-6p --players 6 --arena simple,simple > "$OUT/throws_server.log" 2>&1) &
   sleep 2
   # The blend off: what the client shows at a tick is its prediction of it, the server's state there to the bit
@@ -250,19 +250,23 @@ throws() {
     /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) { burn[$6]++; if ($6 == "p1") burning[$5 + 0] = 1 } }
     /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { c[$5 $6] = $12 }
     /hit on the server at tick/ && $3 == 1 && burning[$10 + 0] { hits++ }
+    /THROW server tick [0-9]+: p1 / { sp[$5 + 0] = $12 }
+    /THROW client tick [0-9]+: p1 / { cp[$5 + 0] = $12 }
     END {
       for (k in s) { thrown++; if (s[k] == "8/26") fatal++ }
       # A client never lands a player fatally itself (GuardThrow): a flying death of the server shows knocked down there
       for (k in c) { shown++; if (s[k] == "8/26") shownFatal++; if ((s[k] == "8/26" ? "8/25" : s[k]) != c[k]) wrong++ }
-      printf "%d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], hits
+      # Electrocuted or sinking to a death on the server: the client still shows that tick alive in it
+      for (t in sp) if (sp[t] ~ /^9\// && sp[t - 1] ~ /^8\/2[07]$/) { phased++; if (cp[t] !~ /^8\/2[07]$/) early++ }
+      printf "%d %d %d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], hits, phased, early
     }' "$OUT/throws_server.log" "$OUT/throws_client.log")
-  local thrown fatal shown shownFatal wrong burnt hits
-  read -r thrown fatal shown shownFatal wrong burnt hits <<< "$result"
-  echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's; $hits hits shown on a player burning $burnt ticks"
-  if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ $((hits * 10)) -ge "$burnt" ]; then
+  local thrown fatal shown shownFatal wrong burnt hits phased early
+  read -r thrown fatal shown shownFatal wrong burnt hits phased early <<< "$result"
+  echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's; $hits hits shown on a player burning $burnt ticks; $phased deaths electrocuted or sinking, $early of them the client's own"
+  if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ $((hits * 10)) -ge "$burnt" ] || [ "${phased:-0}" = 0 ] || [ "${early:-1}" != 0 ]; then
     fail "throws: the client's throws or burning aren't the server's ($BUILD/net_check/throws_*.log)"
   else
-    pass "throws: every throw the client showed was the server's at that tick, flying deaths included; burning didn't bleed"
+    pass "throws: every throw the client showed was the server's at that tick, flying deaths included; burning didn't bleed; electrocution and sinking deaths were the server's"
   fi
 }
 

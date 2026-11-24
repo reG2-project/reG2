@@ -4,6 +4,7 @@
 #include "dev.hpp"
 #include "Source/Car.hpp"
 #include "Source/Char_Pool.hpp"
+#include "Source/char.hpp"
 #include "Source/Game.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
@@ -197,5 +198,22 @@ void net::engine::DebugFire(int player)
     if (Ped* ped = InGamePed(player))
     {
         ped->SetOnFire();
+    }
+}
+
+void net::engine::DebugPhase(int player, int shock)
+{
+    Ped* ped = InGamePed(player);
+    if (!ped || !ped->mGameObject || ped->mCar || ped->mPedState1 == ped_state_1::immobilized_8)
+    {
+        return;
+    }
+    if (shock)
+    {
+        ped->mShockCounter = ped->mElectrocutionThreshold;
+    }
+    else
+    {
+        ped->mGameObject->DrownPed();
     }
 }

@@ -376,6 +376,10 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   ticks), puts the object where the server's is, and stops one the server doesn't have at the server's place, landing
   it back on its feet. Deaths are the server's only: before each tick a client's fatal outcome becomes knocked down
   (`GuardThrow`), and the server's death (`KillNow`) leaves the dead state that any landing then restores.
+- **Sinking and electrocution** (`engine/phases.cpp`): both end in the ped's death (`Char::UpdateImmobilized`). The
+  player entity's state says whether the server's player is in one; a client starts the one it didn't predict as the
+  game does, gets a player the server has out of it back on its feet, and holds its timer short of the death before each
+  tick (`GuardPhases`), so that only the server's death (`KillNow`) ends it.
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
   server's world. It carries every player, the car each sits in and every train wherever they are, and everything
   within the reach (the interest area, 24 blocks around the client's player's foci as the server has them), each entity the
@@ -784,6 +788,8 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
 - **throws**: blasts at a server bot's feet and a block away (`GTA2_NET_TESTBLAST`), another bot set on fire, a bot
   client watching with the blend off: every tick it shows a player thrown, the server had it thrown there with the
   same outcome (a flying death shows knocked down until the server's death), and the burning player's health drops didn't bleed.
+  The burning bot is also electrocuted and drowned (`GTA2_NET_TESTPHASE`): the client still shows it in that state at
+  the tick the server's dies.
 - **replay**: recorded sessions replayed against their saved logs: the same, or nondeterministic (a second replay
   differs too), else a regression. `--record` makes new ones; `--save` takes the current build's logs as the baseline
   after an intended change.
@@ -858,6 +864,7 @@ off by default:
 | `GTA2_NET_TESTPOWERUP=<tick>:<player>:<power-up>,...` | server | a power-up (12: an instant gang) |
 | `GTA2_NET_TESTFIRE=<tick>:<player>,...` | server | the player set on fire |
 | `GTA2_NET_TESTBLAST=<tick>:<player>:<tenths>,...` | server | a grenade's explosion that many tenths of a block east of the player (0: at its feet, a flying death) |
+| `GTA2_NET_TESTPHASE=<tick>:<player>[:1],...` | server | the player on foot drowned, or electrocuted (1) |
 | `GTA2_NET_TESTPATIENTS=<tick>:<player>:<n>[:<blocks>],...` | server | the n ambient peds nearest the player (at least that many blocks away) set on fire: the ambulance comes for their corpses |
 | `GTA2_NET_TESTSTREAK=<tick>:<player>,...` | server | a kill streak's bonus, as the 20th kill in a row gives it |
 | `GTA2_NET_TESTCAR=<tick>:<player>:<model>,...` | server | a car beside the player (11: a bus; 63, 64: a truck cab with a container trailer); model + 1000 * n: damaged by n * 1000 (n = 16: on fire, 25: burning); a model the game can't wreck (24 to 26, 85: the HOTDOG_D vans; the wrecks) isn't spawned |
