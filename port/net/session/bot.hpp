@@ -104,8 +104,50 @@ struct BotRoute
     int goal = -1;
     uint32_t replanAt = 0;
     bool none = false; // no way found: straight at it
-    // The point to head for: a few cells ahead on the route (smoother than cell by cell), or the goal
-    void Next(const BotView& v, float goalX, float goalY, float* pX, float* pY);
+    struct Blocked // a way it got stuck crossing, left out of its searches until then
+    {
+        int cell;
+        uint8_t way;
+        uint32_t until;
+    };
+    std::vector<Blocked> blocked;
+    // The point to head for: the farthest cell of the next few on the route that it can walk to in a straight line,
+    // or the goal. <goalZ> (blocks, negative: unknown) picks the cell a goal under a roof stands next to.
+    void Next(const BotView& v, float goalX, float goalY, float* pX, float* pY, float goalZ = -1);
+};
+
+// Walking to goals on foot (bot_nav.cpp): the route, getting unstuck, and giving up on what it can't get to. Stuck
+// (under 0.3 blocks in 1.5 s), it backs off and turns; stuck again at the same place within 10 s, it tries the next
+// way out: the other side with the way it was crossing left out of its route for 20 s, then a jump, then the goal is
+// left alone for 30 s. A goal its route gets no shorter to for 10 s is left alone for 30 s as well.
+class BotWalker
+{
+  public:
+    // The buttons to walk to (x, y, z); <id> names the goal (a Seen id), for giving up on it. Called again after a
+    // pause of more than a decision, its stuck check starts again.
+    uint32_t Walk(const BotView& v, uint32_t id, float x, float y, float z);
+    bool Skipped(uint32_t id, uint32_t frame) const; // given up on, for now
+    // On the map's ways from where it stands (true when it isn't on a known cell: it may try)
+    bool Reachable(const BotView& v, float x, float y, float z) const;
+    BotRoute route;
+
+  private:
+    struct Skip
+    {
+        uint32_t id, until;
+    };
+    struct Spot // where it got stuck, and the last way out it tried there
+    {
+        int cell, level;
+        uint32_t at;
+    };
+    void GiveUp(const BotView& v, uint32_t id);
+    void Recover(const BotView& v);
+    std::vector<Skip> mSkips;
+    std::vector<Spot> mSpots;
+    uint32_t mGoal = 0, mGoalSince = 0, mCheckAt = 0, mRecoverUntil = 0, mRecoverButtons = 0, mLastFrame = 0;
+    size_t mBest = 0; // the shortest route it had to the goal
+    float mCheckX = 0, mCheckY = 0;
 };
 
 // The network bots decide every this many ticks and hold their buttons in between, in training (arena.cpp) and
@@ -131,8 +173,15 @@ uint32_t BotButtons(const int* choice);
 // The view a client gives its bot (bot.cpp)
 void FillBotView(BotView& view, const Snapshot& snap, int self, uint32_t frame, const engine::NavMap* map);
 
-// Navigation (bot_nav.cpp, no game code): the cells (y * 256 + x) from start to goal, start excluded; false if
-// there is no way within <maxExpand> cells looked at
+// Navigation (bot_nav.cpp, no game code): the cells (y * 256 + x) from start to goal, start excluded; false if there
+// is no way within <maxExpand> cells looked at. Water is left out, and the <blocked> ways still blocked at <frame>.
 bool FindPath(const engine::NavMap& map, int sx, int sy, int gx, int gy, std::vector<int>& path, int maxExpand = 40000,
-              int* pExpanded = nullptr);
+              int* pExpanded = nullptr, const std::vector<BotRoute::Blocked>* blocked = nullptr, uint32_t frame = 0);
+// The map's parts: cells joined by ways (water left out) get the same number in map.part, from 1; 0 for none
+void LabelNavParts(engine::NavMap& map);
+// The cell a body at (x, y, z) stands on: its own column if its height fits, else the nearest that does within 2
+// cells (under a roof, the ground beside it); -1 if none
+int NavCell(const engine::NavMap& map, float x, float y, float z);
+// Walkable in a straight line from (x0, y0) to (x1, y1), with room for a body on either side
+bool NavClear(const engine::NavMap& map, float x0, float y0, float x1, float y1);
 } // namespace net

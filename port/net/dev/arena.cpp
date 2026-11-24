@@ -133,6 +133,7 @@ void net::Arena::Think(const Snapshot& world, uint32_t tick)
     {
         mNavMap.reset(new engine::NavMap());
         engine::BuildNavMap(*mNavMap);
+        LabelNavParts(*mNavMap);
     }
     Score(world);
     uint64_t expanded = 0;

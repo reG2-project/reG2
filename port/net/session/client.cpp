@@ -813,6 +813,7 @@ void net::Client::StartBot()
     mBot = CreateBotBrain(mConfig.bot);
     mNavMap.reset(new engine::NavMap());
     engine::BuildNavMap(*mNavMap);
+    LabelNavParts(*mNavMap);
     if (Env().navDump)
     {
         engine::DumpNavMap(*mNavMap, Env().navDump);

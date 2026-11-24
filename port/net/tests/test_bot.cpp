@@ -1,4 +1,4 @@
-// port/net bot navigation test (ctest): FindPath on made-up maps, no game.
+// port/net bot navigation test (ctest): FindPath, the parts, NavCell and NavClear on made-up maps, no game.
 #include "check.hpp"
 #include "../session/bot.hpp"
 #include <stdio.h>
@@ -8,6 +8,7 @@
 
 namespace
 {
+using net::LabelNavParts;
 const int N = net::engine::NavMap::kSize;
 
 // Every cell walkable at height 2, every way open
@@ -81,6 +82,55 @@ int main()
     WallEast(m, 50, 201, N - 1);
     CHECK(!net::FindPath(m, 40, 20, 60, 20, path));
     CHECK(net::FindPath(m, 40, 20, 40, 20, path) && path.empty()); // already there
+
+    // Two parts either side of the closed wall: no search at all between them
+    net::LabelNavParts(m);
+    CHECK(m.part[20 * N + 40] && m.part[20 * N + 60] && m.part[20 * N + 40] != m.part[20 * N + 60]);
+    int expanded = -1;
+    CHECK(!net::FindPath(m, 40, 20, 60, 20, path, 40000, &expanded) && expanded == 0);
+
+    // The cell a body stands on: its own, or under a roof (a column of height 5) the ground next to it
+    Open(m);
+    m.height[30 * N + 30] = 5;
+    CHECK(net::NavCell(m, 30.5f, 31.5f, 3.0f) == 31 * N + 30);
+    CHECK(net::NavCell(m, 30.5f, 30.5f, 6.0f) == 30 * N + 30);
+    CHECK(net::NavCell(m, 30.5f, 30.5f, 3.0f) != 30 * N + 30 && net::NavCell(m, 30.5f, 30.5f, 3.0f) >= 0);
+    CHECK(net::NavCell(m, 30.5f, 30.5f, 9.0f) == -1);
+
+    // A corner: the wall east of x 50 for y <= 100; a straight line round its end is clear, one through it isn't, nor
+    // one that shaves it closer than a body's half width
+    WallEast(m, 50, 0, 100);
+    LabelNavParts(m);
+    CHECK(net::NavClear(m, 50.5f, 103.5f, 51.5f, 103.5f));
+    CHECK(!net::NavClear(m, 50.5f, 99.5f, 51.5f, 99.5f));
+    CHECK(!net::NavClear(m, 50.5f, 100.5f, 51.5f, 101.1f));
+    CHECK(net::NavClear(m, 50.5f, 102.5f, 51.5f, 102.5f));
+
+    // A blocked way is left out of the search until it expires
+    std::vector<net::BotRoute::Blocked> blocked(1, net::BotRoute::Blocked{101 * N + 50, net::engine::NavMap::kEast, 100});
+    CHECK(net::FindPath(m, 40, 20, 60, 20, path, 40000, NULL, &blocked, 50) && Valid(m, 40, 20, path));
+    bool through = false;
+    for (size_t i = 1; i < path.size(); i++)
+    {
+        through |= path[i - 1] == 101 * N + 50 && path[i] == 101 * N + 51;
+    }
+    CHECK(!through);
+    CHECK(net::FindPath(m, 40, 20, 60, 20, path, 40000, NULL, &blocked, 100));
+    through = false;
+    for (size_t i = 1; i < path.size(); i++)
+    {
+        through |= path[i - 1] == 101 * N + 50 && path[i] == 101 * N + 51;
+    }
+    CHECK(through);
+
+    // Water is walked into only when it is the goal
+    Open(m);
+    for (int y = 0; y < N; y++)
+    {
+        m.water[y * N + 70] = true;
+    }
+    CHECK(!net::FindPath(m, 60, 20, 80, 20, path));
+    CHECK(net::FindPath(m, 60, 20, 70, 20, path) && path.size() == 10);
 
     printf("net bot tests passed\n");
     return 0;

@@ -304,6 +304,7 @@ struct NavMap
     uint8_t height[kSize * kSize]; // 255: nobody stands here
     uint8_t ways[kSize * kSize];
     bool water[kSize * kSize]; // its top block is water: a walker drowns there
+    uint16_t part[kSize * kSize]; // which part of the map's ways (net::LabelNavParts), 0: none
 };
 void BuildNavMap(NavMap& out);
 void DumpNavMap(const NavMap& map, const char* path); // as a picture (PGM): grey by height, black blocked
