@@ -17,12 +17,6 @@ using net::EntityState;
 const int32_t kThrowAirborne = 4;
 const int kThrowCollideShift = 3;
 
-// Only the server's death is fatal here (KillNow): its Ped::Kill leaves dead_9 for any landing to restore
-s32 ClientOutcome(s32 state2)
-{
-    return state2 == ped_state_2::knocked_fatal_26 ? ped_state_2::knocked_down_25 : state2;
-}
-
 int32_t OutcomeCode(s32 state2)
 {
     return state2 - ped_state_2::knocked_recover_24 + 1;
@@ -30,7 +24,7 @@ int32_t OutcomeCode(s32 state2)
 
 s32 OutcomeState(int32_t code)
 {
-    return ClientOutcome(ped_state_2::knocked_recover_24 + (code & 3) - 1);
+    return ped_state_2::knocked_recover_24 + (code & 3) - 1;
 }
 
 void PlaceObject(Object* o, const int32_t* t)
@@ -172,10 +166,9 @@ void net::engine::MoveThrow(Ped* ped, int32_t dx, int32_t dy)
 
 void net::engine::GuardThrow(Ped* ped)
 {
+    // Its timeout, counted twice a tick, makes any landing fatal at 0: a fatal one is the outcome's (its death held, ClientPedMayDie)
     if (ThrowOf(ped))
     {
-        ped->mPedState2 = ClientOutcome(ped->mPedState2);
-        // Its timeout, counted twice a tick, makes the landing fatal at 0
         Char* c = ped->mGameObject;
         if (c->mTimeout < 3)
         {

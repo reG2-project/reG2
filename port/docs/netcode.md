@@ -397,8 +397,9 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   shown dead at once instead (`ShowDeath`: its state, cry, corpse's sprite layer and blood), the rest of `Ped::Kill`
   (its corpse's AI, a dropped weapon, the score, the killer's wanted level) left to the server's death, which `KillNow`
   then carries out without starting its dying again; one the server still has alive `kShownDeathTicks` after it was
-  shown gets up as the server's, and until then it lies where it fell. Before each tick a fatal outcome of its
-  own becomes knocked down and the sinking and electrocution timers are held short of the death (`GuardPhases`); the
+  shown gets up as the server's, and until then it lies where it fell. A throw's fatal landing is the game's (its
+  thud, `Char::UpdateImmobilized`), its death held as any; before each tick a throw's timeout and the sinking and
+  electrocution timers are held short of the death (`GuardPhases`); the
   server's death ends them as the game does (a charred corpse, a sunk one, neither dropping its weapon; a player's
   electrocution voice and death type). Deaths in a car are its car's, whose explosion is the server's. A corpse here
   whose ped the server has alive (the paramedics revived it, `AmbulanceService`) is revived as they do it.
@@ -872,8 +873,9 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
 - **throws**: blasts at a server bot's feet and a block away (`GTA2_NET_TESTBLAST`, none while it is invulnerable after a
   respawn: a test blast is the server's alone, and an invulnerable bot walks into it again and again), another bot set on fire, a bot
   client watching with the blend off: every tick it shows a player thrown, the server had it thrown there with the
-  same outcome (a flying death shows knocked down until the server's death), once a snapshot it applied had the
-  server's throw (before that, it shows its own prediction of that player).
+  same outcome, once a snapshot it applied had the
+  server's throw (before that, it shows its own prediction of that player). The server listens at the client's player
+  (`GTA2_NET_SFXLOG=2`): the client plays each fatal landing's thud the server played.
   The burning bot is also electrocuted and drowned (`GTA2_NET_TESTPHASE`): the client still shows it in that state at
   the tick the server's dies. It is also put in a car and pulled out of it: the client shows it at the door only on ticks the
   server has it there, never seated or walking; then the client's player jacks a player out of a car twice

@@ -1,7 +1,7 @@
 // port/net (port/docs/netcode.md, "Entities"): a ped's phase, as the server has it: thrown (throws.cpp), lying knocked
 // down, sinking (Char::DrownPed), electrocuted (Ped::ManageShocking), pulled out at a car door. A client follows the
 // server's at every snapshot: starts it the game's way, writes its timer, or cancels its own; and holds the fatal ends of
-// its own (GuardThrow, GuardPhases, ClientPedMayDie) for the server's death (KillNow).
+// its own (GuardPhases, ClientPedMayDie) for the server's death (KillNow).
 #include "internal.hpp"
 #include "Source/Car.hpp"
 #include "Source/Object_5C.hpp"

@@ -638,7 +638,7 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
                 p->mStoredPedState1 = e.f[kStates + kStored1]; // a death to come is the server's to carry out (KillNow)
             }
             p->mStoredPedState2 = e.f[kStates + kStored2];
-            GuardThrow(p); // its fatal outcome the server's death's
+            GuardThrow(p);
             ApplyMembers(p->mGameObject, kCharValues, kCharCount, e, kChar);
         }
     }

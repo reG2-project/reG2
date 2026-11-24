@@ -10,7 +10,7 @@
 #           no crash, no CHECK line
 #   soak    a server and three bot clients, the clock 10 times as fast: 10 minutes of play in 60 s, no crash
 #   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown as the
-#           server has it at that tick, with its outcome (a flying death knocked down)
+#           server has it at that tick, with its outcome, and hears a flying death's landing as the server does
 #   shots   armed bots and a server's own rockets, grenades and molotovs, a bot client watching: it keeps the shots it
 #           predicted, makes the ones it lacks and removes one the server never had at the next snapshot; the game's
 #           random stream is the server's at every snapshot (cosmetics draw from their own)
@@ -241,13 +241,13 @@ throws() {
     blasts="$blasts,$t:0:$(( (t / 90) % 2 ? 0 : 9 ))"
   done
   rm -f "$OUT"/throws_*.log
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_TESTBLAST=${blasts#,} GTA2_NET_TESTFIRE=1500:1 GTA2_NET_TESTPHASE=400:1:1,1000:1,700:1:2,730:1:3,830:2:4,840:2:4,850:2:4,860:2:4,870:2:4,880:2:4,890:2:4,900:2:4,910:2:4,920:2:4,930:2:4,940:2:4,950:2:4,960:2:4,970:2:4,980:2:4,990:2:4,1000:2:4,1010:2:4,1020:2:4,1030:2:4,1040:2:4,1050:2:4,1060:2:4,1070:2:4,1080:2:4,1090:2:4,1100:2:4,1110:2:4,1120:2:4,1130:2:4,1140:2:4,1150:2:4,1160:2:4,1170:2:4,1180:2:4,1190:2:4 exec "$BIN" --server --port $p \
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_SFXLOG=2 GTA2_NET_TESTBLAST=${blasts#,} GTA2_NET_TESTFIRE=1500:1 GTA2_NET_TESTPHASE=400:1:1,1000:1,700:1:2,730:1:3,830:2:4,840:2:4,850:2:4,860:2:4,870:2:4,880:2:4,890:2:4,900:2:4,910:2:4,920:2:4,930:2:4,940:2:4,950:2:4,960:2:4,970:2:4,980:2:4,990:2:4,1000:2:4,1010:2:4,1020:2:4,1030:2:4,1040:2:4,1050:2:4,1060:2:4,1070:2:4,1080:2:4,1090:2:4,1100:2:4,1110:2:4,1120:2:4,1130:2:4,1140:2:4,1150:2:4,1160:2:4,1170:2:4,1180:2:4,1190:2:4 exec "$BIN" --server --port $p \
     --map mp1-6p --players 6 --arena simple,simple > "$OUT/throws_server.log" 2>&1) &
   sleep 2
   # The blend off: what the client shows at a tick is its prediction of it, the server's state there to the bit. Its own
   # player drowned and electrocuted on its own at times (the server never has it). Its bot idle around the jacks: a car
   # entry of its own the server's test calls off would go on here
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_BOTIDLE=700:1200 GTA2_NET_THROWLOG=1 GTA2_NET_SELFLOG=1 GTA2_NET_TESTLOCALPHASE=${own#,} GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_BOTIDLE=700:1200 GTA2_NET_THROWLOG=1 GTA2_NET_SFXLOG=1 GTA2_NET_SELFLOG=1 GTA2_NET_TESTLOCALPHASE=${own#,} GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
     exec "$BIN" --connect 127.0.0.1:$p --name c_watch --bot carhop --lag 60 --jitter 5 > "$OUT/throws_client.log" 2>&1) &
   sleep 60
   kill $(jobs -p) 2>/dev/null
@@ -275,10 +275,9 @@ throws() {
     /THROW client tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ && !(($5 + 0) in sown) { own[$5 + 0] = 1 }
     END {
       for (k in s) { thrown++; if (s[k] == "8/26") fatal++ }
-      # A client never lands a player fatally itself (GuardThrow): a flying death of the server shows knocked down there
       for (k in c) {
         shown++; if (s[k] == "8/26") shownFatal++
-        if ((s[k] == "8/26" ? "8/25" : s[k]) == c[k]) continue
+        if (s[k] == c[k]) continue
         if ((k in sstart) && sstart[k] > csnap[k]) unseen++; else { wrong++; print "  wrong at " k ": server " s[k] ", client " c[k] > "/dev/stderr" }
       }
       # Electrocuted or sinking to a death on the server: the client still shows that tick alive in it
@@ -296,11 +295,17 @@ throws() {
     }' "$OUT/throws_server.log" "$OUT/throws_client.log")
   local unseen thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead
   read -r unseen thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead <<< "$result"
+  # A fatal landing's thud (sample 41, Char::UpdateImmobilized) the server played at the client's player: the client too
+  local thuds clientThuds
+  thuds=$(grep -c "^sfx: .* samp 41 ped/p[01] " "$OUT/throws_server.log")
+  clientThuds=$(grep -c "^sfx: .* samp 41 ped/p[01] " "$OUT/throws_client.log")
   echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's (and $unseen before a snapshot had the server's throw); a player burning $burnt ticks; $phased deaths electrocuted or sinking, $early of them the client's own"
+  echo "  fatal landings heard at the client's player: $thuds on the server, $clientThuds on the client"
   echo "  pulled out of a car: $pulled server ticks, $pullShown client ticks, $pullWrong of them while the server's sat or walked; the client's own phases: $ownTicks ticks, $ownRun at most in a row; its player's jack: pulled out $jackServer server ticks, $jackClient client ticks ($lead ticks ahead); the jack called off: $cancelShown ticks shown pulled before, $cancelLate after"
   if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ "${phased:-0}" = 0 ] || [ "${early:-1}" != 0 ] ||
     [ "${pulled:-0}" = 0 ] || [ "${pullShown:-0}" = 0 ] || [ "${pullWrong:-1}" != 0 ] || [ "${ownTicks:-0}" = 0 ] || [ "${ownRun:-99}" -gt 20 ] ||
-    [ "${jackServer:-0}" = 0 ] || [ "${jackClient:-0}" = 0 ] || [ "${lead:--1}" -lt 0 ] || [ "${cancelShown:-0}" = 0 ] || [ "${cancelLate:-1}" != 0 ]; then
+    [ "${jackServer:-0}" = 0 ] || [ "${jackClient:-0}" = 0 ] || [ "${lead:--1}" -lt 0 ] || [ "${cancelShown:-0}" = 0 ] || [ "${cancelLate:-1}" != 0 ] ||
+    [ "$clientThuds" -lt "$thuds" ]; then
     fail "throws: the client's throws or burning aren't the server's ($BUILD/net_check/throws_*.log)"
   else
     pass "throws: every throw the client showed was the server's at that tick, flying deaths included; electrocution and sinking deaths were the server's; a pull out of a car the server's; the client's own phases cancelled; its player's jacks of another player's car predicted, the one called off cancelled"
@@ -331,15 +336,14 @@ peds() {
     function phase(v) { return v % 8 }
     function justRevived(id, t,   d) { for (d = 0; d <= 30; d++) if ((id, t - d) in revived) return 1; return 0 }
     /PEDPHASE server tick/ { k = $5 " " $6; s[k] = $7 " " phase($9); dead[k] = ($7 ~ /^9\//); car[k] = $15; if ($9 % 8) phased++ }
-    # On foot on both sides, not on the way to a car (cars go by the seats), a fatal throw shown knocked down, a flight to
-    # a death of the server as a flight
+    # On foot on both sides, not on the way to a car (cars go by the seats), a flight to a death of the server as a flight
     function foot(st, inCar) { return st !~ /^(3|4|5|10)\// && !inCar }
     /PEDPHASE applied tick/ {
       k = $5 " " $6; a = $7 " " phase($9)
       shownHere = $7 ~ /^9\// && $13 > 0 && !dead[k]
       if ((k in s) && foot(s[k], car[k]) && foot($7, $15) && !(dead[k] && $7 ~ /^8\/2[456]$/) && !shownHere) {
-        applied++; b = s[k]; sub(/^8\/26/, "8/25", b)
-        if (a != b) { wrong++; if (wrong <= 5) print "  at " k ": server " s[k] ", applied " a > "/dev/stderr" }
+        applied++
+        if (a != s[k]) { wrong++; if (wrong <= 5) print "  at " k ": server " s[k] ", applied " a > "/dev/stderr" }
       }
     }
     # Not a corpse a paramedic revived (AmbulanceService, on the server alone), until the revival reaches the client
