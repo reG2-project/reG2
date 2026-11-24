@@ -602,6 +602,62 @@ class CarHopBot : public DecidingBot
     int mEntered = 0, mLeft = 0;
     net::BotWalker mWalker;
 };
+// A test's (comfort.sh): gets into the nearest car and stays in, pulsing its controls for comfort's input to motion
+// counts: forward with a turn each way, then braked to a stop and a moment still, and again
+class PulseBot : public DecidingBot
+{
+  public:
+    std::string Describe() const override
+    {
+        char line[96];
+        snprintf(line, sizeof(line), "%s, %d pulses, buttons 0x%x", mInCar ? "driving" : "on foot", mPulses, mButtons);
+        return line;
+    }
+
+  private:
+    uint32_t Decide(const net::BotView& v) override
+    {
+        if (!v.hasBody || v.health <= 0)
+        {
+            mInCar = false;
+            return 0;
+        }
+        const float speed = v.frame == mLastFrame + 1 ? sqrtf((v.x - mLastX) * (v.x - mLastX) + (v.y - mLastY) * (v.y - mLastY)) : 1;
+        mLastFrame = v.frame;
+        mLastX = v.x;
+        mLastY = v.y;
+        if (!v.car)
+        {
+            mInCar = false;
+            return ApproachCar(v, mWalker);
+        }
+        if (!mInCar)
+        {
+            mInCar = true;
+            mStart = v.frame;
+            mStill = 0;
+        }
+        const uint32_t t = v.frame - mStart;
+        if (t < 45)
+        {
+            return net::kBtnForward | (t >= 12 && t < 20 ? net::kBtnLeft : t >= 28 && t < 36 ? net::kBtnRight : 0);
+        }
+        mStill = speed < 0.002f ? mStill + 1 : 0;
+        if (mStill < 10 && t < 200)
+        {
+            return speed < 0.002f ? 0 : net::kBtnBack;
+        }
+        mStart = v.frame; // still a moment: forward again
+        mPulses++;
+        return net::kBtnForward;
+    }
+
+    bool mInCar = false;
+    uint32_t mStart = 0, mStill = 0, mLastFrame = 0;
+    float mLastX = 0, mLastY = 0;
+    int mPulses = 0;
+    net::BotWalker mWalker;
+};
 // Gets into the nearest car and drives at the nearest other player, to hit it; backs out with the wheel turned the
 // other way when it hasn't moved for a second. Gets out when wedged or when it has to (a wreck, a death), then the next car.
 class RamBot : public DecidingBot
@@ -878,6 +934,10 @@ std::unique_ptr<net::BotBrain> net::CreateBotBrain(const std::string& kind)
     if (kind == "carhop")
     {
         return std::unique_ptr<BotBrain>(new CarHopBot());
+    }
+    if (kind == "pulse")
+    {
+        return std::unique_ptr<BotBrain>(new PulseBot());
     }
     if (kind == "soldier")
     {

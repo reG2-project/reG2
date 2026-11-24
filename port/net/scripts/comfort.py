@@ -160,6 +160,8 @@ def measure(out):
                 c["corr"][key[1]] = add(c["corr"].get(key[1]), v)
             elif key[0] == "resp":
                 c["resp" if key[1] == "foot" else "respcar"].append(v)
+                if key[1] in ("carfwd", "carturn"):
+                    c.setdefault(key[1], []).append(v)
         c["rb"] += cl["rollback"]
         c["ping"] += cl["ping"]
     smv = {k[1]: v for k, v in srv["last"].items() if k[0] == "moves"}
@@ -223,6 +225,8 @@ def table(outs):
     row("3 corrections, own player+car", corr("self"))
     row("3 input to motion, on foot", lambda a, c, s: resp(c["resp"]))
     row("3 input to motion, own car", lambda a, c, s: resp(c["respcar"]))
+    row("3   forward from still", lambda a, c, s: resp(c.get("carfwd")))
+    row("3   a turn", lambda a, c, s: resp(c.get("carturn")))
     row("4 own shots, delay (ticks)", lambda a, c, s: dist_str(a["own"]) + ("; at 0: %.0f%%" % (100.0 * a["own"].count(0) / len(a["own"])) if a["own"] else ""))
     row("4 own bursts, first drawn (ticks)", lambda a, c, s: dist_str(a["burst_own"]))
     row("4 remote bursts, first drawn", lambda a, c, s: dist_str(a["burst_remote"]))

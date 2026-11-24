@@ -2,6 +2,9 @@
 // port/net/scripts/comfort.py. Off unless the switch is set.
 #pragma once
 #include <stdint.h>
+#include <vector>
+
+class Car;
 
 namespace net
 {
@@ -14,5 +17,7 @@ void ComfortServerTick(uint32_t tick);
 void ComfortClientFrame(uint32_t frame, uint32_t tick, int slot, uint32_t input);
 // A correction found by a reconcile, before its blend (in blocks), of what is at <x>, <y>
 void ComfortCorrection(uint32_t id, float blocks, float x, float y);
+// A car pool update in another order than the pool's (engine/car_turns.cpp): <cars> in the pool's order, <order> the update's
+void ComfortCarTurns(const std::vector<Car*>& cars, const std::vector<int>& order);
 } // namespace engine
 } // namespace net

@@ -39,7 +39,7 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 | Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players N` (1-10, 10: every map's slots), `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
 | Round flow | `--minplayers N` (2), `--warmup s` (60), `--results s` (15), `--votes start,map,kick` (or `none`), `--rounds on\|off` |
 | Arena | `--arena brain,...` (bots on the server itself), `--ticks N` (the result printed and the server ended at tick N), `--seed N` |
-| Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` (a client's recording, or a server's: that server again, "Recordings") |
+| Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, pulse, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` (a client's recording, or a server's: that server again, "Recordings") |
 | Either end | `--lag ms`, `--jitter ms`, `--loss %`, `--lossburst N`, `--spike ms:on:every`: a link conditioner on this end's sends (losses in bursts of N on average; ms more delay for `on` s every `every` s); `--mtu N`: the link's MTU (IP packets, 1280 by default, which fits the VPNs people play over: Tailscale 1280, WireGuard 1420, Hamachi 1404; 1428 the most) |
 | Any | `--data <folder>` (the game folder, or its `data/`: else `GTA2_DIR`...), `--help` |
 
@@ -818,6 +818,7 @@ them in a test.
 |---|---|
 | `simple` | walks its route to the nearest player and fights when close |
 | `carhop` | gets into the nearest car, drives, gets out, again |
+| `pulse` | for comfort's input to motion: in the nearest car, forward with a turn each way, braked to a stop, again |
 | `rammer` | drives at players; stuck 4 s with nobody in front, leaves the car and skips it 30 s |
 | `hunter` | the rammer when a car is near, nobody is and it has a good gun or none to fetch, the fighter otherwise |
 | `soldier` | a weapon, a car, then to the nearest player: runs it over when coming at it head on, or gets out and shoots |

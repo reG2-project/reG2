@@ -30,10 +30,12 @@ nice -n "$NICE" ionice -c3 "$BIN" --data "$DATA" --server --port $port --map "$M
 pids+=($!)
 unset GTA2_NET_TESTARM
 sleep 3
+n=0
 for b in $CLIENTS; do
+  n=$((n + 1))
   # shellcheck disable=SC2086
-  nice -n "$NICE" ionice -c3 "$BIN" --data "$DATA" --connect 127.0.0.1:$port --name "c_$b" --bot "$b" $LINK \
-    > "$OUT/client_$b.log" 2>&1 &
+  nice -n "$NICE" ionice -c3 "$BIN" --data "$DATA" --connect 127.0.0.1:$port --name "c${n}_$b" --bot "$b" $LINK \
+    > "$OUT/client_${n}_$b.log" 2>&1 &
   pids+=($!)
 done
 sleep $((MINUTES * 60))
