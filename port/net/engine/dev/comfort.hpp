@@ -12,7 +12,7 @@ bool ComfortOn();
 void ComfortServerTick(uint32_t tick);
 // Once per client frame, the game as it is drawn: <tick> the predicted one, <input> the one chosen for the next tick
 void ComfortClientFrame(uint32_t frame, uint32_t tick, int slot, uint32_t input);
-// A correction found by a reconcile, before its blend (in blocks)
-void ComfortCorrection(uint32_t id, float blocks);
+// A correction found by a reconcile, before its blend (in blocks), of what is at <x>, <y>
+void ComfortCorrection(uint32_t id, float blocks, float x, float y);
 } // namespace engine
 } // namespace net

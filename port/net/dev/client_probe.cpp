@@ -144,7 +144,7 @@ void net::ClientProbe::CompareAlone(const Snapshot& snap, engine::SavedWorld* sa
 // GTA2_NET_CORRLOG: corrections of over half a block or 45 degrees (players: a quarter block)
 void net::ClientProbe::Correction(uint32_t frame, const engine::Pose& n, int32_t dx, int32_t dy, int32_t dr, const Snapshot& latest)
 {
-    engine::ComfortCorrection(n.id, sqrtf((float)dx * dx + (float)dy * dy) / 16384.0f);
+    engine::ComfortCorrection(n.id, sqrtf((float)dx * dx + (float)dy * dy) / 16384.0f, engine::Blocks(n.x), engine::Blocks(n.y));
     const int32_t kFar = 2 << 14;
     if (!Env().corrLog || !(abs(dx) > 8192 || abs(dy) > 8192 || abs(dr) > 180 || (engine::IsPlayerId(n.id) && (abs(dx) > 4096 || abs(dy) > 4096))))
     {

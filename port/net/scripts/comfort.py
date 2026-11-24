@@ -9,6 +9,7 @@ import sys
 
 CAR_BASE = 0x01000000
 TICK_MS = 33
+VIEW = 10  # blocks: another player's shots farther from the local player when drawn aren't counted (not seen)
 
 
 def parse(path):
@@ -21,7 +22,7 @@ def parse(path):
             if kind == "life":
                 life.append((int(f[3]), int(f[4]), int(f[5]), int(f[6]), int(f[7]), float(f[8])))
             elif kind == "shot+":
-                shots[int(f[4])] = dict(tick=int(f[3]), model=int(f[5]), owner=int(f[6]), x=float(f[7]), y=float(f[8]))
+                shots[int(f[4])] = dict(tick=int(f[3]), model=int(f[5]), owner=int(f[6]), x=float(f[7]), y=float(f[8]), dist=float(f[9]))
             elif kind == "shot-":
                 ends[int(f[4])] = int(f[3])
             elif kind in ("moves", "resp", "corr"):
@@ -117,9 +118,9 @@ def measure(out):
             index.setdefault((s["owner"], s["model"]), []).append(n)
         used = set()
         for n, s in sorted(cl["shots"].items(), key=lambda kv: kv[1]["tick"]):
-            if not s["owner"] or s["owner"] >= CAR_BASE:
-                continue
             own = s["owner"] == me
+            if not s["owner"] or s["owner"] >= CAR_BASE or (not own and s["dist"] >= VIEW):
+                continue
             best = None
             for m in index.get((s["owner"], s["model"]), []):
                 t = ss[m]
@@ -141,7 +142,8 @@ def measure(out):
         # A burst's first shot (none by its owner for 20 ticks before) to the client's first drawn of that owner
         drawn = {}
         for s in cl["shots"].values():
-            drawn.setdefault(s["owner"], []).append(s["tick"])
+            if s["owner"] == me or s["dist"] < VIEW:
+                drawn.setdefault(s["owner"], []).append(s["tick"])
         last = {}
         for s in sorted(ss.values(), key=lambda s: s["tick"]):
             o = s["owner"]
@@ -216,14 +218,15 @@ def table(outs):
     row("1 knock-downs up again pl/peds", lambda a, c, s: "%d / %d" % (len(a["up_p"]), len(a["up_ped"])))
     for kind in ("own_player", "own_car", "players", "cars", "peds"):
         row("2 drawn jumps, " + kind, mv(kind))
-    row("2 corrections, others", corr("others"))
+    row("2 corrections, others in view", corr("others"))
+    row("2 players placed in view (respawns)", corr("placed"))
     row("3 corrections, own player+car", corr("self"))
     row("3 input to motion, on foot", lambda a, c, s: resp(c["resp"]))
     row("3 input to motion, own car", lambda a, c, s: resp(c["respcar"]))
     row("4 own shots, delay (ticks)", lambda a, c, s: dist_str(a["own"]) + ("; at 0: %.0f%%" % (100.0 * a["own"].count(0) / len(a["own"])) if a["own"] else ""))
     row("4 own bursts, first drawn (ticks)", lambda a, c, s: dist_str(a["burst_own"]))
     row("4 remote bursts, first drawn", lambda a, c, s: dist_str(a["burst_remote"]))
-    row("4 ghosts own / remote", lambda a, c, s: "%s / %s (of %d / %d drawn)" % (per_min(c["ghost_own"], c), per_min(c["ghost_remote"], c), c["own"], c["remote"]))
+    row("4 ghosts own / remote in view", lambda a, c, s: "%s / %s (of %d / %d drawn)" % (per_min(c["ghost_own"], c), per_min(c["ghost_remote"], c), c["own"], c["remote"]))
     row("4 shots ended early", lambda a, c, s: per_min(c["short"], c))
     row("5 reconcile cost", rb)
     head = ["metric"] + [os.path.basename(o.rstrip("/")) for o in outs]

@@ -24,6 +24,7 @@ namespace
 using namespace net::engine;
 
 const float kView = 8; // blocks: a camera shows 6 to 8
+const float kSeen = 10; // blocks: a correction farther from the local player isn't seen
 const uint32_t kOwnCarId = 0xFFFFFFFF;
 
 long long NowMs()
@@ -340,7 +341,7 @@ Lives gLives;
 Shots gShots;
 Moves gMoves;
 Response gResponse;
-Corrections gCorr[2]; // others, the local player and its car
+Corrections gCorr[3]; // others, the local player and its car, another player placed over 2 blocks off (a respawn)
 uint32_t gSyncedFrames;
 int gSlot = -1;
 
@@ -495,24 +496,30 @@ void net::engine::ComfortClientFrame(uint32_t frame, uint32_t tick, int slot, ui
     {
         gMoves.Print("C", frame);
         gResponse.Print(frame);
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < 3; i++)
         {
-            printf("comfort: C corr %u %s %u %u %u\n", frame, i ? "self" : "others", gCorr[i].n, gCorr[i].over[0], gCorr[i].over[1]);
+            printf("comfort: C corr %u %s %u %u %u\n", frame, i == 2 ? "placed" : i ? "self" : "others", gCorr[i].n, gCorr[i].over[0], gCorr[i].over[1]);
         }
         printf("comfort: C synced %u %u\n", frame, gSyncedFrames);
         fflush(stdout);
     }
 }
 
-void net::engine::ComfortCorrection(uint32_t id, float blocks)
+void net::engine::ComfortCorrection(uint32_t id, float blocks, float x, float y)
 {
     if (!ComfortOn() || blocks <= 0 || gSlot < 0)
     {
         return;
     }
     Ped* me = InGamePed(gSlot);
+    Sprite* ms = me ? PedSprite(me) : NULL;
+    const float dx = ms ? x - ms->mXy.x.ToFloat() : 0, dy = ms ? y - ms->mXy.y.ToFloat() : 0;
+    if (dx * dx + dy * dy > kSeen * kSeen)
+    {
+        return; // out of sight
+    }
     const bool self = id == (uint32_t)gSlot + 1 || (IsCarId(id) && me && me->mCar && ReplicaCar(id) == me->mCar);
-    Corrections& c = gCorr[self ? 1 : 0];
+    Corrections& c = gCorr[!self && IsPlayerId(id) && blocks > 2 ? 2 : self ? 1 : 0];
     c.n++;
     c.over[0] += blocks > 0.25f;
     c.over[1] += blocks > 1;
