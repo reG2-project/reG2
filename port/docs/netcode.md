@@ -393,7 +393,11 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
 - **Deaths are the server's** (`ClientPedMayDie`, `gPortPedMayDie` in `Ped::Kill`): a server's ped on foot (a player, or one
   mapped to a snapshot's; the client's own die as the game has them) dies only by
   the server's death (`KillNow`, also the ambient peds'); its own death, from a predicted shot, car or fall, is held
-  (health 1, knocked down on its feet) until a snapshot says what became of it. Before each tick a fatal outcome of its
+  (health 1, knocked down on its feet) until a snapshot says what became of it. An ambient ped on its feet or lying is
+  shown dead at once instead (`ShowDeath`: its state, cry, corpse's sprite layer and blood), the rest of `Ped::Kill`
+  (its corpse's AI, a dropped weapon, the score, the killer's wanted level) left to the server's death, which `KillNow`
+  then carries out without starting its dying again; one the server still has alive `kShownDeathTicks` after it was
+  shown gets up as the server's, and until then it lies where it fell. Before each tick a fatal outcome of its
   own becomes knocked down and the sinking and electrocution timers are held short of the death (`GuardPhases`); the
   server's death ends them as the game does (a charred corpse, a sunk one, neither dropping its weapon; a player's
   electrocution voice and death type). Deaths in a car are its car's, whose explosion is the server's. A corpse here
@@ -866,8 +870,9 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
   snapshots cancel it within 20 ticks.
 - **peds**: the ambient ped nearest the client's player drowned, electrocuted, knocked down or blown up in turns
   (`GTA2_NET_TESTPHASE`), the client driving into peds, the blend off: at every snapshot tick, as its apply leaves them,
-  the client's peds on foot have the server's states and phase there; none is dead on a live tick before the server's,
-  and no corpse of the client's own is made again.
+  the client's peds on foot have the server's states and phase there, or are shown dead ahead of it; none is a corpse
+  (health 0) on a live tick before the server's death, one shown dead dies there or gets up within 40 ticks, and no
+  corpse of the client's own is made again.
 - **shots**: armed bots, a server's own rocket, grenade or molotov beside a bot every 60 ticks (`GTA2_NET_TESTSHOT`)
   and a human:fight bot client at 60 ms, the blend off, with a rocket of its own the server never fires
   (`GTA2_NET_TESTGHOSTSHOT`): the shots it predicted keep their keys (no more than one in five made or removed within
