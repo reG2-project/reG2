@@ -1,5 +1,5 @@
 // port/net (port/docs/netcode.md, "The server"): a server's ambient traffic and peds for every player, not the first: the game's
-// limits times the players (up to 3 players' worth), and each player's camera bounds out to where its client shows it.
+// limits times the players (up to 3 players' worth), and every player's view, the same on both ends.
 #include "internal.hpp"
 #include "dev/dev.hpp"
 #include "port/src/rand/owner.hpp"
@@ -30,17 +30,38 @@ namespace
 {
 int gSpawnLead[MAX_PLAYERS];
 
-// The camera's bounds out to where its client already shows it: grown ahead as the camera moves (its last tick's step), so the
-// traffic and peds spawn and go out of sight of what that player sees, not of where this game has it (Car.cpp,
-// TrafficSpawner::MakeTrafficForCurrCamera; Char_Pool.cpp; Car::ManageDespawning)
-void LeadCameras()
+// The network view (16:9 at the game's zoom, ReadScreenSettings, PortCameraZoom) of a camera of another size: a
+// client's own (its window), the others' (640x480). Only the bounds: a client's own still draws at its window's size
+void NetworkBounds(Camera* c)
+{
+    if (c->mScreenPxWidth == 1920 && c->mScreenPxHeight == 1080)
+    {
+        return;
+    }
+    Camera view = *c;
+    view.SetScreenSize(1920, 1080);
+    view.UpdateBoundaries();
+    c->mViewBounds = view.mViewBounds;
+    c->mPaddedViewBounds = view.mPaddedViewBounds;
+}
+
+// What the game counts as on screen (a ped's AI, a car's route, spawning) is every player's view on both ends: its
+// cameras at the network view, their bounds out to where its client already shows it, grown ahead as the camera moves
+// (its last tick's step) by that client's lead, which the snapshots carry. So the traffic and peds spawn and go out of
+// sight of what that player sees, not of where the server has it (Car.cpp, TrafficSpawner::MakeTrafficForCurrCamera;
+// Char_Pool.cpp; Car::ManageDespawning)
+void NetworkViews()
 {
     for (int i = 0; i < MAX_PLAYERS; i++)
     {
-        // Every player's view is the network game's (16:9 at the game's zoom, ReadScreenSettings, PortCameraZoom): the
-        // cameras here have the server's window size (slot 0) or 640x480 (the others)
-        if (Player* p = net::engine::GetPlayer(i))
+        Player* p = net::engine::GetPlayer(i);
+        if (!p)
         {
+            continue;
+        }
+        if (!gPortNetFrameLoop)
+        {
+            // A server or a replay, whose view nobody sees: all its cameras at that view (PlayerViewRadius reads their size)
             Camera* views[3] = {&p->mGameCamera, &p->mAuxGameCamera, &p->mViewCamera};
             for (Camera* c : views)
             {
@@ -50,20 +71,17 @@ void LeadCameras()
                 }
             }
         }
-    }
-    for (int i = 0; i < MAX_PLAYERS; i++)
-    {
-        Player* p = gSpawnLead[i] ? net::engine::GetPlayer(i) : NULL;
-        if (!p || !p->mInUse)
+        if (!p->mInUse)
         {
             continue;
         }
         Camera* cams[2] = {&p->mGameCamera, &p->mAuxGameCamera};
         for (Camera* c : cams)
         {
+            NetworkBounds(c);
             const s32 stepX = c->mCurPos.mX.mValue - c->mPrevPos.mX.mValue;
             const s32 stepY = c->mCurPos.mY.mValue - c->mPrevPos.mY.mValue;
-            if (abs(stepX) > 1 << 14 || abs(stepY) > 1 << 14)
+            if (!gSpawnLead[i] || abs(stepX) > 1 << 14 || abs(stepY) > 1 << 14)
             {
                 continue; // a jump (a respawn), not a move
             }
@@ -89,7 +107,6 @@ void net::engine::SetSpawnLead(int player, int ticks)
     if (player >= 0 && player < MAX_PLAYERS)
     {
         gSpawnLead[player] = ticks < 0 ? 0 : ticks > 30 ? 30 : ticks;
-        gPortAfterPlayersHook = LeadCameras;
     }
 }
 
@@ -101,6 +118,12 @@ std::string net::engine::SpawnStats()
              gCarManager_6C->mRecycledCars + gCarManager_6C->mProtoRecycledCars, PortTrafficLimit(), (int)gNumDummyChars,
              dummies < 80 ? dummies : 80, (unsigned)gObj3C_live_count);
     return line;
+}
+
+void net::engine::InstallNetworkViews(bool on)
+{
+    gPortAfterPlayersHook = on ? NetworkViews : NULL;
+    memset(gSpawnLead, 0, sizeof(gSpawnLead));
 }
 
 int net::engine::SpawnLead(int player)

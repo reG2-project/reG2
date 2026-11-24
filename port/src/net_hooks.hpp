@@ -56,9 +56,9 @@ inline s32 PortTrafficLimit()
 {
     return gPortTrafficCap * gPortSpawnPlayers;
 }
-// Called in Game::UpdateGame after the players' tick (their cameras moved), before anything spawns; NULL but on a
-// network server, which moves a client's cameras' bounds to where that client already shows them (its lag ahead): a car
-// or ped spawned out of sight here would come into a fast client's view
+// Called in Game::UpdateGame after the players' tick (their cameras moved), before anything spawns; NULL but in a network
+// game, whose ends give every player's cameras the same bounds: the network view, out to where its client already shows
+// them (its lag ahead). What the game counts as on screen is then the same on both ends
 extern void (*gPortAfterPlayersHook)();
 // Called in Game::BootGame after the map script's level start, before the players are set up: NULL but in a network
 // game, whose players past the script's PLAYER_PEDs get a ped there

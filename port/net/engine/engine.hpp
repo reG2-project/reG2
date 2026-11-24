@@ -171,9 +171,11 @@ bool PlayerInCar(int player); // in this game
 // How far a player's camera shows (blocks, centre to corner): it zooms out with speed
 float PlayerViewRadius(int player);
 // The spawning (a server's): the players the limits are for, and how many ticks ahead of this game each one's client
-// shows its player (0: here, a bot); its cameras' bounds move that far along their motion for each tick (spawn.cpp)
+// shows its player (0: here, a bot; a client has them from the snapshots); its cameras' bounds move that far along their
+// motion for each tick (spawn.cpp)
 void SetSpawnPlayers(int players);
 void SetSpawnLead(int player, int ticks);
+void InstallNetworkViews(bool on); // every player's view at the network view and its lead, on both ends (spawn.cpp)
 int SpawnLead(int player);
 std::string SpawnStats(); // for the log: the ambient traffic and peds, the moving objects, and their limits
 // A slot's name as the game shows it (over the player, in kill messages): Player::mPlayerName, up to 15
