@@ -133,6 +133,37 @@ int EntityOf(const SoundEvent& e)
     return -1;
 }
 
+// A blast's bang (ProcessOtherObjects: a small, a car's or item's, a large one), 0 for another sound
+int BangSize(const sound_0x68& r)
+{
+    return r.mSampIdx >= 186 && r.mSampIdx <= 188 ? (int)r.mSampIdx - 185 : 0;
+}
+
+// A bigger bang given where a smaller one plays ends that one, the game's way (AddReleasingSounds no longer carries it):
+// the car the server blew up where this client's own blast was
+void CutSmallerBangs(const SoundEvent& w)
+{
+    const uint32_t kBangTicks = 30;
+    sound_obj& s = gSound_obj;
+    const u8 q = s.mnActiveSampleQueue ? 0 : 1;
+    for (const SoundEvent& h : sHeard)
+    {
+        if (BangSize(h.mSample) == 0 || BangSize(h.mSample) >= BangSize(w.mSample) || h.mTick + kBangTicks < w.mTick ||
+            abs(h.mX - w.mX) > 1 || abs(h.mY - w.mY) > 1)
+        {
+            continue;
+        }
+        for (u8 i = 0; i < s.mSampleRequestQueuesStatus[q]; i++)
+        {
+            sound_0x68& r = s.masSamples[q][s.mabSampleQueueIndexTable[q][i]];
+            if (r.mSampIdx == h.mSample.mSampIdx && abs(r.mObj.mX.ToInt() - h.mX) <= 1 && abs(r.mObj.mY.ToInt() - h.mY) <= 1)
+            {
+                r.mReleasingVolumeDivider = 0;
+            }
+        }
+    }
+}
+
 // The settled ticks' requests no live frame had, into this frame's queue (the vocal line into its slot)
 void GiveOwed()
 {
@@ -176,6 +207,10 @@ void GiveOwed()
         const int ent = EntityOf(w);
         if (ent > 0)
         {
+            if (BangSize(w.mSample))
+            {
+                CutSmallerBangs(w);
+            }
             memcpy(&gSound_obj.msQueueSample, &w.mSample, sizeof(sound_0x68));
             gSound_obj.msQueueSample.mEntityIndex = ent;
             gSound_obj.AddSampleToRequestedQueue();

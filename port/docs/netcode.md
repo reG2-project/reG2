@@ -611,16 +611,21 @@ follow the rollback: a tick first simulated in a resimulation, which plays nothi
 predicted and resimulated would be heard twice.
 
 The sound log (`engine/sound_log.cpp`): every live frame notes the one-shot samples its audio entities ask for
-(`gPortSoundRequestsHook`, in `sound_obj::ServiceSoundEffects`, around `InterrogateAudioEntities`), keyed by the entity's
-owner (its pointer and id), which of its sounds it is (`sound_0x68::mSampleIndex`; the collision queue's impacts by
-place), the place and the tick. A resimulated tick runs the same entities without the mixer (`SoundLogResimTick`: the
-queues and channels as they were, no radio, vocal stream or pager) and notes what they would have asked for; their
-progress moves on with the world as on a live frame (entity ages, `SoundPosEntry`, the frame counter, the events they
-take). Once a snapshot settles a tick (its tick and the next, which runs with the server's state and inputs), that
-tick's requests no live frame had (same owner and sound, within 2 ticks and a block) are added to the next live frame's
-queue, each once, and noted as heard. What a snapshot's Apply leaves (a death the server carried out) is asked for by a
-pass before the first resimulated tick, as the snapshot's next tick's. Loops are asked for every frame by the live
-frames from the corrected world, and the channels playing them are kept over a restore.
+(`gPortSoundRequestsHook`, in `sound_obj::ServiceSoundEffects`, around `InterrogateAudioEntities`), keyed by the
+entity's owner (a car or a ped by its id, as a resimulation can make it again elsewhere in its pool; an object, a blast,
+by place, as a snapshot's blast is made again with another id; anything else by its pointer), which of its sounds it is
+(`sound_0x68::mSampleIndex`; an object's sample; the collision queue's impacts by place; an AI driver's shouts and
+beeps, which take the next of a shared count, as one), the place and the tick, the game's cycle (`Rng::get_cur_rng`),
+which every map starts anew: a restore learns which snapshot tick it is. A resimulated tick runs the same entities
+without the mixer (`SoundLogResimTick`: the queues and channels as they were, no radio, vocal stream or pager) and notes
+what they would have asked for; their progress moves on with the world as on a live frame (entity ages, `SoundPosEntry`,
+the frame counter, the events they take). Once a snapshot settles a tick (its tick and the next, which runs with the
+server's state and inputs), that tick's requests no live frame had (same owner and sound, within 2 ticks and a block)
+are added to the next live frame's queue, each once, and noted as heard. A bigger blast's bang given where a smaller one
+plays ends that one (the car the server blew up where this client's own rocket blast was; the server's game had only the
+car's). What a snapshot's Apply leaves (a death the server carried out) is asked for by a pass before the first
+resimulated tick, as the snapshot's next tick's. Loops are asked for every frame by the live frames from the corrected
+world, and the channels playing them are kept over a restore.
 
 | Sound | Where (`sound_obj.cpp`) | On a client |
 |---|---|---|
