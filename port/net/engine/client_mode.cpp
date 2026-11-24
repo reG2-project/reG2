@@ -40,7 +40,10 @@ void net::engine::ProtectPlayers()
     }
     for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
     {
-        GuardPhases(p);
+        if (IsServerPed(p)) // this game's own die as they do: no snapshot would ever end their hold
+        {
+            GuardPhases(p);
+        }
     }
 }
 

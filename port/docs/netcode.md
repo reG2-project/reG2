@@ -380,7 +380,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   tick the server's wins: the same phase gets its timer, one the server has is started the game's way (`Char::DrownPed`,
   a throw's object, the door as the jacker's char puts a driver there), one the server lacks is cancelled to walking
   (a throw: its object removed). Nothing waits: there is no grace for a throw just landed.
-- **Deaths are the server's** (`ClientPedMayDie`, `gPortPedMayDie` in `Ped::Kill`): a client's ped on foot dies only by
+- **Deaths are the server's** (`ClientPedMayDie`, `gPortPedMayDie` in `Ped::Kill`): a server's ped on foot (a player, or one
+  mapped to a snapshot's; the client's own die as the game has them) dies only by
   the server's death (`KillNow`, also the ambient peds'); its own death, from a predicted shot, car or fall, is held
   (health 1, knocked down on its feet) until a snapshot says what became of it. Before each tick a fatal outcome of its
   own becomes knocked down and the sinking and electrocution timers are held short of the death (`GuardPhases`); the

@@ -38,6 +38,7 @@ std::unordered_map<uint32_t, Ped*> gPeds;
 // The game's own id of each mapped car and ped (Car::mCarId, Ped::mId): a pool slot this game freed and handed out again
 // since is another car or ped, and its mapping goes (Prune)
 std::unordered_map<uint32_t, int32_t> gCarIds, gPedIds;
+void MakeKeys(); // the reverse maps (the random draws' owners)
 const int32_t kAdoptRadius = 4096; // a quarter block: the same car or ped as the server's
 // Free slots below which this game's own cars and peds beyond the reach go (EvictOwn), so that the server's have room
 const int kReserve = 32;
@@ -740,6 +741,7 @@ void net::engine::RestoreReplicas(const ReplicaState* state)
     gCarIds = state->carIds;
     gPedIds = state->pedIds;
     PickupMap() = state->objects;
+    MakeKeys();
 }
 
 void net::engine::FreeReplicas(ReplicaState* state)
@@ -777,6 +779,21 @@ std::unordered_map<const Car*, uint32_t> gCarKeys;
 // A client's own peds and cars (the server has none of them) own their draws too: the game's stream is the server's
 const uint32_t kOwnPedKey = 0x7C000000, kOwnCarKey = 0x7D000000;
 
+// Made again every tick and restore (a few hundred entries); the maps change with every apply and restore
+void MakeKeys()
+{
+    gPedKeys.clear();
+    gCarKeys.clear();
+    for (const auto& kv : gPeds)
+    {
+        gPedKeys[kv.second] = kv.first;
+    }
+    for (const auto& kv : gCars)
+    {
+        gCarKeys[kv.second] = kv.first;
+    }
+}
+
 unsigned int ServerPedKey(const Ped* p)
 {
     return p->mPlayer ? 1 + p->mPlayer->mPlayerIdx : net::engine::kPedIdBase + p->mId;
@@ -805,20 +822,10 @@ unsigned int ClientCarKey(const Car* c)
 
 void ClientTickStart()
 {
+    MakeKeys();
     ProtectPlayers(); // before every tick, live or resimulated: a frame may run several
     ShotsTickStart();
     DebugLocalPhase();
-    // Made again every tick (a few hundred entries); the maps change with every apply and restore
-    gPedKeys.clear();
-    gCarKeys.clear();
-    for (const auto& kv : gPeds)
-    {
-        gPedKeys[kv.second] = kv.first;
-    }
-    for (const auto& kv : gCars)
-    {
-        gCarKeys[kv.second] = kv.first;
-    }
 }
 } // namespace
 
@@ -856,13 +863,10 @@ bool net::engine::ClientPedMayGo(Ped* ped)
     {
         return true; // in a car, it goes with its car (Car::KillContainedPeds), whose state is the server's
     }
-    for (const auto& it : gPeds)
+    if (IsServerPed(ped))
     {
-        if (it.second == ped)
-        {
-            gPedsKept++;
-            return false;
-        }
+        gPedsKept++;
+        return false;
     }
     return true;
 }
@@ -944,4 +948,9 @@ void net::engine::SetReplicaPose(const Pose& p)
             MoveCar(car, Raw(p.x), Raw(p.y), Raw(p.z), Angle(p.rot));
         }
     }
+}
+
+bool net::engine::IsServerPed(const Ped* p)
+{
+    return p->mPlayer || gPedKeys.count(p);
 }

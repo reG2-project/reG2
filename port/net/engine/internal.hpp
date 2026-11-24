@@ -332,6 +332,7 @@ void GuardThrow(Ped* ped);
 bool ClientPedMayDie(Ped* ped);
 // gPortPedMayGo on a client: a server's ped goes by the snapshots (RemoveUnsent), a death of the server's or with its car
 bool ClientPedMayGo(Ped* ped);
+bool IsServerPed(const Ped* p); // a player's, or mapped to a snapshot's ped (a client's own one isn't)
 bool InServerDeath(); // inside KillNow
 bool ClientMayPullOut(Ped* victim); // gPortMayPullOut on a client: a player is pulled out of its car by the server only
 extern int gDeathsHeld; // for the log
@@ -351,7 +352,7 @@ void ResetHudScores(Player* p); // the HUD's money, frags and multiplier as at a
 void SoundLogRestored(uint32_t tick);
 void SoundLogResimTick(bool applied);
 void SoundLogStop();
-void ProtectPlayers(); // the cars of player peds kept, every ped's fatal phase steps held (GuardPhases)
+void ProtectPlayers(); // the cars of player peds kept, the server's peds' fatal phase steps held (GuardPhases)
 void SeenByAll(); // every ped and car counts as seen: no removal off screen on a client
 
 // Cars (cars.cpp, car_ai.cpp)

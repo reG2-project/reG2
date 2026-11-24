@@ -610,9 +610,9 @@ void net::engine::KillNow(Ped* ped)
 
 bool net::engine::ClientPedMayDie(Ped* ped)
 {
-    if (gServerDeath || ped->mCar || !ped->mGameObject || ped->isDead())
+    if (gServerDeath || ped->mCar || !ped->mGameObject || ped->isDead() || !IsServerPed(ped))
     {
-        return true; // in a car, its car's state (an explosion) is the server's
+        return true; // in a car, its car's state (an explosion) is the server's; this game's own ped, its own
     }
     // Held: alive, and on its feet knocked down until the server's state says what became of it
     gDeathsHeld++;
