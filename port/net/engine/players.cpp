@@ -365,6 +365,21 @@ void StartTransition(Player* p, Ped* ped, Car* serverTarget, const net::EntitySt
         StartLeaving(ped);
     }
 }
+// Jacking a seated player here only: its char would wait at the door for a pull the server never starts (ClientMayPullOut)
+void CancelJack(Ped* ped, const net::EntityState& e)
+{
+    Char* c = ped->mGameObject;
+    Car* car = c ? c->mTargetCar : NULL;
+    if ((e.f[kPlayerState] & (kPlayerTransition | kPlayerDead)) || ped->mCar || !car || ped->isDead() ||
+        (c->mAnimationState != Char_Anim_state::Entering_Car_6 && c->mAnimationState != Char_Anim_state::Carjacking_9) ||
+        !car->mDriver || car->mDriver == ped || ClientMayPullOut(car->mDriver))
+    {
+        return;
+    }
+    ped->SetObjective(objectives_enum::no_obj_0, 9999);
+    ped->SetObjective2(objectives_enum::no_obj_0);
+    CancelPhase(ped);
+}
 } // namespace
 
 void net::engine::CapturePlayer(int i, Snapshot& out)
@@ -497,6 +512,7 @@ void net::engine::ApplyPlayer(const EntityState& e)
         // ped has (0) started a death of this game's own, undone by the next restore (a flicker of dying and living)
         ped->set_health((s16)(e.f[kPlayerHealth] > 0 ? e.f[kPlayerHealth] : 1));
     }
+    CancelJack(ped, e);
     Car* serverTarget = RefCar(e.f[kPlayerTarget]);
     RetargetEntering(ped, serverTarget, e);
     SettleCar(p, ped, e);
