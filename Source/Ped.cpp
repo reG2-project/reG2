@@ -11595,6 +11595,13 @@ void Ped::UpdateStatsForKiller()
 MATCH_FUNC(0x46f9d0)
 void Ped::Kill()
 {
+#if defined(GTA2_PORT)
+    // Port: a network client's peds on foot die by the server's death only (port/net/engine/players.cpp)
+    if (gPortPedMayDie && !gPortPedMayDie(this))
+    {
+        return;
+    }
+#endif
     if (mBf21C.bOnFire)
     {
         if (mGameObject)

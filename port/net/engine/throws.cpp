@@ -1,13 +1,12 @@
-// port/net (port/docs/netcode.md, "Entities"): a player thrown by a blast, a car or a door, as the server has it. The
-// game throws a ped by a moving object (Ped::mpObj2C, ped_pushed_110) that its char follows until it stops, then lands
-// it by the throw's outcome (Char::UpdateImmobilized). A client predicts its players' throws; its snapshots correct them.
+// port/net (port/docs/netcode.md, "Entities"): a ped thrown by a blast, a car or a door, as the server has it. The game
+// throws a ped by a moving object (Ped::mpObj2C, ped_pushed_110) that its char follows until it stops, then lands it by
+// the throw's outcome (Char::UpdateImmobilized). A client predicts every ped's throws; its snapshots correct them.
 #include "internal.hpp"
 #include "Source/Object_3C.hpp"
 #include "Source/Object_5C.hpp"
 #include "Source/Ped.hpp"
 #include "Source/PedRefTable.hpp"
 #include "Source/char.hpp"
-#include "Source/rng.hpp"
 #include "Source/sprite.hpp"
 
 namespace
@@ -15,18 +14,8 @@ namespace
 using namespace net::engine;
 using net::EntityState;
 
-// kPlayerThrow: 0 not thrown, else the outcome (1 back on its feet, 2 knocked down, 3 dead) | airborne << 2 | the
-// object's collision mode (Object_3C::mSpriteCollideMode) << 3
 const int32_t kThrowAirborne = 4;
 const int kThrowCollideShift = 3;
-// A throw the client landed this many ticks before the server's ends isn't started again
-const uint32_t kLandedGrace = 10;
-uint32_t gThrownTick[MAX_PLAYERS]; // the last tick each player was thrown here (GuardThrow)
-
-uint32_t Tick()
-{
-    return gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
-}
 
 // Only the server's death is fatal here (KillNow): its Ped::Kill leaves dead_9 for any landing to restore
 s32 ClientOutcome(s32 state2)
@@ -44,28 +33,26 @@ s32 OutcomeState(int32_t code)
     return ClientOutcome(ped_state_2::knocked_recover_24 + (code & 3) - 1);
 }
 
-void PlaceObject(Object* o, const EntityState& e)
+void PlaceObject(Object* o, const int32_t* t)
 {
     o->RemoveFromCollisionBuckets();
-    o->mSprite->set_xyz_lazy(Raw(e.f[kPlayerThrowX]), Raw(e.f[kPlayerThrowY]), Raw(e.f[kPlayerThrowZ]));
-    o->mSprite->set_ang_lazy(Angle(e.f[kPlayerThrowRot]));
+    o->mSprite->set_xyz_lazy(Raw(t[kThrowX]), Raw(t[kThrowY]), Raw(t[kThrowZ]));
+    o->mSprite->set_ang_lazy(Angle(t[kThrowRot]));
     o->AssignToBucket();
 }
 
 // The server's throw started here as Char::HandleGenericImpact starts one, its object at the server's
-Object* StartThrow(Ped* ped, Char* c, const EntityState& e)
+Object* StartThrow(Ped* ped, Char* c, const int32_t* t)
 {
-    const int32_t t = e.f[kPlayerThrow];
-    const s32 outcome = OutcomeState(t);
     Object* o = gObject_5C->NewMovingObj(objects::ped_pushed_110,
-                                         Raw(e.f[kPlayerThrowX]),
-                                         Raw(e.f[kPlayerThrowY]),
-                                         Raw(e.f[kPlayerThrowZ]),
-                                         Angle(e.f[kPlayerThrowAngle]),
-                                         Angle(e.f[kPlayerThrowRot]),
-                                         Raw(e.f[kPlayerThrowSpeed]),
-                                         Raw(e.f[kPlayerThrowFriction]),
-                                         Raw(e.f[kPlayerThrowZSpeed]));
+                                         Raw(t[kThrowX]),
+                                         Raw(t[kThrowY]),
+                                         Raw(t[kThrowZ]),
+                                         Angle(t[kThrowAngle]),
+                                         Angle(t[kThrowRot]),
+                                         Raw(t[kThrowSpeed]),
+                                         Raw(t[kThrowFriction]),
+                                         Raw(t[kThrowZSpeed]));
     if (!o || !o->mObj3c || !o->mSprite)
     {
         return NULL;
@@ -78,13 +65,13 @@ Object* StartThrow(Ped* ped, Char* c, const EntityState& e)
     }
     o->SetDamageOwner(ped->mPedRefIdx);
     ped->ChangeNextPedState1(ped_state_1::immobilized_8);
-    ped->ChangeNextPedState2(outcome);
+    ped->ChangeNextPedState2(OutcomeState(t[kThrow]));
     c->mPedState2 = ped_state_2::knocked_recover_24;
     return o; // its blood is the server's hit's (ShowServerHit)
 }
 } // namespace
 
-Object* net::engine::ThrowOf(Ped* ped)
+Object* net::engine::ThrowOf(const Ped* ped)
 {
     Object* o = ped->mpObj2C;
     const bool thrown = o && o->mObj3c && o->mSprite && !ped->mCar && ped->mGameObject && ped->mPedState1 == ped_state_1::immobilized_8 &&
@@ -92,7 +79,7 @@ Object* net::engine::ThrowOf(Ped* ped)
     return thrown ? o : NULL;
 }
 
-void net::engine::CaptureThrow(Ped* ped, EntityState& e)
+void net::engine::CaptureThrow(const Ped* ped, EntityState& e, int base)
 {
     const Object* o = ThrowOf(ped);
     if (!o)
@@ -100,73 +87,74 @@ void net::engine::CaptureThrow(Ped* ped, EntityState& e)
         return;
     }
     const Object_3C* m = o->mObj3c;
-    e.f[kPlayerThrow] =
-        OutcomeCode(ped->mPedState2) | (m->mbAirborne ? kThrowAirborne : 0) | (m->mSpriteCollideMode & 3) << kThrowCollideShift;
-    e.f[kPlayerThrowX] = o->mSprite->mXy.x.mValue;
-    e.f[kPlayerThrowY] = o->mSprite->mXy.y.mValue;
-    e.f[kPlayerThrowZ] = o->mSprite->mZpos.mValue;
-    e.f[kPlayerThrowRot] = o->mSprite->mRotation.rValue;
-    e.f[kPlayerThrowAngle] = m->mAngle.rValue;
-    e.f[kPlayerThrowSpeed] = m->mSpeed.mValue;
-    e.f[kPlayerThrowZSpeed] = m->mZSpeed.mValue;
-    e.f[kPlayerThrowZAccel] = m->mZAccel.mValue;
-    e.f[kPlayerThrowFriction] = m->mFriction.mValue;
+    int32_t* t = &e.f[base];
+    t[kThrow] = OutcomeCode(ped->mPedState2) | (m->mbAirborne ? kThrowAirborne : 0) | (m->mSpriteCollideMode & 3) << kThrowCollideShift;
+    t[kThrowX] = o->mSprite->mXy.x.mValue;
+    t[kThrowY] = o->mSprite->mXy.y.mValue;
+    t[kThrowZ] = o->mSprite->mZpos.mValue;
+    t[kThrowRot] = o->mSprite->mRotation.rValue;
+    t[kThrowAngle] = m->mAngle.rValue;
+    t[kThrowSpeed] = m->mSpeed.mValue;
+    t[kThrowZSpeed] = m->mZSpeed.mValue;
+    t[kThrowZAccel] = m->mZAccel.mValue;
+    t[kThrowFriction] = m->mFriction.mValue;
 }
 
-void net::engine::ApplyThrow(Ped* ped, const EntityState& e)
+// After ApplyPhases ended any other phase here: thrown as the server's, or not
+void net::engine::ApplyThrow(Ped* ped, const EntityState& e, int base)
 {
     Char* c = ped->mGameObject;
     if (!c || ped->mCar || ped->isDead())
     {
         return;
     }
-    const int32_t t = e.f[kPlayerThrow];
+    const int32_t* t = &e.f[base];
     Object* o = ThrowOf(ped);
-    if (!t)
+    if (!t[kThrow])
     {
         if (o)
         {
-            // Not thrown on the server: stopped at its place, its char lands it in its next update (peds update first)
-            o->RemoveFromCollisionBuckets();
-            o->mSprite->set_xyz_lazy(Raw(e.f[kPlayerX]), Raw(e.f[kPlayerY]), Raw(e.f[kPlayerZ]));
-            o->AssignToBucket();
-            o->mObj3c->mSpeed = Fix16(0);
-            o->mObj3c->mZSpeed = Fix16(0);
-            o->mObj3c->mbAirborne = 0;
-            ped->mPedState2 = ped_state_2::knocked_recover_24;
+            // Not thrown there: on its feet at once (its place the server's ped's), or in the server's phase (ApplyPhases)
+            o->RequestRemoval();
+            ped->mpObj2C = NULL;
+            CancelPhase(ped);
         }
         return;
     }
     if (!o)
     {
-        const int i = (int)e.id - 1;
-        const uint32_t since = i >= 0 && i < MAX_PLAYERS ? Tick() - gThrownTick[i] : kLandedGrace + 1;
-        // Knocked down and lying (no object), a new throw takes; one the client just landed stays landed
-        const bool held = ped->mPedState1 == ped_state_1::immobilized_8 && ped->mPedState2 != ped_state_2::lying_on_floor_22;
-        if (ped->mpObj2C || held || since <= kLandedGrace || InCarTransition(ped) || !c->mSpritePtr)
+        if (ped->mpObj2C || ped->mPedState1 == ped_state_1::immobilized_8 || AtCarDoor(ped) || !c->mSpritePtr)
         {
             return;
         }
-        o = StartThrow(ped, c, e);
+        o = StartThrow(ped, c, t);
         if (!o)
         {
             return;
         }
     }
-    PlaceObject(o, e);
+    PlaceObject(o, t);
     Object_3C* m = o->mObj3c;
-    m->mAngle = Angle(e.f[kPlayerThrowAngle]);
-    m->mSpeed = Raw(e.f[kPlayerThrowSpeed]);
-    m->mZSpeed = Raw(e.f[kPlayerThrowZSpeed]);
-    m->mZAccel = Raw(e.f[kPlayerThrowZAccel]);
-    m->mFriction = Raw(e.f[kPlayerThrowFriction]);
-    m->mbAirborne = (t & kThrowAirborne) ? 1 : 0;
-    m->mSpriteCollideMode = t >> kThrowCollideShift & 3;
-    const s32 outcome = OutcomeState(t);
+    m->mAngle = Angle(t[kThrowAngle]);
+    m->mSpeed = Raw(t[kThrowSpeed]);
+    m->mZSpeed = Raw(t[kThrowZSpeed]);
+    m->mZAccel = Raw(t[kThrowZAccel]);
+    m->mFriction = Raw(t[kThrowFriction]);
+    m->mbAirborne = (t[kThrow] & kThrowAirborne) ? 1 : 0;
+    m->mSpriteCollideMode = t[kThrow] >> kThrowCollideShift & 3;
+    const s32 outcome = OutcomeState(t[kThrow]);
     ped->mPedState2 = outcome;
     if (!c->mStateInitPending && c->mPedState1 == ped_state_1::immobilized_8)
     {
         c->mPedState2 = outcome;
+        if (t[kPhase] & kPhaseInit)
+        {
+            c->mStateInitPending = true;
+        }
+        else
+        {
+            c->mTimeout = (u16)t[kPhaseTimer];
+        }
     }
 }
 
@@ -182,13 +170,12 @@ void net::engine::MoveThrow(Ped* ped, int32_t dx, int32_t dy)
     }
 }
 
-void net::engine::GuardThrow(int i, Ped* ped)
+void net::engine::GuardThrow(Ped* ped)
 {
-    if (ped && i >= 0 && i < MAX_PLAYERS && ThrowOf(ped))
+    if (ThrowOf(ped))
     {
-        gThrownTick[i] = Tick();
         ped->mPedState2 = ClientOutcome(ped->mPedState2);
-        // Its timeout, counted twice a tick, makes the landing fatal at 0: only a snapshot ends a long throw
+        // Its timeout, counted twice a tick, makes the landing fatal at 0
         Char* c = ped->mGameObject;
         if (c->mTimeout < 3)
         {

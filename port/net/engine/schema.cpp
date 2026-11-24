@@ -7,6 +7,16 @@
 #include <stdio.h>
 #include <string>
 
+void net::engine::PhaseRecordFields(std::vector<net::FieldDesc>& out)
+{
+    static const net::FieldDesc kFields[net::engine::kPhaseFieldCount] = {
+        {"phase", 4, false}, {"phase_timer", 16, false}, {"phase_car", 25, false}, {"throw", 5, false}, {"throw_x", 22, false},
+        {"throw_y", 22, false}, {"throw_z", 17, false}, {"throw_rot", 11, false}, {"throw_angle", 11, false},
+        {"throw_speed", 18, true}, // Fix16 raw: up to 8 blocks a tick either way
+        {"throw_zspeed", 18, true}, {"throw_zaccel", 18, true}, {"throw_friction", 18, true}};
+    out.insert(out.end(), kFields, kFields + net::engine::kPhaseFieldCount);
+}
+
 namespace
 {
 using net::FieldDesc;
@@ -44,17 +54,7 @@ net::Schema BuildSchema()
     player.fields.push_back(FieldDesc{"multiplier", 8, false}); // kPlayerMultiplier
     player.fields.push_back(FieldDesc{"death_events", 8, false}); // kPlayerDeathEvents
     player.fields.push_back(FieldDesc{"bonus", 12, false}); // kPlayerBonus
-    player.fields.push_back(FieldDesc{"throw", 5, false}); // kPlayerThrow
-    player.fields.push_back(FieldDesc{"throw_x", 22, false});
-    player.fields.push_back(FieldDesc{"throw_y", 22, false});
-    player.fields.push_back(FieldDesc{"throw_z", 17, false});
-    player.fields.push_back(FieldDesc{"throw_rot", 11, false});
-    player.fields.push_back(FieldDesc{"throw_angle", 11, false});
-    player.fields.push_back(FieldDesc{"throw_speed", 18, true}); // Fix16 raw: up to 8 blocks a tick either way
-    player.fields.push_back(FieldDesc{"throw_zspeed", 18, true});
-    player.fields.push_back(FieldDesc{"throw_zaccel", 18, true});
-    player.fields.push_back(FieldDesc{"throw_friction", 18, true});
-    player.fields.push_back(FieldDesc{"lying", 6, false}); // kPlayerLying
+    PhaseRecordFields(player.fields); // kPlayerPhase
     net::EntityType car = {"car", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"model", 8, false},
                                    {"driver", 2, false}, {"damage", 16, false}, {"areas", 32, false}, {"wrecked", 2, false},
                                    {"lights", 8, false}, {"flash", 8, false}, {"horn", 8, false}, {"horn_cooldown", 8, false}, {"remap", 16, true},
@@ -65,6 +65,7 @@ net::Schema BuildSchema()
     net::EntityType ped = {"ped", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"remap", 8, false},
                                    {"car", 25, false}, {"state", 1, false}}};
     PedStateFields(ped.fields);
+    PhaseRecordFields(ped.fields); // kPedPhase
     // The last field of cars, peds and pickups: how many ticks old its state is (0: this snapshot's; a busy area's far
     // entities get theirs less often, AgeField)
     car.fields.push_back(FieldDesc{"age", 6, false});

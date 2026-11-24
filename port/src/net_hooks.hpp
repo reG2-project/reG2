@@ -81,6 +81,12 @@ extern bool (*gPortBlastHurts)(Explosion* pExplosion);
 // Asked as a large blast would throw its burning debris (Explosion::UpdateExplosion_18_19_20_32_33): whether it does, seen
 // or not. NULL but in a network game, whose ends see through different cameras
 extern bool (*gPortBlastDebris)(Explosion* pExplosion);
+// Asked as a ped would die (Ped::Kill): false, and it doesn't. NULL but on a network client, whose peds on foot die by
+// the server's death only
+extern bool (*gPortPedMayDie)(Ped* pPed);
+// Asked as a jacker's char pulls a driver out (Char::UpdateCharB4): false, and the jacker waits at the door. NULL but on
+// a network client, whose players are pulled out by the server's jack only
+extern bool (*gPortMayPullOut)(Ped* pVictim);
 // Asked for each command a script thread runs (ScriptThread::PreExecOpCode): false, and it is stepped over. NULL but on a
 // network client, which runs its map script's level start for what only shows or sounds here (the server runs the rest)
 extern bool (*gPortScriptCommandRuns)(u16 type);

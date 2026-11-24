@@ -156,6 +156,8 @@ void net::engine::StopNetworkGame()
     gPortServerKillAwards = false;
     gPortProtectsPlayers = false;
     gPortCarMayExplode = NULL;
+    gPortPedMayDie = NULL;
+    gPortMayPullOut = NULL;
     gPortScriptCommandRuns = NULL;
     ClearRandOwners();
     ResetForNewGame();

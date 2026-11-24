@@ -48,6 +48,7 @@ int gRefusedCars;
 int gEvicted;
 int gOccupiedKept;
 int gPedsRemade;
+int gPedsRemadeTotal; // for the first ones' log
 
 template <class T> int FreeSlots(T* head)
 {
@@ -431,7 +432,8 @@ void ApplyPed(Pass& a, const EntityState& e)
     }
     else if (ped->mCar)
     {
-        if (settled)
+        ApplyPhases(ped, e, kPedPhase, false, NULL); // pulled out there: at its car's door here
+        if (settled && ped->mCar)
         {
             ForceOutOfCar(ped, Raw(e.f[kPedX]), Raw(e.f[kPedY]), Raw(e.f[kPedZ]), Angle(e.f[kPedRot]));
         }
@@ -444,6 +446,11 @@ void ApplyPed(Pass& a, const EntityState& e)
     {
         // A corpse of this game's own (a death predicted that the server didn't have): it goes, and the next snapshot
         // makes the ped again
+        if (gPedsRemadeTotal++ < 20)
+        {
+            printf("net: ped %u dead here only (%s, cause %d, %s, objective %d)\n", e.id, ped->mBf21C.bActive ? "killed" : "removed",
+                   (int)ped->mDeathCause, ped->mCar ? "in a car" : "on foot", (int)ped->mObjective);
+        }
         RemovePed(ped);
         gPeds.erase(e.id);
         a.mapped.erase(ped);
@@ -668,6 +675,11 @@ void net::engine::PrintReplicaLog()
         printf("net: %d corpses of this game's own made again\n", gPedsRemade);
         gPedsRemade = 0;
     }
+    if (gDeathsHeld)
+    {
+        printf("net: %d deaths of this game's own held for the server's\n", gDeathsHeld);
+        gDeathsHeld = 0;
+    }
     if (gOccupiedKept)
     {
         printf("net: %d removals of occupied cars skipped\n", gOccupiedKept);
@@ -875,9 +887,13 @@ void net::engine::SetReplicaPose(const Pose& p)
     if (p.id >= kPedIdBase)
     {
         Ped* ped = ReplicaPed(p.id);
-        if (ped && !ped->mCar)
+        if (ped && !ped->mCar && !AtCarDoor(ped) && PhaseOf(ped) != kPhaseDoor && !ped->isDead())
         {
-            PortInterp::Correcting(CharSprite(ped));
+            if (const Sprite* s = CharSprite(ped))
+            {
+                PortInterp::Correcting(s);
+                MoveThrow(ped, p.x - s->mXy.x.mValue, p.y - s->mXy.y.mValue); // its char follows the throw's object
+            }
             MovePed(ped, Raw(p.x), Raw(p.y), Raw(p.z), Angle(p.rot));
         }
     }

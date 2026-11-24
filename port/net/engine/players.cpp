@@ -19,9 +19,11 @@
 #include "Source/TextTable.hpp"
 #include "Source/TrafficLights.hpp"
 #include "Source/root_sound.hpp"
+#include "Source/voice_line.hpp"
 #include "Source/Weapon.hpp"
 #include "Source/WeaponManager.hpp"
 #include "Source/char.hpp"
+#include "Source/char_anim_state_more.hpp"
 #include "Source/network_data.hpp"
 #include "Source/rng.hpp"
 #include "Source/sprite.hpp"
@@ -449,8 +451,7 @@ void net::engine::CapturePlayer(int i, Snapshot& out)
     {
         e.f[kPlayerPowerUp + k] = p->mPowerUpTimers[k];
     }
-    CaptureThrow(ped, e);
-    CapturePhases(ped, e);
+    CapturePhases(ped, e, kPlayerPhase);
     out.entities.push_back(e);
 }
 
@@ -516,8 +517,8 @@ void net::engine::ApplyPlayer(const EntityState& e)
         }
     }
     ShowServerHit(i, ped, e);
-    ApplyThrow(ped, e); // first: a death carried out on a thrown ped takes at its landing, as the server's
-    ApplyPhases(ped, e);
+    // First: a death carried out on a thrown ped takes at its landing, as the server's
+    ApplyPhases(ped, e, kPlayerPhase, (e.f[kPlayerState] & kPlayerDead) != 0, e.f[kPlayerInCar] ? RefCar(e.f[kPlayerCar]) : NULL);
     if (CarryOutDeath(i, p, ped, e))
     {
         return;
@@ -572,17 +573,73 @@ void net::engine::KillCredited(Ped* ped, int killerSlot)
     KillNow(ped);
 }
 
+namespace
+{
+bool gServerDeath; // in KillNow
+} // namespace
+
+int net::engine::gDeathsHeld;
+
 void net::engine::KillNow(Ped* ped)
 {
+    // Electrocuted or sinking to its death, it ends as the game ends them (Char::UpdateImmobilized): a charred corpse, a
+    // sunk one, neither dropping its weapon
+    Char* c = ped->mGameObject;
+    const int32_t phase = PhaseOf(ped);
+    if (phase == kPhaseShocked || phase == kPhaseSinking)
+    {
+        ped->mBf224.bDropsWeaponOnDeath = false;
+    }
+    if (phase == kPhaseShocked)
+    {
+        ped->mPedState1 = ped_state_1::walking_0;
+        ped->mPedState2 = ped_state_2::ped2_walking_0;
+        if (ped->mPlayer)
+        {
+            gRoot_sound.PlayVoice(voice_line::shocking_25);
+            ped->mPlayer->SetDeathType(4);
+        }
+    }
+    gServerDeath = true;
     ped->Kill();
+    gServerDeath = false;
     // Knocked down (a blast threw it), the game keeps the ped's state until it gets up (Ped::ChangeNextPedState1), so
     // the server's death didn't take and the next snapshot carried it out again: its cry, its killer's points. A
-    // thrown player's death takes when it lands: the landing restores the dead_9 Ped::Kill stored
-    if (!ped->isDead() && !(ped->mPlayer && ThrowOf(ped)))
+    // thrown ped's death takes when it lands: the landing restores the dead_9 Ped::Kill stored
+    if (!ped->isDead() && !ThrowOf(ped))
     {
         ped->mPedState1 = ped_state_1::dead_9;
         ped->mPedState2 = ped_state_2::ped2_dead_15;
     }
+    if (c && phase == kPhaseShocked)
+    {
+        c->Set_F8_ped_state_1_433910(ped_state_1::dead_9);
+        c->mPedState2 = ped_state_2::ped2_dead_15;
+        c->mAnimationState = Char_Anim_state::Charred_Corpse_21;
+        c->mCharState = Char_B4_state::Walking_1;
+    }
+    if (c && c->mSpritePtr && phase == kPhaseSinking)
+    {
+        c->mSpritePtr->set_z_lazy(Fix16(0));
+    }
+}
+
+bool net::engine::ClientPedMayDie(Ped* ped)
+{
+    if (gServerDeath || ped->mCar || !ped->mGameObject || ped->isDead())
+    {
+        return true; // in a car, its car's state (an explosion) is the server's
+    }
+    // Held: alive, and on its feet knocked down until the server's state says what became of it
+    gDeathsHeld++;
+    ped->mHealth = ped->mHealth > 0 ? ped->mHealth : 1;
+    if (ped->mPedState1 != ped_state_1::immobilized_8)
+    {
+        ped->ChangeNextPedState1(ped_state_1::immobilized_8);
+        ped->ChangeNextPedState2(ped_state_2::lying_on_floor_22);
+        ped->SetStateInitPending();
+    }
+    return false;
 }
 
 void net::engine::SnapCamera(Player* p)

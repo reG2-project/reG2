@@ -31,8 +31,6 @@ void net::engine::ProtectPlayers()
         {
             ped->mInvulnerability = 2; // counts down once per tick: never 0 between our frames
         }
-        GuardThrow(i, ped);
-        GuardPhases(ped);
         // The car a player sits in or is getting into stays: one marked for removal before (it wasn't the server's,
         // or not yet) would otherwise go with the player in it, as Ped::SpawnPedInCar knows
         Car* cars[2] = {ped ? ped->mCar : NULL, ped ? ped->mTargetObjectiveCar : NULL};
@@ -43,6 +41,10 @@ void net::engine::ProtectPlayers()
                 cars[k]->mDespawnStatus = car_despawn_status::active_1;
             }
         }
+    }
+    for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
+    {
+        GuardPhases(p);
     }
 }
 
@@ -103,6 +105,8 @@ void net::engine::ClientModeFrame()
     gPortProtectsPlayers = true;
     bSkip_ambulance = true;
     gPortCarMayExplode = ClientCarMayExplode;
+    gPortPedMayDie = ClientPedMayDie;
+    gPortMayPullOut = ClientMayPullOut;
     SeenByAll();
 }
 

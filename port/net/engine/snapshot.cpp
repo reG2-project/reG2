@@ -441,7 +441,7 @@ void net::engine::SetPose(const Pose& pose)
         return;
     }
     Ped* ped = InGamePed((int)pose.id - 1);
-    if (ped && !ped->mCar && !AtCarDoor(ped) && !ped->isDead())
+    if (ped && !ped->mCar && !AtCarDoor(ped) && PhaseOf(ped) != kPhaseDoor && !ped->isDead())
     {
         // Thrown, its char follows the throw's object: the object goes the same way
         if (const Sprite* s = CharSprite(ped))

@@ -24,6 +24,8 @@ bool (*gPortCarMayExplode)(Car* pCar);
 void (*gPortObjectMade)(Object* pObject);
 bool (*gPortBlastHurts)(Explosion* pExplosion);
 bool (*gPortBlastDebris)(Explosion* pExplosion);
+bool (*gPortPedMayDie)(Ped* pPed);
+bool (*gPortMayPullOut)(Ped* pVictim);
 bool (*gPortScriptCommandRuns)(u16 type);
 void (*gPortFrontendSetup)(Frontend* pFrontend);
 bool (*gPortFrontendInput)(Frontend* pFrontend);

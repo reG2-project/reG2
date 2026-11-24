@@ -1033,6 +1033,14 @@ void Char::UpdateAnimState()
                     frame_limit = 2;
                     newId = mAnimationFrame + baseId + 19;
                     Ped* pDriver = pCar->mDriver;
+#if defined(GTA2_PORT)
+                    // Port: a network client's player is pulled out by the server's jack only; the jacker waits here
+                    if (pDriver && gPortMayPullOut && !gPortMayPullOut(pDriver))
+                    {
+                        pDriver = NULL;
+                        mFrameTimer = 0;
+                    }
+#endif
                     if (pDriver)
                     {
                         switch (pDriver->get_occupation())

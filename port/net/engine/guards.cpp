@@ -153,6 +153,12 @@ void net::engine::GuardPeds()
                 p->mPedState1 = ped_state_1::walking_0;
             }
         }
+        // Pulled out at a car door whose car is gone (the snapshot's removal): Char::UpdateImmobilized read it, unchecked
+        else if (body && PhaseOf(p) == kPhaseDoor &&
+                 !((cars.count(body->mTargetCar) || carriages.count(body->mTargetCar)) && body->mTargetCar->mCarSprite))
+        {
+            CancelPhase(p);
+        }
         // In any other state, a target car that is gone (the snapshot's removal; the game never clears it): a ped leaving
         // a car on foot looks for its door through it (Ped::FindUsableCarDoor), and read the freed car
         else if (body && body->mTargetCar && !cars.count(body->mTargetCar) && !carriages.count(body->mTargetCar) &&

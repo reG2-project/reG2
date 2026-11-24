@@ -24,6 +24,36 @@ const int kPlayerWeapons = 28; // Player::mWeapons: its own (0..14) and its car 
 const int kPowerUps = 17; // Player::mPowerUpTimers
 const int kKillerLaw = 63; // kPlayerKiller: killed by the police
 const int kLyingMax = 60; // Char::mLyingOnFloorTimer's start, a ped's (a player's: 20)
+// A ped's phase (phases.cpp, throws.cpp), the same record in the player and the ped entity from its first field on
+enum PhaseField
+{
+    kPhase, // PhaseCode | kPhaseInit
+    kPhaseTimer, // what ends it: thrown Char::mTimeout, lying mLyingOnFloorTimer, sinking and electrocuted mTimer, at a car
+                 // door mAnimationFrame | Ped::mTargetCarDoor << 2
+    kPhaseCar, // at a car door: the car (CarRef)
+    kThrow, // thrown: the outcome (1 back on its feet, 2 knocked down, 3 dead) | airborne << 2 | the object's collision mode
+            // (Object_3C::mSpriteCollideMode) << 3, 0 not thrown; then the throw's object:
+    kThrowX, // its place
+    kThrowY,
+    kThrowZ,
+    kThrowRot,
+    kThrowAngle, // and its motion (Object_3C): the way it goes, its speed, its height's speed and gain, its friction
+    kThrowSpeed,
+    kThrowZSpeed,
+    kThrowZAccel,
+    kThrowFriction,
+    kPhaseFieldCount,
+};
+enum PhaseCode
+{
+    kPhaseNone,
+    kPhaseThrown, // ped_state_2::knocked_recover_24 .. knocked_fatal_26 on its object (Ped::mpObj2C)
+    kPhaseLying, // lying_on_floor_22, not an arrest's
+    kPhaseSinking, // sinking_20
+    kPhaseShocked, // electrocuted_27
+    kPhaseDoor, // ped2_at_car_door_17: pulled out of a car
+    kPhaseInit = 8, // its char is yet to start it (Char::mStateInitPending)
+};
 enum PlayerField
 {
     kPlayerX,
@@ -54,17 +84,7 @@ enum PlayerField
     kPlayerMultiplier, // and its multiplier (Player::mMultipliers)
     kPlayerDeathEvents, // how often it died this game (wraps at 256): what a client carries out (kPlayerDeaths: the round's)
     kPlayerBonus, // its scoring bonuses this game (wraps at 256) << 4 | the last one's voice line (ScoreBonus)
-    kPlayerThrow, // thrown (throws.cpp): its outcome, airborne and collision mode, 0 not thrown; then the throw's object:
-    kPlayerThrowX, // its place
-    kPlayerThrowY,
-    kPlayerThrowZ,
-    kPlayerThrowRot,
-    kPlayerThrowAngle, // and its motion (Object_3C): the way it goes, its speed, its height's speed and gain, its friction
-    kPlayerThrowSpeed,
-    kPlayerThrowZSpeed,
-    kPlayerThrowZAccel,
-    kPlayerThrowFriction,
-    kPlayerLying, // knocked down on the floor (phases.cpp): its timer + 1 (Char::mLyingOnFloorTimer), 0 not lying
+    kPlayerPhase, // its phase (PhaseField)
 };
 enum PlayerState
 {
@@ -72,8 +92,6 @@ enum PlayerState
     kPlayerDead = 2,
     kPlayerLeaving = 4, // getting out of one (LeavingCar)
     kPlayerOnFire = 8, // burning (Ped::mBf21C.bOnFire)
-    kPlayerSinking = 16, // sinking in water (phases.cpp)
-    kPlayerShocked = 32, // electrocuted
 };
 enum WorldField
 {
@@ -290,16 +308,28 @@ void ApplyPlayer(const EntityState& e);
 void KillCredited(Ped* ped, int killerSlot); // the game's own death, credited to a player (-1: nobody)
 void KillNow(Ped* ped); // the game's own death (Ped::Kill), dead at once even when knocked down, at its landing when thrown
 void ApplyFire(Ped* p, bool onFire); // on fire or not as the server has it, the game's own way
-// A player's throw (throws.cpp): its object while thrown (NULL: not thrown), sent, applied as the server's, and moved
-// across by as much as the ped's shown place (the blend; not in height: below its floor it would fall through)
-Object* ThrowOf(Ped* ped);
-void CaptureThrow(Ped* ped, EntityState& e);
-void ApplyThrow(Ped* ped, const EntityState& e);
+// A ped's phase (phases.cpp, throws.cpp) at the record from field <base> (kPlayerPhase, kPedPhase). Captured; applied as
+// the server's: started the game's way, its timer written, or cancelled to walking; deadThere: the server's ped is dead
+// (the death ends it, KillNow), seat: the car the server has it in
+void PhaseRecordFields(std::vector<FieldDesc>& out);
+extern const int kPedPhase;
+int32_t PhaseOf(const Ped* ped); // PhaseCode, without kPhaseInit
+void CapturePhases(const Ped* ped, EntityState& e, int base);
+void ApplyPhases(Ped* ped, const EntityState& e, int base, bool deadThere, Car* seat);
+void CancelPhase(Ped* ped); // on its feet, walking
+// Before each tick on a client, every ped: thrown, sinking or electrocuted to death only by KillNow
+void GuardPhases(Ped* ped);
+// Its throw's object while thrown (NULL: not thrown), moved across by as much as the ped's shown place (the blend; not in
+// height: below its floor it would fall through)
+Object* ThrowOf(const Ped* ped);
+void CaptureThrow(const Ped* ped, EntityState& e, int base);
+void ApplyThrow(Ped* ped, const EntityState& e, int base);
 void MoveThrow(Ped* ped, int32_t dx, int32_t dy); // raw Fix16
-void GuardThrow(int i, Ped* ped); // before each tick on a client: its players' throws land fatally only by KillNow
-void CapturePhases(const Ped* ped, EntityState& e); // kPlayerSinking, kPlayerShocked, kPlayerLying (phases.cpp)
-void GuardPhases(Ped* ped); // before each tick on a client: its players sink or are electrocuted to death only by KillNow
-void ApplyPhases(Ped* ped, const EntityState& e);
+void GuardThrow(Ped* ped);
+// gPortPedMayDie on a client: only the server's death (KillNow), or one in a car; another is held, the ped knocked down
+bool ClientPedMayDie(Ped* ped);
+bool ClientMayPullOut(Ped* victim); // gPortMayPullOut on a client: a player is pulled out of its car by the server only
+extern int gDeathsHeld; // for the log
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there
 void EndDeath(Player* p); // a death's or an arrest's countdown over at once, the player's part (slots.cpp)
 void InstallStarts(bool on); // the players' peds past the script's and their start blocks (starts.cpp)
@@ -374,6 +404,8 @@ void ForceOutOfCar(Ped* ped, const Fix16& x, const Fix16& y, const Fix16& z, con
 void ForceOutBesideCar(Ped* ped, Car* car); // out at the car's side (a car's driver needn't point back to it)
 void StartEntering(Ped* ped, Car* car);
 void StartLeaving(Ped* ped);
+// Pulled out at its door as the jacker's char does it (Char::UpdateCharB4), its char made at x, y, z
+void StartPulledOut(Ped* ped, Car* car, int door, const Fix16& x, const Fix16& y, const Fix16& z);
 
 // A client's cars and peds (replica.cpp)
 void ApplyCarsAndPeds(const Snapshot& snap);

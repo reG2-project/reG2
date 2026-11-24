@@ -70,7 +70,14 @@ const Rule kRules[] = {
     {kEntityPlayer, "throw_zspeed", kRange, -kSpeedMax, kSpeedMax},
     {kEntityPlayer, "throw_zaccel", kRange, -kSpeedMax, kSpeedMax},
     {kEntityPlayer, "throw_friction", kRange, -kSpeedMax, 0},
-    {kEntityPlayer, "lying", kRange, 0, kLyingMax + 1},
+    {kEntityPed, "throw_x", kZeroOrRange, kMapMin, kMapMax},
+    {kEntityPed, "throw_y", kZeroOrRange, kMapMin, kMapMax},
+    {kEntityPed, "throw_rot", kAngle, 0, 0},
+    {kEntityPed, "throw_angle", kAngle, 0, 0},
+    {kEntityPed, "throw_speed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPed, "throw_zspeed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPed, "throw_zaccel", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPed, "throw_friction", kRange, -kSpeedMax, 0},
     {kEntityPlayer, "multiplier", kRange, 0, 99},
     {kEntityWorld, "zone_turn", kRange, -1, 39}, // Map_0x370::GetNextZoneOfTypeRoundRobin's zone_stack[40]
     {kEntityWorld, "police_level", kRange, 0, 6},
@@ -148,6 +155,11 @@ const Rule kRules[] = {
     {kEntityShot, "mZAccel", kRange, -kSpeedMax, kSpeedMax},
     {kEntityShot, "mFriction", kRange, -kSpeedMax, kSpeedMax},
     {kEntityShot, "mSpriteCollideMode", kRange, 0, 2},
+    // Its states, written as they come (ped_state.cpp): within ped_state_1 and ped_state_2 (initial_28 the last)
+    {kEntityPed, "state1", kRange, 0, ped_state_1::in_car_10 + 1},
+    {kEntityPed, "state2", kRange, 0, ped_state_2::initial_28},
+    {kEntityPed, "stored1", kRange, 0, ped_state_1::in_car_10 + 1},
+    {kEntityPed, "stored2", kRange, 0, ped_state_2::initial_28},
     {kEntityTrain, "speed", kRange, 0, kTrainSpeedMax},
     {kEntityTrain, "state", kRange, 0, 5},
     {kEntityTrain, "stop_phase", kRange, 0, 11},
@@ -278,10 +290,15 @@ void net::engine::SanitizeSnapshot(Snapshot& snap)
         {
             Set(e, kPedRemapField, 0xFF);
         }
-        // A throw's outcome is 1..3 (0: not thrown, its other bits with it)
-        if (e.type == kEntityPlayer && (e.f[kPlayerThrow] & 3) == 0)
+        // A phase is a PhaseCode (else none), a throw's outcome 1..3 (0: not thrown, its other bits with it)
+        const int phase = e.type == kEntityPlayer ? kPlayerPhase : e.type == kEntityPed ? kPedPhase : -1;
+        if (phase >= 0 && (e.f[phase + kPhase] & 7) > kPhaseDoor)
         {
-            Set(e, kPlayerThrow, 0);
+            Set(e, phase + kPhase, 0);
+        }
+        if (phase >= 0 && (e.f[phase + kThrow] & 3) == 0)
+        {
+            Set(e, phase + kThrow, 0);
         }
         if (e.type == kEntityPed)
         {
