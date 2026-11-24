@@ -129,6 +129,7 @@ class BotWalker
     bool Skipped(uint32_t id, uint32_t frame) const; // given up on, for now
     // On the map's ways from where it stands (true when it isn't on a known cell: it may try)
     bool Reachable(const BotView& v, float x, float y, float z) const;
+    void GiveUp(const BotView& v, uint32_t id); // <id> left alone for 30 s
     BotRoute route;
 
   private:
@@ -141,7 +142,6 @@ class BotWalker
         int cell, level;
         uint32_t at;
     };
-    void GiveUp(const BotView& v, uint32_t id);
     void Recover(const BotView& v);
     std::vector<Skip> mSkips;
     std::vector<Spot> mSpots;

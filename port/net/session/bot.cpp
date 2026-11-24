@@ -209,7 +209,7 @@ class CarHopBot : public DecidingBot
     net::BotWalker mWalker;
 };
 // Gets into the nearest car and drives at the nearest other player, to hit it; backs out with the wheel turned the
-// other way when it hasn't moved for a second. Gets out only when it has to (a wreck, a death), then the next car.
+// other way when it hasn't moved for a second. Gets out when wedged or when it has to (a wreck, a death), then the next car.
 class RamBot : public DecidingBot
 {
   public:
@@ -236,9 +236,13 @@ class RamBot : public DecidingBot
         }
         if (!inCar)
         {
+            mWedged = 0;
             return ApproachCar(v, mWalker);
         }
-        // Stuck: hardly moved over the last second
+        float d = 0;
+        const net::BotView::Seen* target = Nearest(v, net::BotView::Seen::kPlayer, &d);
+        // Stuck: hardly moved over the last second. Stuck 4 s in a row with nobody pinned in front: out, and that car
+        // left alone for a while.
         if (v.frame % 30 == 0)
         {
             const bool still = hypotf(v.x - mLastX, v.y - mLastY) < 0.5f;
@@ -249,9 +253,16 @@ class RamBot : public DecidingBot
                 mBackUntil = v.frame + 30;
                 mReversals++;
             }
+            mWedged = still && (!target || d > 3) ? mWedged + 1 : 0;
+            if (mWedged == 4)
+            {
+                mWalker.GiveUp(v, v.car);
+            }
         }
-        float d = 0;
-        const net::BotView::Seen* target = Nearest(v, net::BotView::Seen::kPlayer, &d);
+        if (mWedged >= 4)
+        {
+            return v.frame % 20 < 2 ? net::kBtnEnterExit : 0;
+        }
         const int err = target ? TurnTo(v.rot, target->x - v.x, target->y - v.y) : (v.frame / 60 % 2 ? 200 : -200); // none in sight: wander
         if (v.frame < mBackUntil)
         {
@@ -261,7 +272,7 @@ class RamBot : public DecidingBot
     }
 
     bool mInCar = false;
-    int mEntered = 0, mReversals = 0;
+    int mEntered = 0, mReversals = 0, mWedged = 0;
     float mLastX = 0, mLastY = 0;
     uint32_t mBackUntil = 0;
     net::BotWalker mWalker;
