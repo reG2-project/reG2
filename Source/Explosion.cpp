@@ -15,6 +15,7 @@
 #include "rng.hpp"
 #if defined(GTA2_PORT)
 #include "../port/src/net_hooks.hpp" // gPortBlastHurts, gPortBlastDebris
+#include "../port/src/rand/particle.hpp" // the particles' draws, on their own stream in a network game (port/docs/netcode.md)
 #endif
 
 DEFINE_GLOBAL(ExplosionPool*, gExplosionPool_7A8, 0x6FD5F0);
