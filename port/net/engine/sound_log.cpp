@@ -25,9 +25,11 @@ namespace
 struct SoundEvent
 {
     const void* mOwner; // what the audio entity follows (its SoundObject's mpAny), or the vocals
-    s32 mId; // the owner's identity, as a pointer can be another's after a restore
+    s32 mKind; // a car or a char (by its id, as a resimulation can make it again elsewhere in its pool), an object (by
+               // place: a snapshot's blast is made again with another id), or minus the sound object's type (by the pointer)
+    s32 mId;
     u32 mSound; // which of its owner's sounds (sound_0x68::mSampleIndex: a footstep, a door, whatever variant it
-                // draws), the voice line for the vocals, 0 for the collision queue's impacts (one by place)
+                // draws; an object's sample), the voice line for the vocals, 0 for the collision queue's impacts (one by place)
     s32 mX, mY; // in blocks: the collision queue's events share one owner
     uint32_t mTick;
     sound_0x68 mSample;
@@ -40,23 +42,30 @@ uint32_t sSettled; // the newest tick whose requests were given
 bool sRestored;
 const uint32_t kKeep = 64; // ticks of the logs
 
-s32 OwnerId(const SoundObject* o)
+const s32 kCarOwner = 1, kCharOwner = 2, kObjectOwner = 3;
+
+s32 OwnerId(const SoundObject* o, s32* pKind)
 {
     Sprite* sprite = o->mObjectType == SoundObjectTypeEnum::Sprite_1 ? o->mpAny.pSprite : NULL;
+    *pKind = -o->mObjectType;
     if (!sprite)
     {
-        return -o->mObjectType;
+        return 0;
     }
     if (Car* c = sprite->AsCar())
     {
+        *pKind = kCarOwner;
         return c->mCarId;
     }
-    if (Char* c = sprite->AsCharB4())
+    Char* c = sprite->AsCharB4();
+    if (c && c->mpPed)
     {
-        return c->mpPed ? (s32)c->mpPed->mId : -100;
+        *pKind = kCharOwner;
+        return c->mpPed->mId;
     }
     Object* obj = sprite->AsObject2C();
-    return obj ? obj->mId : -101;
+    *pKind = obj ? kObjectOwner : *pKind;
+    return obj ? obj->mId : 0;
 }
 
 uint32_t Tick()
@@ -67,8 +76,8 @@ uint32_t Tick()
 bool Same(const SoundEvent& a, const SoundEvent& b)
 {
     const uint32_t dt = a.mTick > b.mTick ? a.mTick - b.mTick : b.mTick - a.mTick;
-    return a.mOwner == b.mOwner && a.mId == b.mId && a.mSound == b.mSound && dt <= 2 && abs(a.mX - b.mX) <= 1 &&
-        abs(a.mY - b.mY) <= 1;
+    return (a.mKind > 0 || a.mOwner == b.mOwner) && a.mKind == b.mKind && (a.mKind == kObjectOwner || a.mId == b.mId) &&
+        a.mSound == b.mSound && dt <= 2 && abs(a.mX - b.mX) <= 1 && abs(a.mY - b.mY) <= 1;
 }
 
 bool Heard(const SoundEvent& e)
@@ -96,12 +105,17 @@ void TakeRequests(std::vector<SoundEvent>& out, uint32_t tick)
         {
             continue;
         }
-        const u32 sound = e.mpObj->mObjectType == SoundObjectTypeEnum::CollisionSoundQueue_6 ? 0 : r.mSampleIndex;
-        out.push_back({e.mpObj->mpAny.pAny, OwnerId(e.mpObj), sound, r.mObj.mX.ToInt(), r.mObj.mY.ToInt(), tick, r});
+        s32 kind;
+        const s32 id = OwnerId(e.mpObj, &kind);
+        u32 sound = e.mpObj->mObjectType == SoundObjectTypeEnum::CollisionSoundQueue_6 ? 0 : r.mSampleIndex;
+        // An AI driver's insult or beep (HandleAICarHornBeep) takes the next of a shared count, 100 to 199; an object's
+        // by its sample, as a small blast and a car's bang there are two
+        sound = kind == kCarOwner && sound >= 100 ? 100 : kind == kObjectOwner ? r.mSampIdx : sound;
+        out.push_back({e.mpObj->mpAny.pAny, kind, id, sound, r.mObj.mX.ToInt(), r.mObj.mY.ToInt(), tick, r});
     }
     if (s.mVocals.mPendingVoice)
     {
-        out.push_back({&s.mVocals, 0, (u32)s.mVocals.mPendingVoice, 0, 0, tick, sound_0x68()});
+        out.push_back({&s.mVocals, 0, 0, (u32)s.mVocals.mPendingVoice, 0, 0, tick, sound_0x68()});
     }
 }
 
@@ -110,7 +124,8 @@ int EntityOf(const SoundEvent& e)
     for (int i = 1; i < 1020; i++)
     {
         const AudioEntity& a = gSound_obj.mAudioEntities[i];
-        if (a.mbUsed && a.mpObj && a.mpObj->mpAny.pAny == e.mOwner && OwnerId(a.mpObj) == e.mId)
+        s32 kind;
+        if (a.mbUsed && a.mpObj && a.mpObj->mpAny.pAny == e.mOwner && OwnerId(a.mpObj, &kind) == e.mId && kind == e.mKind)
         {
             return i;
         }
@@ -189,7 +204,7 @@ void LiveRequests(bool requested)
         // The vocal line is taken while the entities ask for theirs
         if (gSound_obj.mVocals.mPendingVoice)
         {
-            sHeard.push_back({&gSound_obj.mVocals, 0, (u32)gSound_obj.mVocals.mPendingVoice, 0, 0, tick, sound_0x68()});
+            sHeard.push_back({&gSound_obj.mVocals, 0, 0, (u32)gSound_obj.mVocals.mPendingVoice, 0, 0, tick, sound_0x68()});
         }
         return;
     }
