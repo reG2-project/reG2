@@ -1045,8 +1045,8 @@ void LogSampleStart(const void*)
     {
         snprintf(src, sizeof(src), "type%d", o->mObjectType);
     }
-    printf("sfx: tick %u samp %u %s at %d,%d loops %u\n", gpRng ? (uint32_t)gpRng->get_cur_rng() : 0, a.mSampIdx, src,
-           a.mObj.mX.ToInt(), a.mObj.mY.ToInt(), a.mLoopCount);
+    printf("sfx: tick %u samp %u %s at %d,%d loops %u vol %u\n", gpRng ? (uint32_t)gpRng->get_cur_rng() : 0, a.mSampIdx, src,
+           a.mObj.mX.ToInt(), a.mObj.mY.ToInt(), a.mLoopCount, a.mnVolume);
 }
 } // namespace
 
