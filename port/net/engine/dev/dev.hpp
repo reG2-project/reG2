@@ -57,7 +57,10 @@ void DebugLocalPhase();
 // That many ambient peds nearest the player, at least that many blocks from it, set on fire: their corpses call the ambulance
 void DebugPatients(int player, int count, int fromBlocks);
 void DebugBlast(int player, int tenths); // an explosion (a grenade's) that far east of the player
-void DebugShot(int player, int model); // a rocket, grenade or molotov (objects::) thrown east from beside the player (shots.cpp)
+void DebugShot(int player, int model); // a rocket, grenade or molotov (objects::) thrown east from beside the player
+// GTA2_NET_TESTGHOSTSHOT=<tick> on a client, before each run of that tick: a rocket beside its player the server never fires
+void DebugGhostShot();
+uint32_t DebugShotSkew(); // GTA2_NET_SHOTSKEW=1 on a client: what its keys are xored with, none of the server's then
 void DebugStreak(int player); // a kill streak's bonus (PlayerScoreTracker::Service: 20 kills in a row)
 void DebugWanted(int player, int points); // at least that many wanted points (Ped::mWantedPoints)
 void DebugPowerUp(int player, int powerUp); // Player::CollectPowerUp (power_up_indices, e.g. 12 instant gang)

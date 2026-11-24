@@ -818,7 +818,7 @@ void ClientTickStart()
 {
     MakeKeys();
     ProtectPlayers(); // before every tick, live or resimulated: a frame may run several
-    ShotsTickStart();
+    DebugGhostShot();
     DebugLocalPhase();
 }
 } // namespace

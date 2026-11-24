@@ -455,7 +455,7 @@ void ShotMotionFields(std::vector<FieldDesc>& out);
 void CaptureShots(Snapshot& out);
 void ApplyShots(const Snapshot& snap);
 void InstallShots(bool on, bool client); // the game's hooks for the keys and a client's blasts
-void ShotsTickStart(); // a client's, before each tick (GTA2_NET_TESTGHOSTSHOT)
+uint32_t ShotKey(const Object* o); // its prediction key, 0: none
 void ClearShots(); // a new game
 extern int gShotsKept, gShotsMade, gShotsRemoved, gShotsBeyond; // for the log
 

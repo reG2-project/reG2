@@ -210,8 +210,7 @@ void SetDebris(Object* o, const EntityState& e)
 
 std::unordered_map<uint32_t, EntityState> gStarts; // a live shot's key -> its start, as first captured
 std::unordered_set<uint32_t> gMadeHere; // a client's blasts made from a snapshot: they hurt on the server
-uint32_t gGhostTick; // GTA2_NET_TESTGHOSTSHOT
-uint32_t gKeySkew; // GTA2_NET_SHOTSKEW=1: a client's keys none of the server's (the shots check's red run)
+uint32_t gKeySkew; // DebugShotSkew
 
 void ObjectMade(Object* o)
 {
@@ -361,9 +360,12 @@ void net::engine::InstallShots(bool on, bool client)
     PortRand::gObjectKey = on ? ObjectCreator : NULL;
     gPortBlastHurts = on && client ? BlastHurts : NULL;
     gPortBlastDebris = !on ? NULL : client ? ClientBlastDebris : ServerBlastDebris;
-    const char* ghost = getenv("GTA2_NET_TESTGHOSTSHOT");
-    gGhostTick = on && client && ghost ? (uint32_t)atoi(ghost) : 0;
-    gKeySkew = on && client && getenv("GTA2_NET_SHOTSKEW") ? 0x800000 : 0;
+    gKeySkew = on && client ? DebugShotSkew() : 0;
+}
+
+uint32_t net::engine::ShotKey(const Object* o)
+{
+    return KeyOf(o);
 }
 
 void net::engine::ClearShots()
@@ -466,24 +468,6 @@ void net::engine::ApplyShots(const Snapshot& snap)
     }
 }
 
-void net::engine::ShotsTickStart()
-{
-    Ped* ped = gGhostTick && Cycle() == gGhostTick ? InGamePed(LocalPlayer()) : NULL;
-    Sprite* s = ped ? PedSprite(ped) : NULL;
-    if (s)
-    {
-        // A rocket the server never fires, made in every run of this tick: the snapshot of the first tick after it
-        // removes it
-        PortRand::Scope scope(0x7E000001u);
-        Object* o = gObject_5C->NewMovingObj(objects::rocket_bullet_128, s->mXy.x, s->mXy.y + Fix16(2), s->mZpos, Ang16((s16)0, (u8)0),
-                                             Ang16((s16)0, (u8)0), Fix16(0x800, 0), Fix16(0), Fix16(0));
-        if (o)
-        {
-            printf("net: test ghost shot key %06x\n", KeyOf(o));
-        }
-    }
-}
-
 void net::engine::ShotLog(bool server)
 {
     static uint32_t sLast;
@@ -498,30 +482,4 @@ void net::engine::ShotLog(bool server)
                (int)o->mModel, BlastKind(o), BlastKind(o) >= 0 ? (int)o->mpAny.pExplosion->mTimer : -1, OwnerOf(o), o->mSprite->mXy.x.ToFloat(),
                o->mSprite->mXy.y.ToFloat(), o->mSprite->mZpos.ToFloat());
     });
-}
-
-void net::engine::DebugShot(int player, int model)
-{
-    Ped* ped = InGamePed(player);
-    Sprite* s = ped ? PedSprite(ped) : NULL;
-    if (!s || !Projectile(model))
-    {
-        return;
-    }
-    if (!ped->mPedRefIdx)
-    {
-        ped->mPedRefIdx = gPedRefTable_7F8->AllocForPed(ped->mId);
-    }
-    // East of it, thrown east (a rocket flies on), as Weapon::throwable sets a throw off
-    gObject_5C->SetPendingDamageOwner(ped->mPedRefIdx);
-    Object* o = gObject_5C->NewMovingObj(model, s->mXy.x + Fix16(1), s->mXy.y, s->mZpos + Fix16(0x2000, 0), Ang16((s16)0, (u8)0),
-                                         Ang16((s16)0, (u8)0), Fix16(0x800, 0), -Fix16(0x20, 0), model == objects::rocket_bullet_128 ? Fix16(0) : Fix16(0x666, 0));
-    if (o && model == objects::grenade_obj_183 && o->mpAny.o8)
-    {
-        o->SetO8Timer(6);
-    }
-    if (o)
-    {
-        printf("net: test shot key %06x\n", KeyOf(o));
-    }
 }

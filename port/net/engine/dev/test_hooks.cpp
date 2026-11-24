@@ -17,6 +17,8 @@
 #include "Source/sprite.hpp"
 #include "Source/rng.hpp"
 #include "port/src/net_hooks.hpp"
+#include "port/src/rand/owner.hpp"
+#include "Source/PedRefTable.hpp"
 #include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
@@ -392,6 +394,55 @@ void net::engine::DebugLocalPhase()
         if (sscanf(k, "%u:%d", &t, &what) == 2 && t == tick)
         {
             StartPhase(InGamePed(LocalPlayer()), what);
+        }
+    }
+}
+
+void net::engine::DebugShot(int player, int model)
+{
+    Ped* ped = InGamePed(player);
+    Sprite* s = ped ? PedSprite(ped) : NULL;
+    if (!s || (model != objects::rocket_bullet_128 && model != objects::moving_molotov_138 && model != objects::grenade_obj_183))
+    {
+        return;
+    }
+    if (!ped->mPedRefIdx)
+    {
+        ped->mPedRefIdx = gPedRefTable_7F8->AllocForPed(ped->mId);
+    }
+    // East of it, thrown east (a rocket flies on), as Weapon::throwable sets a throw off
+    gObject_5C->SetPendingDamageOwner(ped->mPedRefIdx);
+    Object* o = gObject_5C->NewMovingObj(model, s->mXy.x + Fix16(1), s->mXy.y, s->mZpos + Fix16(0x2000, 0), Ang16((s16)0, (u8)0),
+                                         Ang16((s16)0, (u8)0), Fix16(0x800, 0), -Fix16(0x20, 0), model == objects::rocket_bullet_128 ? Fix16(0) : Fix16(0x666, 0));
+    if (o && model == objects::grenade_obj_183 && o->mpAny.o8)
+    {
+        o->SetO8Timer(6);
+    }
+    if (o)
+    {
+        printf("net: test shot key %06x\n", ShotKey(o));
+    }
+}
+
+uint32_t net::engine::DebugShotSkew()
+{
+    return getenv("GTA2_NET_SHOTSKEW") ? 0x800000 : 0;
+}
+
+void net::engine::DebugGhostShot()
+{
+    static const char* tick = getenv("GTA2_NET_TESTGHOSTSHOT");
+    Ped* ped = tick && gpRng && (uint32_t)gpRng->get_cur_rng() == (uint32_t)atoi(tick) ? InGamePed(LocalPlayer()) : NULL;
+    Sprite* s = ped ? PedSprite(ped) : NULL;
+    if (s)
+    {
+        // Made in every run of this tick: the snapshot of the first tick after it removes it
+        PortRand::Scope scope(0x7E000001u);
+        Object* o = gObject_5C->NewMovingObj(objects::rocket_bullet_128, s->mXy.x, s->mXy.y + Fix16(2), s->mZpos, Ang16((s16)0, (u8)0),
+                                             Ang16((s16)0, (u8)0), Fix16(0x800, 0), Fix16(0), Fix16(0));
+        if (o)
+        {
+            printf("net: test ghost shot key %06x\n", ShotKey(o));
         }
     }
 }
