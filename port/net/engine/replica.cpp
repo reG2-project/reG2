@@ -740,6 +740,8 @@ namespace
 {
 std::unordered_map<const Ped*, uint32_t> gPedKeys; // a client's: this game's ped -> the server's id, made each tick
 std::unordered_map<const Car*, uint32_t> gCarKeys;
+// A client's own peds and cars (the server has none of them) own their draws too: the game's stream is the server's
+const uint32_t kOwnPedKey = 0x7C000000, kOwnCarKey = 0x7D000000;
 
 unsigned int ServerPedKey(const Ped* p)
 {
@@ -758,13 +760,13 @@ unsigned int ClientPedKey(const Ped* p)
         return 1 + p->mPlayer->mPlayerIdx;
     }
     auto it = gPedKeys.find(p);
-    return it != gPedKeys.end() ? it->second : 0; // one of this game's own: the game's stream
+    return it != gPedKeys.end() ? it->second : kOwnPedKey + p->mId; // one of this game's own: not the game's stream either
 }
 
 unsigned int ClientCarKey(const Car* c)
 {
     auto it = gCarKeys.find(c);
-    return it != gCarKeys.end() ? it->second : 0;
+    return it != gCarKeys.end() ? it->second : kOwnCarKey + c->mCarId;
 }
 
 void ClientTickStart()
