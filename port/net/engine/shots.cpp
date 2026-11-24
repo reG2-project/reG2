@@ -68,9 +68,10 @@ bool Projectile(int model)
            model == objects::explosion_fragments_127;
 }
 
+// A thrown ped's object isn't a shot: keyed, its draws are its own (PortRand::Scope) and not the game's stream
 bool KeyedModel(int model)
 {
-    return Projectile(model) || model == objects::explosion_113;
+    return Projectile(model) || model == objects::explosion_113 || model == objects::ped_pushed_110;
 }
 
 bool SyncedBlast(int kind)

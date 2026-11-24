@@ -44,7 +44,7 @@ class Scope
     explicit Scope(unsigned int serviceKey);
     explicit Scope(const Ped* p);
     explicit Scope(const Car* c);
-    explicit Scope(const Object* o); // the objects it makes only: its draws stay the game's stream
+    explicit Scope(const Object* o); // a predicted object's (with a key) draws are its own; one without, the game's stream
     template <class T> explicit Scope(const T*) : mActive(false), mCreating(false), mSavedKey(0), mSavedDraws(0), mSavedCreator(0), mSavedMade(0)
     {
     } // other pools: whoever owns the draws already

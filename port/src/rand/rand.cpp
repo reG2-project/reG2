@@ -77,9 +77,16 @@ PortRand::Scope::Scope(const Car* c)
     Enter(gCarKey ? gCarKey(c) : 0);
 }
 
-PortRand::Scope::Scope(const Object* o) : mActive(false), mSavedKey(0), mSavedDraws(0)
+PortRand::Scope::Scope(const Object* o)
 {
-    Create(gObjectKey ? gObjectKey(o) : 0);
+    const unsigned int key = gObjectKey ? gObjectKey(o) : 0;
+    mActive = key != 0;
+    mSavedKey = sOwner, mSavedDraws = sOwnerDraws;
+    if (mActive)
+    {
+        sOwner = 0x05000000u | key, sOwnerDraws = 0; // 24-bit keys, apart from the ped and car owners (net ids)
+    }
+    Create(key);
 }
 
 PortRand::Scope::~Scope()
