@@ -367,10 +367,10 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   | particles, tile animations, lights, HUD | runs | cosmetic |
   | sound | runs | the sound log ("Sound on a client" below): a resimulated tick runs the sound's entities without the mixer, and what it asked for that no live frame played is played once its tick is settled |
 
-  Player peds take no damage on a client, and everything counts as seen there, so nothing is removed off screen. A
-  player's health that drops in a snapshot shows the server's hit: the game's blood burst at its ped and the grunt of a
-  punch (`ShowServerHit`, `engine/players.cpp`), which the client's own hits on an invulnerable ped don't give; burning
-  takes 1 a tick without bleeding (`Ped::ManageBurning`), so only what drops beyond the burn is a hit.
+  Player peds take no damage on a client (`gPortProtectsPlayers` in `Ped::TakeDamage`): their health is the server's.
+  Everything else of a hit is the game's own, by the server's invulnerability (the player entity carries it): the
+  blood, the throw a car or a blast gives, getting up or dying after a fall. Everything counts as seen there, so
+  nothing is removed off screen.
 - **Phases** (`engine/phases.cpp`, `engine/throws.cpp`): a ped thrown (a blast, a car or a door throws it on a moving
   object its char follows until the object stops, then lands it by the throw's outcome: back on its feet, knocked down,
   or dead), lying knocked down, sinking in water, electrocuted, or pulled out of a car at its door. The player and the
@@ -385,10 +385,16 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   (health 1, knocked down on its feet) until a snapshot says what became of it. Before each tick a fatal outcome of its
   own becomes knocked down and the sinking and electrocution timers are held short of the death (`GuardPhases`); the
   server's death ends them as the game does (a charred corpse, a sunk one, neither dropping its weapon; a player's
-  electrocution voice and death type). Deaths in a car are its car's, whose explosion is the server's.
+  electrocution voice and death type). Deaths in a car are its car's, whose explosion is the server's. A corpse here
+  whose ped the server has alive (the paramedics revived it, `AmbulanceService`) is revived as they do it.
+- **A server's ped goes by the snapshots only** (`ClientPedMayGo`, `gPortPedMayGo` in `Ped::Deallocate`): the client's
+  own AI doesn't free a ped the snapshots carry (one boarding a train, a group's cleanup); a server's death and a ped
+  in a car going with its car (`Car::KillContainedPeds`) do.
 - **A player is pulled out of its car by the server only** (`gPortMayPullOut` in `Char::UpdateCharB4`): a jacker the
   client predicts, its own player or another, waits at the door until the server's pull arrives (`StartPulledOut`) and
-  clears the seat. An ambient driver's pull is predicted and corrected as its phase.
+  clears the seat. An ambient driver's pull is predicted and corrected as its phase. A ped jacking a driver on foot
+  (`Ped::PullDriverOutOfCarStateMachine`, the carjacking animation) gets the server's states with its char at the
+  victim's car here, or keeps its own while that car isn't here.
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
   server's world. It carries every player, the car each sits in and every train wherever they are, and everything
   within the reach (the interest area, 24 blocks around the client's player's foci as the server has them), each entity the
@@ -823,10 +829,11 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
 - **soak**: a server and three bot clients at 10 times the clock: 10 minutes of play in 60 s, no crash.
 - **throws**: blasts at a server bot's feet and a block away (`GTA2_NET_TESTBLAST`), another bot set on fire, a bot
   client watching with the blend off: every tick it shows a player thrown, the server had it thrown there with the
-  same outcome (a flying death shows knocked down until the server's death), and the burning player's health drops didn't bleed.
+  same outcome (a flying death shows knocked down until the server's death).
   The burning bot is also electrocuted and drowned (`GTA2_NET_TESTPHASE`): the client still shows it in that state at
   the tick the server's dies. It is also put in a car and pulled out of it: the client shows it at the door only on ticks the
-  server has it there or past it, never seated or walking. The client's own player is drowned and electrocuted at times
+  server has it there, never seated or walking; then the client's player jacks it out of a car (server's
+  `GTA2_NET_TESTPHASE` code 4), which the client shows from the server's pull too. The client's own player is drowned and electrocuted at times
   where the server never has it (`GTA2_NET_TESTLOCALPHASE`, on every run of that tick, live and resimulated): the
   snapshots cancel it within 20 ticks.
 - **peds**: the ambient ped nearest the client's player drowned, electrocuted, knocked down or blown up in turns
@@ -968,9 +975,6 @@ own (`single`) and rollback in scenes with explosions (`explode`).
 - **Other players at car doors**: most of the remaining large corrections of other players are with the server at a
   door. Next: a remote player the server has at a door put there at once instead of walked there by its predicted
   inputs, measured on recorded sessions (`GTA2_NET_COMPARE`, `GTA2_NET_JERKLOG`).
-- **A player's throw outcome predicted by a car**: `Char::HandleCarImpact` and two cases of `HandleGenericImpact` read
-  `mInvulnerability > 0`, not `PortReactsInvulnerable`, so a client's player (kept at 2) is predicted back on its feet
-  where the server's is knocked down, until the snapshot (a few ticks; the throws step fails on it at times).
 - **Cops** differ the most of any entity (health from hits a client predicts, animation and aim on foot): corrected by
   the next snapshot; worth a look if players see cops jump.
 - **The police are the original's**: one city for every criminal. Four pursuits for six players, and the most wanted
