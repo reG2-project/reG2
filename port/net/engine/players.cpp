@@ -437,6 +437,16 @@ void net::engine::ApplySlots(const Snapshot& snap)
     }
 }
 
+// Again once the snapshot's cars are here (ApplyCarsAndPeds): a car new to this game wasn't when its player was applied
+void net::engine::SettlePlayerCar(const EntityState& e)
+{
+    Player* p = GetPlayer((int)e.id - 1);
+    if (p && p->mPlayerPed)
+    {
+        SettleCar(p, p->mPlayerPed, e);
+    }
+}
+
 void net::engine::ApplyPlayer(const EntityState& e)
 {
     const int i = (int)e.id - 1;

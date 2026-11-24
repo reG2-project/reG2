@@ -403,6 +403,13 @@ void net::engine::Apply(const Snapshot& snap)
         }
     }
     ApplyCarsAndPeds(snap);
+    for (const EntityState& e : snap.entities)
+    {
+        if (e.type == kEntityPlayer)
+        {
+            SettlePlayerCar(e);
+        }
+    }
     ApplyPickups(snap);
     ApplyShots(snap); // after the cars and peds: owners and what a catch-up hits are the server's
     PedLog("applied");
