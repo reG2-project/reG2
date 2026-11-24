@@ -247,7 +247,7 @@ void net::Arena::Score(const Snapshot& world)
     {
         const Bot::Body& me = bodies[i];
         Bot& bot = mBots[i];
-        float nearest = 1e9f, shooterDist = 1e9f;
+        float nearest = 1e9f, shooterDist = 1e9f, nearestOnFoot = 1e9f;
         int shooter = -1;
         for (size_t j = 0; j < mBots.size(); j++)
         {
@@ -258,6 +258,7 @@ void net::Arena::Score(const Snapshot& world)
                 continue;
             }
             nearest = d < nearest ? d : nearest;
+            nearestOnFoot = !other.car && d < nearestOnFoot ? d : nearestOnFoot;
             // Who faces it (30 degrees, 10 blocks) or stands at it (3) hurt it; cars and fire mislead it
             int err = (int)(atan2f(dx, dy) * 720.0f / 3.14159265f) - other.rot;
             err = ((err % 1440) + 2160) % 1440 - 720;
@@ -278,6 +279,7 @@ void net::Arena::Score(const Snapshot& world)
         if (lost > 0 && shooter >= 0 && bot.last.health > 0)
         {
             mBots[shooter].dealt += lost;
+            mBots[shooter].fistDealt += !bodies[shooter].guns && !bodies[shooter].car ? lost : 0;
             mBots[shooter].reward += kDamageReward * lost;
         }
         if (mTicks > 0)
@@ -295,6 +297,13 @@ void net::Arena::Score(const Snapshot& world)
             bot.pickups += took;
             bot.reward += took ? kPickupReward : 0;
             bot.cars += me.car && !bot.last.car;
+        }
+        if (me.health > 0)
+        {
+            bot.aliveTicks++;
+            bot.armedTicks += me.guns > 0;
+            bot.fistTicks += !me.guns && !me.car && nearest < 1.5f;
+            bot.carNearFootTicks += me.car && nearestOnFoot < 6;
         }
         Meter(bot, me);
         bot.last = me;
@@ -352,6 +361,9 @@ void net::Arena::Finish(const Snapshot& world)
             printf("net: arena %d %s stuck %.1f s longest %.1f s searches %u failed %u giveups %u recoveries %u in a car %.1f s\n", p,
                    bot.kind.c_str(), bot.stuckTicks / 30.0, bot.longestStuck / 30.0, bot.nav.searches, bot.nav.failed, bot.nav.giveUps,
                    bot.nav.recoveries, bot.carStuckTicks / 30.0);
+            printf("net: arena %d %s behaviour alive %.1f s armed %.1f s fists %.1f s dealing %d in a car near one on foot %.1f s\n", p,
+                   bot.kind.c_str(), bot.aliveTicks / 30.0, bot.armedTicks / 30.0, bot.fistTicks / 30.0, bot.fistDealt,
+                   bot.carNearFootTicks / 30.0);
         }
     }
     printf("net: arena search cells per tick: mean %.0f max %llu\n", mTicks ? (double)mExpanded / mTicks : 0.0, (unsigned long long)mMaxExpanded);

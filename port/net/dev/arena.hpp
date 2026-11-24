@@ -54,6 +54,10 @@ class Arena
         uint32_t windowFrom = 0, pushing = 0, stuckTicks = 0, carStuckTicks = 0, stuckRun = 0, longestStuck = 0;
         float windowX = 0, windowY = 0;
         bool windowInCar = false, windowOpen = false;
+        // Behaviour, in ticks alive: with a gun, on foot unarmed within 1.5 blocks of someone (a fistfight), in a car
+        // within 6 blocks of someone on foot; and the damage it dealt unarmed on foot
+        uint32_t aliveTicks = 0, armedTicks = 0, fistTicks = 0, carNearFootTicks = 0;
+        int fistDealt = 0;
     };
     void Meter(Bot& bot, const Bot::Body& me);
     void Score(const Snapshot& world);
