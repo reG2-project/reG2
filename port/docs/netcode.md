@@ -241,8 +241,9 @@ player's name, as far as all that fit agree; when several fit they show over the
    original lobby listed them; `/map` and Tab take the file names.
    The world stands still meanwhile: a tick runs only the players' own (the chat goes on) and the HUD, and the
    inputs are key events only, on the server and every client (`gPortWorldStill`); its sounds stop as in a pause.
-   Then the next round's fresh game, on the most chosen map (a tie: one of the tied, at random), else the rotation's next,
-   else the same map. The board and the still world stay through the map change's pause, till that game's countdown.
+   Then the next round's fresh game, on the most chosen map (a tie: one of the tied, drawn from the server's secret, as
+   its replay draws it), else the rotation's next, else the same map. The board and the still world stay through the
+   map change's pause, till that game's countdown.
 
 **Votes**: `/start` (end the warmup), `/map N` (change now; a round ends without a winner), `/kick NAME` (out, and the
 name turned away for 10 minutes). One at a time, open 20 s, decided by a majority of the people in the game (not
