@@ -60,9 +60,12 @@ void SetKey(Object* o, uint32_t k)
     memcpy(&o->mUnused28, &k, sizeof(k));
 }
 
+// And a loose fire: the burning debris a large blast throws (Explosion::UpdateExplosion_18_19_20_32_33), sent as it is
+// now rather than as it started (its way comes from the blast's particles, which differ between the ends)
 bool Projectile(int model)
 {
-    return model == objects::rocket_bullet_128 || model == objects::moving_molotov_138 || model == objects::grenade_obj_183;
+    return model == objects::rocket_bullet_128 || model == objects::moving_molotov_138 || model == objects::grenade_obj_183 ||
+           model == objects::explosion_fragments_127;
 }
 
 bool KeyedModel(int model)
@@ -79,6 +82,20 @@ bool SyncedBlast(int kind)
 int BlastKind(const Object* o)
 {
     return o->mModel == objects::explosion_113 && o->mHasExplosion && o->mpAny.pExplosion ? o->mpAny.pExplosion->mType : -1;
+}
+
+// A debris' fire (Explosion::EmitFireTrail_5: out 20 ticks after it comes to rest), or NULL
+Explosion* DebrisFire(const Object* o)
+{
+    for (const AttachedSprite* a = o->mObj3c ? o->mObj3c->mAttachedSprites.mP18 : NULL; a; a = a->mpNext)
+    {
+        const Object* fire = a->mpSprite ? a->mpSprite->mObject2CPtr : NULL;
+        if (fire && BlastKind(fire) == explosion_type::molotov_fire_5)
+        {
+            return fire->mpAny.pExplosion;
+        }
+    }
+    return NULL;
 }
 
 bool Synced(const Object* o)
@@ -148,6 +165,8 @@ uint32_t OwnerOf(const Object* o)
     {
         id = gPedRefTable_7F8->GetPedId(o->mPedRefIdx);
     }
+    const Explosion* fire = !id && o->mModel == objects::explosion_fragments_127 ? DebrisFire(o) : NULL;
+    id = fire ? fire->mOwnerPedId : id;
     Ped* p = id && gPedManager ? gPedManager->PedById(id) : NULL;
     return p ? PedNetId(p) : 0;
 }
@@ -160,6 +179,11 @@ EntityState StartOf(const Object* o, uint32_t key)
     const int kind = BlastKind(o);
     e.f[kShotKind] = kind < 0 ? 0 : kind;
     e.f[kShotTimer] = kind >= 0 ? o->mpAny.pExplosion->mTimer : o->mModel == objects::grenade_obj_183 && o->mpAny.o8 ? (uint16_t)o->mpAny.o8->mTimer : 0;
+    if (o->mModel == objects::explosion_fragments_127)
+    {
+        const Explosion* fire = DebrisFire(o);
+        e.f[kShotTimer] = fire ? fire->mTimer : 0; // 0: out, its light alone keeps it
+    }
     e.f[kShotOwner] = (int32_t)OwnerOf(o);
     e.f[kShotBorn] = (int32_t)(Cycle() & 0xFFFF);
     if (kind < 0)
@@ -167,6 +191,20 @@ EntityState StartOf(const Object* o, uint32_t key)
         CaptureMembers(o->mObj3c, kMotion, kMotionCount, e, kShotMotion); // a blast's stands still (its Object_3C isn't set)
     }
     return e;
+}
+
+// A debris here as the server's is at this tick
+void SetDebris(Object* o, const EntityState& e)
+{
+    o->RemoveFromCollisionBuckets();
+    o->mSprite->set_xyz_lazy(Raw(e.f[kShotX]), Raw(e.f[kShotY]), Raw(e.f[kShotZ]));
+    o->mSprite->set_ang_lazy(Angle(e.f[kShotRot]));
+    o->AssignToBucket();
+    ApplyMembers(o->mObj3c, kMotion, kMotionCount, e, kShotMotion);
+    if (Explosion* fire = DebrisFire(o))
+    {
+        fire->mTimer = e.f[kShotTimer] ? (u16)e.f[kShotTimer] : 1; // 1: out at its next update
+    }
 }
 
 std::unordered_map<uint32_t, EntityState> gStarts; // a live shot's key -> its start, as first captured
@@ -189,10 +227,30 @@ bool BlastHurts(Explosion* x)
     return !x->mpObj2C || !gMadeHere.count(KeyOf(x->mpObj2C));
 }
 
-// In a network game a blast throws its debris seen or not, on both ends alike
-bool BlastDebris(Explosion*)
+bool ServerBlastDebris(Explosion*)
 {
     return true;
+}
+
+// A client's blast that it didn't predict (a car's the server blew up, or one made at a snapshot): its debris are the
+// server's, which come with the snapshots
+bool ClientBlastDebris(Explosion* x)
+{
+    if (!x->mpObj2C || (x->mTimer != 59 && x->mTimer != 69 && x->mTimer != 79 && x->mTimer != 89))
+    {
+        return true; // no debris this tick (and Explosion::mpAttachedSprite outlives its car: the pool doesn't clear it)
+    }
+    for (Car* c = gCar_BC_Pool->mPool.mpPrev; c; c = c->mpNext)
+    {
+        for (const AttachedSprite* a = c->mAttachments.mP18; a; a = a->mpNext)
+        {
+            if (a->mpSprite == x->mpObj2C->mSprite)
+            {
+                return false;
+            }
+        }
+    }
+    return !gMadeHere.count(KeyOf(x->mpObj2C));
 }
 
 bool ShotLogOn()
@@ -234,28 +292,40 @@ Object* MakeShot(const EntityState& e, uint32_t key, uint32_t cycle)
         {
             o->SetO8Timer((s16)e.f[kShotTimer]);
         }
-        else if (model == objects::moving_molotov_138)
+        else if (model == objects::moving_molotov_138 || model == objects::explosion_fragments_127)
         {
-            // Its light and its fire, as Weapon::throwable attaches them
-            Object* pLight = gObject_5C->NewLight(94, 138, 2, 0xFF8000, 3, 255);
+            // Its light and its fire, in the order Weapon::throwable (a molotov) and a blast's debris attach them
+            const Ang16 zero((s16)0, (u8)0);
+            Object* pLight = model == objects::moving_molotov_138 ? gObject_5C->NewLight(94, 138, 2, 0xFF8000, 3, 255) : NULL;
             if (pLight)
             {
-                o->mSprite->AttachSprite(pLight->mSprite, 0, 0, Ang16((s16)0, (u8)0));
+                o->mSprite->AttachSprite(pLight->mSprite, 0, 0, zero);
             }
-            Object* pFire = gObject_5C->CreateExplosion(Fix16(113), Fix16(145), 2, Ang16((s16)0, (u8)0), explosion_type::molotov_fire_5,
-                                                        owner ? owner->mId : 0);
+            const bool debris = model == objects::explosion_fragments_127;
+            Object* pFire = !debris || e.f[kShotTimer] ? gObject_5C->CreateExplosion(Fix16(113), Fix16(145), 2, zero, explosion_type::molotov_fire_5,
+                                                                                        owner ? owner->mId : 0)
+                                                       : NULL;
             if (pFire)
             {
-                o->mSprite->AttachSprite(pFire->mSprite, 0, 0, Ang16((s16)0, (u8)0));
+                o->mSprite->AttachSprite(pFire->mSprite, 0, 0, zero);
+                if (debris && pFire->mpAny.pExplosion)
+                {
+                    pFire->mpAny.pExplosion->mTimer = (u16)e.f[kShotTimer];
+                }
+            }
+            pLight = model == objects::explosion_fragments_127 ? gObject_5C->NewLight(94, 138, 2, 0xFF8000, 3, 255) : NULL;
+            if (pLight)
+            {
+                o->mSprite->AttachSprite(pLight->mSprite, 0, 0, zero);
             }
         }
     }
-    if (owner)
+    if (owner && model != objects::explosion_fragments_127)
     {
         o->SetDamageOwner(owner->mPedRefIdx);
     }
     SetKey(o, key);
-    const uint32_t behind = (cycle - (uint32_t)e.f[kShotBorn]) & 0xFFFF;
+    const uint32_t behind = model == objects::explosion_fragments_127 ? 0 : (cycle - (uint32_t)e.f[kShotBorn]) & 0xFFFF;
     for (uint32_t t = 0; t < behind && t < kMostCatchUp; t++)
     {
         PortRand::Scope scope(o);
@@ -289,7 +359,7 @@ void net::engine::InstallShots(bool on, bool client)
     gPortObjectMade = on ? ObjectMade : NULL;
     PortRand::gObjectKey = on ? ObjectCreator : NULL;
     gPortBlastHurts = on && client ? BlastHurts : NULL;
-    gPortBlastDebris = on ? BlastDebris : NULL;
+    gPortBlastDebris = !on ? NULL : client ? ClientBlastDebris : ServerBlastDebris;
     const char* ghost = getenv("GTA2_NET_TESTGHOSTSHOT");
     gGhostTick = on && client && ghost ? (uint32_t)atoi(ghost) : 0;
     gKeySkew = on && client && getenv("GTA2_NET_SHOTSKEW") ? 0x800000 : 0;
@@ -311,7 +381,12 @@ void net::engine::CaptureShots(Snapshot& out)
             return; // two live shots with one key: the first only (ids are unique in a snapshot)
         }
         auto it = gStarts.find(key);
-        const EntityState e = it != gStarts.end() && it->second.f[kShotModel] == o->mModel ? it->second : StartOf(o, key);
+        const bool known = it != gStarts.end() && it->second.f[kShotModel] == o->mModel;
+        EntityState e = known && o->mModel != objects::explosion_fragments_127 ? it->second : StartOf(o, key);
+        if (known)
+        {
+            e.f[kShotBorn] = it->second.f[kShotBorn];
+        }
         now[key] = e;
         out.entities.push_back(e);
     });
@@ -338,8 +413,13 @@ void net::engine::ApplyShots(const Snapshot& snap)
         }
         const uint32_t key = e.id - kShotIdBase;
         wanted.insert(key);
-        if (live.count(key))
+        auto kept = live.find(key);
+        if (kept != live.end())
         {
+            if (kept->second->mModel == objects::explosion_fragments_127 && e.f[kShotModel] == objects::explosion_fragments_127)
+            {
+                SetDebris(kept->second, e);
+            }
             gShotsKept++;
             continue;
         }

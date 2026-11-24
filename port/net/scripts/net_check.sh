@@ -289,7 +289,8 @@ shots() {
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
   # Keys both had; keys the client missed: a projectile made, or a shot removed within the reach (beyond, its world is a
-  # guess; a blast is made when the shot before it was beyond); the server's own shots made; the ghost
+  # guess; a blast is made when the shot before it was beyond); the server's own shots made; the ghost. A debris made
+  # isn't one: those of a car's blast, and of one beyond the reach, are the server's
   local result
   result=$(awk '
     FNR == 1 { file++ }
@@ -297,17 +298,17 @@ shots() {
     file == 1 && /SHOT server tick/ { server[$6] = 1 }
     file == 2 && /test ghost shot key/ { ghost = $NF }
     file == 2 && /SHOT client tick/ { if ($6 in server) matched[$6] = 1; if ($6 == ghost && gone) back++ }
-    file == 2 && /SHOT made tick/ { if ($6 in test) made[$6] = 1; else if ($10 == 0) miss[$6] = 1 }
+    file == 2 && /SHOT made tick/ { if ($6 in test) made[$6] = 1; else if ($8 == 127) debris[$6] = 1; else if ($10 == 0) miss[$6] = 1 }
     file == 2 && /SHOT removed tick/ { if ($6 == ghost) gone = 1; else if (/within the reach/) miss[$6] = 1 }
     END {
-      for (k in matched) m++; for (k in miss) x++; for (k in test) t++; for (k in made) tm++
-      printf "%d %d %d %d %d %d", m, x, t, tm, gone, back
+      for (k in matched) m++; for (k in miss) x++; for (k in test) t++; for (k in made) tm++; for (k in debris) d++
+      printf "%d %d %d %d %d %d %d", m, x, t, tm, gone, back, d
     }' "$OUT/shots_server.log" "$OUT/shots_client.log")
-  local matched missed tests made gone back crashes checks
-  read -r matched missed tests made gone back <<< "$result"
+  local matched missed tests made gone back debris crashes checks
+  read -r matched missed tests made gone back debris <<< "$result"
   crashes=$(grep -l "crashed" "$OUT"/shots_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/shots_*.log | grep -c "net: CHECK")
-  echo "  $matched shots both had, $missed the client made or removed; $made of the server's $tests own made; the ghost removed: $gone, shown again $back ticks"
+  echo "  $matched shots both had, $missed the client made or removed, $debris debris made; $made of the server's $tests own made; the ghost removed: $gone, shown again $back ticks"
   if [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ "${made:-0}" -lt 3 ] || [ "${gone:-0}" != 1 ] || [ "${back:-1}" != 0 ] || [ $((missed * 5)) -gt "${matched:-0}" ]; then
     fail "shots: the client's shots aren't the server's ($BUILD/net_check/shots_*.log)"
   else
