@@ -8,6 +8,7 @@
 //   teacher would press (a scripted brain, "hunter" by default: for kickstarting), its features
 // and the trainer answers each slot's buttons. With done (the last message, at --ticks) there is no answer.
 #include "arena.hpp"
+#include <algorithm>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +24,7 @@
 namespace
 {
 const float kNear = 50; // blocks: closer than this to the nearest other player counts towards "near"
+const float kClientArea = 24; // blocks: a client's area (ServerConfig::interestRadius)
 const uint32_t kRemoteHead = 4; // slot, alive, reward, teacher
 
 // The trainer's reward: frags and deaths most, then damage, pickups and being near someone to fight
@@ -149,6 +151,14 @@ void net::Arena::Think(const Snapshot& world, uint32_t tick)
         {
             FillBotView(mView, world, (int)i, tick, mNavMap.get());
             mView.stats = &bot.nav;
+            // What a client's snapshots would have: every player and train, the rest within its area (server.hpp)
+            const float x = mView.x, y = mView.y;
+            mView.seen.erase(std::remove_if(mView.seen.begin(), mView.seen.end(),
+                                            [&](const BotView::Seen& s) {
+                                                return s.kind != BotView::Seen::kPlayer && s.kind != BotView::Seen::kTrain &&
+                                                       hypotf(s.x - x, s.y - y) > kClientArea;
+                                            }),
+                             mView.seen.end());
         }
         if (bot.brain)
         {
@@ -227,8 +237,13 @@ bool net::Arena::Exchange(const std::vector<float>& message, bool done)
 void net::Arena::Score(const Snapshot& world)
 {
     std::vector<Bot::Body> bodies(mBots.size());
+    std::vector<float> cars;
     for (const EntityState& e : world.entities)
     {
+        if (e.type == engine::kEntityCar)
+        {
+            cars.push_back(engine::Blocks(e.f[0])), cars.push_back(engine::Blocks(e.f[1]));
+        }
         int p = 0;
         uint32_t b = 0;
         if (engine::PlayerOf(e, &p, &b) && p < (int)bodies.size())
@@ -241,13 +256,19 @@ void net::Arena::Score(const Snapshot& world)
             {
                 body.guns += engine::PlayerAmmo(e, w) > 0;
             }
+            body.throwables = engine::PlayerAmmo(e, 4) + engine::PlayerAmmo(e, 5);
         }
     }
     for (size_t i = 0; i < mBots.size(); i++)
     {
         const Bot::Body& me = bodies[i];
         Bot& bot = mBots[i];
-        float nearest = 1e9f, shooterDist = 1e9f, nearestOnFoot = 1e9f;
+        float nearest = 1e9f, shooterDist = 1e9f, nearestOnFoot = 1e9f, nearestInCar = 1e9f, carDist = 1e9f;
+        for (size_t c = 0; c + 1 < cars.size(); c += 2)
+        {
+            const float d = hypotf(cars[c] - me.x, cars[c + 1] - me.y);
+            carDist = d < carDist ? d : carDist;
+        }
         int shooter = -1;
         for (size_t j = 0; j < mBots.size(); j++)
         {
@@ -259,6 +280,7 @@ void net::Arena::Score(const Snapshot& world)
             }
             nearest = d < nearest ? d : nearest;
             nearestOnFoot = !other.car && d < nearestOnFoot ? d : nearestOnFoot;
+            nearestInCar = other.car && d < nearestInCar ? d : nearestInCar;
             // Who faces it (30 degrees, 10 blocks) or stands at it (3) hurt it; cars and fire mislead it
             int err = (int)(atan2f(dx, dy) * 720.0f / 3.14159265f) - other.rot;
             err = ((err % 1440) + 2160) % 1440 - 720;
@@ -297,6 +319,12 @@ void net::Arena::Score(const Snapshot& world)
             bot.pickups += took;
             bot.reward += took ? kPickupReward : 0;
             bot.cars += me.car && !bot.last.car;
+            if (me.throwables < bot.last.throwables && me.health > 0 && !me.car)
+            {
+                bot.throws++;
+                bot.closeThrows += nearest < 1.8f;
+                bot.farThrows += nearest > 5;
+            }
         }
         if (me.health > 0)
         {
@@ -304,8 +332,11 @@ void net::Arena::Score(const Snapshot& world)
             bot.armedTicks += me.guns > 0;
             bot.fistTicks += !me.guns && !me.car && nearest < 1.5f;
             bot.carNearFootTicks += me.car && nearestOnFoot < 6;
+            const bool unarmedOnFoot = !me.guns && !me.car;
+            bot.carPunchTicks += unarmedOnFoot && (bot.buttons & kBtnAttack) && carDist < 1.2f;
+            bot.fistAtCarTicks += unarmedOnFoot && nearestInCar < 1.5f;
         }
-        Meter(bot, me);
+        Meter(bot, me, carDist);
         bot.last = me;
         bot.last.nearest = nearest;
     }
@@ -314,7 +345,7 @@ void net::Arena::Score(const Snapshot& world)
 
 // Stuck: alive through a window, pressing on (forward, or back in a car) for most of it, and under 0.3 blocks (on foot)
 // or 0.5 (in a car) from where it started
-void net::Arena::Meter(Bot& bot, const Bot::Body& me)
+void net::Arena::Meter(Bot& bot, const Bot::Body& me, float carDist)
 {
     const bool inCar = me.car != 0;
     if (me.health <= 0 || (bot.windowOpen && inCar != bot.windowInCar))
@@ -337,6 +368,7 @@ void net::Arena::Meter(Bot& bot, const Bot::Body& me)
     const bool stuck = bot.pushing * 2 >= length && hypotf(me.x - bot.windowX, me.y - bot.windowY) < (inCar ? 0.5f : 0.3f);
     bot.stuckTicks += stuck ? length : 0;
     bot.carStuckTicks += stuck && inCar ? length : 0;
+    bot.carStuckFootTicks += stuck && !inCar && carDist < 1.5f ? length : 0;
     bot.stuckRun = stuck ? bot.stuckRun + length : 0;
     bot.longestStuck = bot.stuckRun > bot.longestStuck ? bot.stuckRun : bot.longestStuck;
     bot.windowOpen = false;
@@ -364,6 +396,10 @@ void net::Arena::Finish(const Snapshot& world)
             printf("net: arena %d %s behaviour alive %.1f s armed %.1f s fists %.1f s dealing %d in a car near one on foot %.1f s\n", p,
                    bot.kind.c_str(), bot.aliveTicks / 30.0, bot.armedTicks / 30.0, bot.fistTicks / 30.0, bot.fistDealt,
                    bot.carNearFootTicks / 30.0);
+            printf("net: arena %d %s cars punched %.1f s fists near one in a car %.1f s stuck by a car %.1f s\n", p, bot.kind.c_str(),
+                   bot.carPunchTicks / 30.0, bot.fistAtCarTicks / 30.0, bot.carStuckFootTicks / 30.0);
+            printf("net: arena %d %s throws %d nearer than 1.8 %d farther than 5 %d\n", p, bot.kind.c_str(), bot.throws, bot.closeThrows,
+                   bot.farThrows);
         }
     }
     printf("net: arena search cells per tick: mean %.0f max %llu\n", mTicks ? (double)mExpanded / mTicks : 0.0, (unsigned long long)mMaxExpanded);

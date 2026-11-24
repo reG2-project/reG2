@@ -36,6 +36,7 @@ class Arena
         {
             float x = 0, y = 0;
             int rot = 0, health = 0, frags = 0, deaths = 0, guns = 0; // guns: the weapons with ammo
+            int throwables = 0; // molotovs and grenades
             float nearest = 0; // blocks to the nearest other player alive
             uint32_t car = 0;
         };
@@ -58,8 +59,11 @@ class Arena
         // within 6 blocks of someone on foot; and the damage it dealt unarmed on foot
         uint32_t aliveTicks = 0, armedTicks = 0, fistTicks = 0, carNearFootTicks = 0;
         int fistDealt = 0;
+        // Unarmed on foot: punching within 1.2 blocks of a car, near a player in a car; stuck with a car within 1.5
+        uint32_t carPunchTicks = 0, fistAtCarTicks = 0, carStuckFootTicks = 0;
+        int throws = 0, closeThrows = 0, farThrows = 0; // molotovs and grenades thrown, by the nearest other player
     };
-    void Meter(Bot& bot, const Bot::Body& me);
+    void Meter(Bot& bot, const Bot::Body& me, float carDist);
     void Score(const Snapshot& world);
     void AddRemote(int slot, std::vector<float>& message);
     bool Exchange(const std::vector<float>& message, bool done);
