@@ -484,18 +484,25 @@ void net::engine::ApplyShots(const Snapshot& snap)
             continue;
         }
         const uint32_t key = e.id - kShotIdBase;
+        const int model = e.f[kShotModel];
         wanted.insert(key);
         auto kept = live.find(key);
         if (kept != live.end())
         {
-            if (kept->second->mModel == objects::explosion_fragments_127 && e.f[kShotModel] == objects::explosion_fragments_127)
+            Object* o = kept->second;
+            if (o->mModel == model && (model != objects::explosion_113 || BlastKind(o) == e.f[kShotKind]))
             {
-                SetDebris(kept->second, e);
+                if (model == objects::explosion_fragments_127)
+                {
+                    SetDebris(o, e);
+                }
+                gShotsKept++;
+                continue;
             }
-            gShotsKept++;
-            continue;
+            o->Dealloc(); // another shot than the server's with its key: the server's is made instead
+            live.erase(kept);
+            gShotsRemoved++;
         }
-        const int model = e.f[kShotModel];
         if (!(Projectile(model) || (model == objects::explosion_113 && SyncedBlast(e.f[kShotKind]))))
         {
             continue; // a model or blast the server never sends (sanitize.cpp's rule: CreateExplosion takes any type)
