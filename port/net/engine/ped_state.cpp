@@ -114,6 +114,7 @@ const Member kCharValues[] = {CM(mCharState, 4, true),      CM(mTargetRotation, 
                               CM(mRepulsionTimer, 1, false), CM(mRepulsionRotation, 2, true)};
 #undef CM
 const size_t kCharCount = sizeof(kCharValues) / sizeof(kCharValues[0]);
+const int kCharAnim = net::engine::MemberIndex(kCharValues, kCharCount, offsetof(Char, mAnimationState));
 const int kGroup = kChar + (int)kCharCount; // its group: leader (net id), its index (99: the leader), type, counts
 const int kWeapons = kGroup + 5; // its weapon and its second one: weapon_type + 1, 0 none
 const int kEnd = kWeapons + 2; // then its phase (PhaseField)
@@ -604,9 +605,22 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
     if (p->mGameObject)
     {
         const int32_t there = e.f[kEnd + kPhase] & 7;
-        if (PhaseOf(p) == there &&
+        // Jacking a driver (Ped::PullDriverOutOfCarStateMachine): its char reads the victim's car, unchecked
+        Car* jacked = NULL;
+        if (e.f[kChar + kCharAnim] == Char_Anim_state::Carjacking_9)
+        {
+            bool ok;
+            Ped* victim = LocalPed((uint32_t)e.f[kPedRefs + kRefInternalPed], &ok);
+            jacked = victim && victim->mCar && victim->mCar->mCarSprite ? victim->mCar : NULL;
+        }
+        if (PhaseOf(p) == there && (jacked || e.f[kChar + kCharAnim] != Char_Anim_state::Carjacking_9) &&
             (there || (e.f[kStates + kState1] != ped_state_1::immobilized_8 && p->mPedState1 != ped_state_1::immobilized_8)))
         {
+            if (jacked)
+            {
+                p->mGameObject->mTargetCar = jacked;
+                p->mTargetCarDoor = (u8)e.f[kFirst + kDoor];
+            }
             p->mPedState1 = e.f[kStates + kState1];
             p->mPedState2 = e.f[kStates + kState2];
             if (e.f[kStates + kStored1] != ped_state_1::dead_9)

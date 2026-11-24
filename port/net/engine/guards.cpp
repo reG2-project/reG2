@@ -159,6 +159,13 @@ void net::engine::GuardPeds()
         {
             CancelPhase(p);
         }
+        // Jacking a driver with no car (the snapshot's removal, or the animation without the jack): Char::UpdateAnimState
+        // read it, unchecked
+        else if (body && !p->mCar && body->mAnimationState == Char_Anim_state::Carjacking_9 &&
+                 !(cars.count(body->mTargetCar) && body->mTargetCar->mCarSprite))
+        {
+            CancelPhase(p);
+        }
         // In any other state, a target car that is gone (the snapshot's removal; the game never clears it): a ped leaving
         // a car on foot looks for its door through it (Ped::FindUsableCarDoor), and read the freed car
         else if (body && body->mTargetCar && !cars.count(body->mTargetCar) && !carriages.count(body->mTargetCar) &&
