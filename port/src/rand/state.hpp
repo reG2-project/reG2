@@ -8,7 +8,7 @@ namespace PortRand
 unsigned int State();
 void SetState(unsigned int state);
 extern unsigned int gCalls; // port_rand_5EDEE1 calls so far
-extern void (*gLog)(void* caller); // when set, told of each draw's caller
+extern void (*gLog)(void* caller, bool owned); // when set, told of each draw's caller, and whether an owner drew it
 
 // VC6's rand(): a linear congruential generator, 15 bits per call
 // The sound's and the particles' own streams, on in a network game (sound.hpp, particle.hpp), and the particles' state

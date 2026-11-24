@@ -26,6 +26,7 @@
 #include <math.h>
 #if !defined(_WIN32)
 #include <dlfcn.h>
+#include <execinfo.h>
 #endif
 #include "port/src/rand/state.hpp"
 #include "Source/rng.hpp"
@@ -343,19 +344,23 @@ namespace
 {
 FILE* gRandLog;
 uint32_t gRandFrom, gRandTo;
-void LogRand(void* caller)
+void LogRand(void* caller, bool owned)
 {
     const uint32_t cycle = (uint32_t)gpRng->get_cur_rng();
     if (cycle >= gRandFrom && cycle <= gRandTo)
     {
         uintptr_t base = 0;
+        // the caller, and two above it (past the rng wrappers: rng::get_int and the like)
+        void* up[5] = {NULL, NULL, caller, NULL, NULL};
 #if !defined(_WIN32)
         Dl_info info;
         base = dladdr(caller, &info) ? (uintptr_t)info.dli_fbase : 0;
+        backtrace(up, 5); // not __builtin_return_address(n > 0): it follows frame pointers the game's code leaves out
+#else
+        up[3] = __builtin_return_address(2), up[4] = __builtin_return_address(3);
 #endif
-        // the caller, and two above it (past the rng wrappers: rng::get_int and the like)
-        fprintf(gRandLog, "%u 0x%lx 0x%lx 0x%lx\n", cycle, (unsigned long)((uintptr_t)caller - base),
-                (unsigned long)((uintptr_t)__builtin_return_address(2) - base), (unsigned long)((uintptr_t)__builtin_return_address(3) - base));
+        fprintf(gRandLog, "%u %c 0x%lx 0x%lx 0x%lx\n", cycle, owned ? 'o' : 's', (unsigned long)((uintptr_t)caller - base),
+                (unsigned long)((uintptr_t)up[3] - base), (unsigned long)((uintptr_t)up[4] - base));
     }
 }
 } // namespace

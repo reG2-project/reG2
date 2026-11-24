@@ -25,7 +25,7 @@ void PortRand::SetState(unsigned int state)
 }
 
 unsigned int PortRand::gCalls;
-void (*PortRand::gLog)(void* caller);
+void (*PortRand::gLog)(void* caller, bool owned);
 
 // The owners' draws (owner.hpp)
 unsigned int (*PortRand::gPedKey)(const Ped* p);
@@ -141,7 +141,7 @@ int port_rand_5EDEE1()
     PortRand::gCalls++;
     if (PortRand::gLog)
     {
-        PortRand::gLog(__builtin_return_address(0)); // the divergence check's log of who draws (port/net/engine/dev/compare.cpp)
+        PortRand::gLog(__builtin_return_address(0), sOwner != 0); // the divergence check's log of who draws (port/net/engine/dev/compare.cpp)
     }
     if (sOwner)
     {

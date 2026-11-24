@@ -80,7 +80,7 @@ void PrintDivergence();
 // GTA2_NET_DUMPPEDS=<file>[:<from>:<to>]: every ped's Ped, Char and Sprite as bytes, by the server's ids, at a tick
 // (port/net/scripts/ped_diff.py compares a server's dump with a client's)
 void DumpPeds(uint32_t tick, bool server);
-// GTA2_NET_RANDLOG=<file>:<from>:<to>: each rand() draw's caller (an offset in the program) at those ticks (the game's
+// GTA2_NET_RANDLOG=<file>:<from>:<to>: each rand() draw's caller (an offset in the program) and owner flag at those ticks (the game's
 // cycle), from when StartRandLog is called; port/net/scripts/rand_diff.py compares two
 void StartRandLog();
 // GTA2_NET_SFXLOG: the samples the mixer starts printed; on a server, its listener at slot <value>'s camera (every tick)
