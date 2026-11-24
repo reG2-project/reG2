@@ -101,6 +101,7 @@ void net::engine::ClientModeFrame()
     bSkip_police = true;
     bSkip_fire_engines = true; // the server's fire trucks arrive as cars; this game's own would never be removed
     gPortNoOwnBus = true; // the server's bus arrives as a car
+    gPortServerDespawns = true;
     // With the police off, every ped tick zeroes the wanted points (Ped::PoolUpdate): no cop heads, and the cops chasing a
     // player gave up between snapshots
     gPortKeepWantedPoints = true; // the server's (players' entities, peds' AI state)
@@ -112,22 +113,5 @@ void net::engine::ClientModeFrame()
     gPortPedMayDie = ClientPedMayDie;
     gPortMayPullOut = ClientMayPullOut;
     gPortPedMayGo = ClientPedMayGo;
-    SeenByAll();
-}
-
-// Everything counts as seen: a client never removes peds or corpses off its screen (Ped::StateMachineTick,
-// Ped::PoolUpdate) or cars (Car::ManageDespawning); the server does. Before each resimulated tick too: the
-// saves keep the counters, so once a frame wasn't enough (they went on counting along the saves, and a dead player's
-// ped off screen 200 ticks was freed as a corpse: a crash at its respawn)
-void net::engine::SeenByAll()
-{
-    for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
-    {
-        p->mOffscreenCounter = 0;
-    }
-    for (Car* c = gCar_BC_Pool->mPool.mpPrev; c; c = c->mpNext)
-    {
-        c->mLastSeenTimer = 0;
-    }
 }
 

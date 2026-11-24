@@ -375,8 +375,9 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
 
   Player peds take no damage on a client (`gPortProtectsPlayers` in `Ped::TakeDamage`): their health is the server's.
   Everything else of a hit is the game's own, by the server's invulnerability (the player entity carries it): the
-  blood, the throw a car or a blast gives, getting up or dying after a fall. Everything counts as seen there, so
-  nothing is removed off screen.
+  blood, the throw a car or a blast gives, getting up or dying after a fall. Peds and cars count their ticks off screen as the
+  server's do (the same views), but nothing is removed there for it: a server's ped by `gPortPedMayGo`, a car by
+  `gPortServerDespawns` (`Car::ManageDespawning`).
 - **Phases** (`engine/phases.cpp`, `engine/throws.cpp`): a ped thrown (a blast, a car or a door throws it on a moving
   object its char follows until the object stops, then lands it by the throw's outcome: back on its feet, knocked down,
   or dead), lying knocked down, sinking in water, electrocuted, or pulled out of a car at its door. The player and the

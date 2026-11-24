@@ -113,6 +113,9 @@ extern bool gPortKeepWantedPoints;
 // A network client's: no bus of its own (PublicTransport::BusesService); its peds still go for the bus stops as the
 // server's do (Ped::EnterPublicTransport, whose draw bSkip_buses would skip)
 extern bool gPortNoOwnBus;
+// A network client's: its cars count the ticks unseen as the server's do (Car::ManageDespawning), whose despawning
+// it gets by the snapshots
+extern bool gPortServerDespawns;
 // A network client's: the HUD's kill notices (Hud_MpMessage::AnnounceKill) are the server's deaths only, not the ones
 // its prediction starts and a restore undoes
 extern bool gPortServerKillNotices;

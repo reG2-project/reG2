@@ -187,7 +187,6 @@ void net::engine::ResimTick(const uint32_t* buttons, int count)
     ProtectPlayers();
     GuardPeds();
     KeepPlayerArrows();
-    SeenByAll();
     const bool noRumble = gPortNoRumble;
     gPortNoRumble = true; // felt when the tick was predicted, as its sounds were heard
     g->UpdateAllPlayersControls();

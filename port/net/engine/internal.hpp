@@ -355,7 +355,6 @@ void SoundLogRestored(uint32_t tick);
 void SoundLogResimTick(bool applied);
 void SoundLogStop();
 void ProtectPlayers(); // the cars of player peds kept, the server's peds' fatal phase steps held (GuardPhases)
-void SeenByAll(); // every ped and car counts as seen: no removal off screen on a client
 
 // Cars (cars.cpp, car_ai.cpp)
 void CarPhysicsFields(std::vector<FieldDesc>& out);
