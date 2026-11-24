@@ -779,7 +779,8 @@ recoveries R in a car C s` counts the time it spent alive pressing on without ge
 `DATA`, `MAPS`, `SEEDS`) plays headless matches on downtown, mp1 and Industrial, two at a time, and sums them per map
 and brain. With 10 seeds and hunter, soldier and simple twice each, stuck seconds per bot and 5 minutes went from 118,
 104 and 60 (the three brains summed, downtown, mp1, Industrial) to 60, 74 and 68, frags about doubled, and search
-cells per tick fell from 2200..15000 to 15..230 on average; most of what is left is the hunter wedged in a car.
+cells per tick fell from 2200..15000 to 15..230 on average. Leaving a wedged car took the hunter's longest stuck
+stretch from 96 to 14 s; its time stuck in a car (about 30 s per 5 minutes) is still the largest share.
 A bot client still takes the keyboard's key events (Escape and the pause menu, the chat), so `GTA2_INPUT` can press
 them in a test.
 
@@ -787,7 +788,7 @@ them in a test.
 |---|---|
 | `simple` | walks its route to the nearest player and fights when close |
 | `carhop` | gets into the nearest car, drives, gets out, again |
-| `rammer` | drives at players |
+| `rammer` | drives at players; stuck 4 s with nobody in front, leaves the car and skips it 30 s |
 | `hunter` | the rammer when a car is near and nobody is, the fighter otherwise |
 | `soldier` | a weapon, a car, then to the nearest player: runs it over when coming at it head on, or gets out and shoots |
 | `human` | for crash hunts, what people do and the others don't, in turns: cars, buses and the tank (in, about, out at speed), trains (on at a station, a ride, off), every weapon it has, pickups, into water, its own blasts (`session/bot_human.cpp`) |
