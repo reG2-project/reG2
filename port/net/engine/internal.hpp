@@ -84,6 +84,7 @@ enum PlayerField
     kPlayerMultiplier, // and its multiplier (Player::mMultipliers)
     kPlayerDeathEvents, // how often it died this game (wraps at 256): what a client carries out (kPlayerDeaths: the round's)
     kPlayerBonus, // its scoring bonuses this game (wraps at 256) << 4 | the last one's voice line (ScoreBonus)
+    kPlayerInvulnerable, // Ped::mInvulnerability: how it reacts to cars and blasts (a client's takes no damage either way)
     kPlayerPhase, // its phase (PhaseField)
 };
 enum PlayerState
@@ -345,7 +346,7 @@ void ResetHudScores(Player* p); // the HUD's money, frags and multiplier as at a
 void SoundLogRestored(uint32_t tick);
 void SoundLogResimTick(bool applied);
 void SoundLogStop();
-void ProtectPlayers(); // player peds take no damage on a client: their health and deaths are the server's
+void ProtectPlayers(); // the cars of player peds kept, every ped's fatal phase steps held (GuardPhases)
 void SeenByAll(); // every ped and car counts as seen: no removal off screen on a client
 
 // Cars (cars.cpp, car_ai.cpp)

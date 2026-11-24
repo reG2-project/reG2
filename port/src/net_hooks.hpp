@@ -119,13 +119,8 @@ extern bool gPortTagTimeCounts;
 // A network server's: the character a player's client typed with the key <dik> this tick, in its keyboard's layout
 // (0: none), for its chat line (Hud_ChatInput::HandleChatInputKey); the server's own table is a US keyboard's
 extern u16 (*gPortChatChar)(Player* pPlayer, s32 dik);
-// A network client's: its players are kept at mInvulnerability 2 so that only the server takes their health
-// (ProtectPlayers); how a ped reacts to a car, a blast or fire goes by the invulnerability the server gives
+// A network client's: its players take no damage (Ped::TakeDamage), their health is the server's
 extern bool gPortProtectsPlayers;
-inline bool PortReactsInvulnerable(s32 invulnerability, bool player)
-{
-    return gPortProtectsPlayers && player ? invulnerability > 2 : invulnerability > 0;
-}
 // A scoring bonus (PlayerScoreTracker: a kill streak, a stunt...) with its voice line (voice_line.hpp): true, and this
 // machine shows its message and plays the voice. NULL: the user's player's, as the original; in a network game the
 // server sends each player its own and a client shows only those

@@ -13,7 +13,6 @@
 #include "Source/Game.hpp"
 #include "Source/GameSession.hpp"
 #include "Source/Hud.hpp"
-#include "Source/ParticleManager.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
 #include "Source/TextTable.hpp"
@@ -27,7 +26,6 @@
 #include "Source/network_data.hpp"
 #include "Source/rng.hpp"
 #include "Source/sprite.hpp"
-#include <algorithm>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,47 +64,6 @@ uint8_t gKillCamKiller[MAX_PLAYERS];
 uint8_t gBonusCount[MAX_PLAYERS];
 uint8_t gBonusVoice[MAX_PLAYERS];
 int gBonusSeen = -1;
-// Each player's health as the last snapshot had it, its ped and the game's tick then: a hit is a drop on the same ped
-struct SeenHealth
-{
-    s32 mPedId = -1;
-    int32_t mHealth = 0;
-    uint32_t mTick = 0;
-    bool mOnFire = false;
-};
-SeenHealth gSeenHealth[MAX_PLAYERS];
-
-// A hit the server had on a player, shown here: its blood and its grunt, which the client's own hits on players don't
-// give (players take no damage on a client: Ped::HandlePedHitByObject returns before the blood)
-void ShowServerHit(int i, Ped* ped, const EntityState& e)
-{
-    SeenHealth& seen = gSeenHealth[i];
-    const int32_t health = e.f[net::engine::kPlayerHealth], was = seen.mHealth;
-    const uint32_t tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0; // the snapshot's (the world entity's, applied first)
-    // Burning takes 1 a tick and doesn't bleed (Ped::ManageBurning): a hit is what dropped beyond it. Its death puts the
-    // fire out, so the burn counts when it was on fire before or now
-    const bool onFire = (e.f[net::engine::kPlayerState] & net::engine::kPlayerOnFire) != 0;
-    const int32_t burnt = onFire || seen.mOnFire ? (int32_t)std::min<uint32_t>(tick - seen.mTick, 100) : 0;
-    const bool hit = seen.mPedId == ped->mId && health < seen.mHealth - burnt && seen.mHealth > 0 && !ped->mCar && !ped->isDead();
-    seen.mPedId = ped->mId;
-    seen.mHealth = health;
-    seen.mTick = tick;
-    seen.mOnFire = onFire;
-    Sprite* s = hit ? net::engine::CharSprite(ped) : NULL;
-    if (!s)
-    {
-        return;
-    }
-    gParticle_8->EmitBloodBurst(s->mXy.x, s->mXy.y, s->mZpos, s->mRotation);
-    if (health > 0)
-    {
-        ped->SetVoiceEventIfNotOnFire(25); // Ped::TriggerVoiceEventRateLimited's, a punch's
-    }
-    if (Debug().selfLog)
-    {
-        printf("net: player %d hit on the server at tick %u: health %d -> %d, its blood shown\n", i, tick, was, health);
-    }
-}
 const int kBonusVoices = 12;
 const char* const kBonusText[kBonusVoices] = {NULL, "fly_car", "stl_all", "dst_all", "excutin", "gencide", "copkill", "carjaka",
                                               "elvis_d", "accurcy", "wrngway", "em_dest"}; // by voice_line
@@ -266,7 +223,7 @@ void ApplyPowerUps(Player* p, Ped* ped, const net::EntityState& e)
             }
             else if (k == power_up_indices::Invulnerability_6)
             {
-                now ? ped->SetInvulnerable() : ped->ClearInvulnerable(); // ProtectPlayers keeps it above 0 after
+                now ? ped->SetInvulnerable() : ped->ClearInvulnerable();
             }
         }
         p->mPowerUpTimers[k] = now;
@@ -451,6 +408,7 @@ void net::engine::CapturePlayer(int i, Snapshot& out)
     {
         e.f[kPlayerPowerUp + k] = p->mPowerUpTimers[k];
     }
+    e.f[kPlayerInvulnerable] = ped->mInvulnerability;
     CapturePhases(ped, e, kPlayerPhase);
     out.entities.push_back(e);
 }
@@ -495,6 +453,7 @@ void net::engine::ApplyPlayer(const EntityState& e)
     }
     ApplyWeapons(p, e);
     ApplyPowerUps(p, ped, e);
+    ped->mInvulnerability = (u16)e.f[kPlayerInvulnerable];
     ApplyFire(ped, (e.f[kPlayerState] & kPlayerOnFire) != 0);
     // Its wanted points, the server's: the HUD's cop heads, and the cops' AI here, which gave up the chase at 0 stars
     ped->mWantedPoints = (s16)e.f[kPlayerWanted];
@@ -516,7 +475,6 @@ void net::engine::ApplyPlayer(const EntityState& e)
             gBonusSeen = count;
         }
     }
-    ShowServerHit(i, ped, e);
     // First: a death carried out on a thrown ped takes at its landing, as the server's
     ApplyPhases(ped, e, kPlayerPhase, (e.f[kPlayerState] & kPlayerDead) != 0, e.f[kPlayerInCar] ? RefCar(e.f[kPlayerCar]) : NULL);
     if (CarryOutDeath(i, p, ped, e))

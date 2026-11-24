@@ -67,7 +67,7 @@ Object* StartThrow(Ped* ped, Char* c, const int32_t* t)
     ped->ChangeNextPedState1(ped_state_1::immobilized_8);
     ped->ChangeNextPedState2(OutcomeState(t[kThrow]));
     c->mPedState2 = ped_state_2::knocked_recover_24;
-    return o; // its blood is the server's hit's (ShowServerHit)
+    return o;
 }
 } // namespace
 

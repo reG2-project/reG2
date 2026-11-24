@@ -54,6 +54,7 @@ net::Schema BuildSchema()
     player.fields.push_back(FieldDesc{"multiplier", 8, false}); // kPlayerMultiplier
     player.fields.push_back(FieldDesc{"death_events", 8, false}); // kPlayerDeathEvents
     player.fields.push_back(FieldDesc{"bonus", 12, false}); // kPlayerBonus
+    player.fields.push_back(FieldDesc{"invulnerable", 16, false}); // kPlayerInvulnerable
     PhaseRecordFields(player.fields); // kPlayerPhase
     net::EntityType car = {"car", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"model", 8, false},
                                    {"driver", 2, false}, {"damage", 16, false}, {"areas", 32, false}, {"wrecked", 2, false},

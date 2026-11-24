@@ -27,10 +27,6 @@ void net::engine::ProtectPlayers()
     for (int i = 0; i < PlayerCount(); i++)
     {
         Ped* ped = InGamePed(i);
-        if (ped && ped->mInvulnerability < 2)
-        {
-            ped->mInvulnerability = 2; // counts down once per tick: never 0 between our frames
-        }
         // The car a player sits in or is getting into stays: one marked for removal before (it wasn't the server's,
         // or not yet) would otherwise go with the player in it, as Ped::SpawnPedInCar knows
         Car* cars[2] = {ped ? ped->mCar : NULL, ped ? ped->mTargetObjectiveCar : NULL};

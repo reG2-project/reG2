@@ -10,7 +10,7 @@
 #           no crash, no CHECK line
 #   soak    a server and three bot clients, the clock 10 times as fast: 10 minutes of play in 60 s, no crash
 #   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown as the
-#           server has it at that tick, with its outcome (a flying death knocked down), and burning doesn't bleed
+#           server has it at that tick, with its outcome (a flying death knocked down)
 #   shots   armed bots and a server's own rockets, grenades and molotovs, a bot client watching: it keeps the shots it
 #           predicted, makes the ones it lacks and removes one the server never had at the next snapshot; the game's
 #           random stream is the server's at every snapshot (cosmetics draw from their own)
@@ -254,9 +254,8 @@ throws() {
   # Per tick and player: thrown with an outcome (ped 8/24..26) or not, on fire or not
   local result
   result=$(awk '
-    /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) { burn[$6]++; if ($6 == "p1") burning[$5 + 0] = 1 } }
+    /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) { burn[$6]++} }
     /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { c[$5 $6] = $12 }
-    /hit on the server at tick/ && $3 == 1 && burning[$10 + 0] { hits++ }
     /THROW server tick [0-9]+: p1 / { sp[$5 + 0] = $12 }
     /THROW client tick [0-9]+: p1 / { cp[$5 + 0] = $12 }
     /THROW server tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ { delete own[$5 + 0]; sown[$5 + 0] = 1 }
@@ -272,17 +271,17 @@ throws() {
       for (t in cp) if (cp[t] == "8/17") { pullShown++; if (!(t in sp)) pullWrong++ }
       # The own player of the client (p2) drowned or electrocuted there alone: cancelled by the next snapshots
       for (t in own) { ownTicks++; run = 0; for (u = t; u in own; u--) run++; if (run > ownRun) ownRun = run }
-      printf "%d %d %d %d %d %d %d %d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], hits, phased, early, pulled, pullShown, pullWrong, ownTicks, ownRun
+      printf "%d %d %d %d %d %d %d %d %d %d %d %d %d", thrown, fatal, shown, shownFatal, wrong, burn["p1"], phased, early, pulled, pullShown, pullWrong, ownTicks, ownRun
     }' "$OUT/throws_server.log" "$OUT/throws_client.log")
-  local thrown fatal shown shownFatal wrong burnt hits phased early pulled pullShown pullWrong ownTicks ownRun
-  read -r thrown fatal shown shownFatal wrong burnt hits phased early pulled pullShown pullWrong ownTicks ownRun <<< "$result"
-  echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's; $hits hits shown on a player burning $burnt ticks; $phased deaths electrocuted or sinking, $early of them the client's own"
+  local thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun
+  read -r thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun <<< "$result"
+  echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's; a player burning $burnt ticks; $phased deaths electrocuted or sinking, $early of them the client's own"
   echo "  pulled out of a car: $pulled server ticks, $pullShown client ticks, $pullWrong of them while the server's sat or walked; the client's own phases: $ownTicks ticks, $ownRun at most in a row"
-  if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ $((hits * 10)) -ge "$burnt" ] || [ "${phased:-0}" = 0 ] || [ "${early:-1}" != 0 ] ||
+  if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ "${phased:-0}" = 0 ] || [ "${early:-1}" != 0 ] ||
     [ "${pulled:-0}" = 0 ] || [ "${pullShown:-0}" = 0 ] || [ "${pullWrong:-1}" != 0 ] || [ "${ownTicks:-0}" = 0 ] || [ "${ownRun:-99}" -gt 20 ]; then
     fail "throws: the client's throws or burning aren't the server's ($BUILD/net_check/throws_*.log)"
   else
-    pass "throws: every throw the client showed was the server's at that tick, flying deaths included; burning didn't bleed; electrocution and sinking deaths were the server's; a pull out of a car the server's; the client's own phases cancelled"
+    pass "throws: every throw the client showed was the server's at that tick, flying deaths included; electrocution and sinking deaths were the server's; a pull out of a car the server's; the client's own phases cancelled"
   fi
 }
 
