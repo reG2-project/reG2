@@ -220,6 +220,7 @@ void SetDebris(Object* o, const EntityState& e)
 std::unordered_map<uint32_t, EntityState> gStarts; // a live shot's key -> its start, as first captured
 std::unordered_set<uint32_t> gMadeHere; // a client's blasts made from a snapshot: they hurt on the server
 uint32_t gKeySkew; // DebugShotSkew
+bool gClient;
 std::vector<std::pair<Object*, uint32_t>>* gCatchUpMade; // while a made shot is brought on: the keyed objects it makes
 
 void ObjectMade(Object* o)
@@ -406,6 +407,7 @@ void net::engine::InstallShots(bool on, bool client)
     gPortBlastDebris = !on ? NULL : client ? ClientBlastDebris : ServerBlastDebris;
     PortRand::gObjectMade = on ? MadeCount : NULL;
     gKeySkew = on && client ? DebugShotSkew() : 0;
+    gClient = on && client;
 }
 
 uint32_t net::engine::ShotKey(const Object* o)
@@ -423,10 +425,16 @@ void net::engine::CaptureShots(Snapshot& out)
 {
     std::unordered_map<uint32_t, EntityState> now;
     ForEachShot([&](Object* o) {
-        const uint32_t key = KeyOf(o);
-        if (now.count(key))
+        uint32_t key = KeyOf(o);
+        if (now.count(key) && gClient)
         {
-            return; // two live shots with one key: the first only (ids are unique in a snapshot)
+            return; // ids are unique in a snapshot
+        }
+        while (now.count(key))
+        {
+            key = (key * 0x9E3779B1u + 1) & 0xFFFFFF; // two live shots with one key: the second another, sent too
+            key = key ? key : 1;
+            SetKey(o, key, *MadeCount(o));
         }
         auto it = gStarts.find(key);
         const bool known = it != gStarts.end() && it->second.f[kShotModel] == o->mModel;
@@ -450,7 +458,23 @@ void net::engine::ApplyShots(const Snapshot& snap)
     }
     const uint32_t cycle = (uint32_t)w->f[kWorldCycle];
     std::unordered_map<uint32_t, Object*> live;
-    ForEachShot([&](Object* o) { live[KeyOf(o)] = o; });
+    std::vector<Object*> twice;
+    ForEachShot([&](Object* o) {
+        Object*& at = live[KeyOf(o)];
+        if (at)
+        {
+            twice.push_back(o); // a second with one key: the server's other one has another (CaptureShots)
+        }
+        else
+        {
+            at = o;
+        }
+    });
+    for (Object* o : twice)
+    {
+        o->Dealloc();
+        gShotsRemoved++;
+    }
     std::set<uint32_t> wanted;
     const ReachArea area(snap, 0.0f);
     for (const EntityState& e : snap.entities)
