@@ -70,7 +70,7 @@ struct Record
     float lx, ly, lz; // where a tick last left it
     float dx, dy; // a tick's way
     bool seen; // at the end of a tick
-    bool drawn; // at the end of a frame
+    bool done; // shown (slid or flashed): kept so that a resimulation making it again doesn't show it again
     bool ended;
     bool pending; // its tick resimulated since, not made again yet
 };
@@ -85,7 +85,7 @@ bool Alive(const Record& r)
 
 void See(Record& r)
 {
-    if (r.pending || r.ended)
+    if (r.pending || r.ended || r.done)
     {
         return;
     }
@@ -116,15 +116,16 @@ void net::engine::ShotVisMade(Object* o)
     }
     const Key key(p, Cycle(), gMadeThisTick[p]++);
     Record& r = gRecords[key];
-    const bool again = r.o != NULL;
-    const bool drawn = r.drawn;
+    if (r.done)
+    {
+        return;
+    }
     r = Record();
     r.o = o, r.s = o->mSprite, r.id = o->mSprite->mInstanceId, r.model = o->mModel, r.shooter = p, r.tick = Cycle();
     r.x = r.lx = x, r.y = r.ly = y, r.z = r.lz = o->mSprite->mZpos.ToFloat();
     const float speed = o->mObj3c ? o->mObj3c->mSpeed.ToFloat() : 0;
     r.dx = o->mObj3c ? speed * Ang16::sine(o->mObj3c->mAngle).ToFloat() : 0;
     r.dy = o->mObj3c ? speed * Ang16::cosine(o->mObj3c->mAngle).ToFloat() : 0;
-    r.drawn = again && drawn;
 }
 
 void net::engine::ShotVisTick()
@@ -141,6 +142,10 @@ void net::engine::ShotVisRollback(uint32_t tick)
     for (auto& kv : gRecords)
     {
         Record& r = kv.second;
+        if (r.done)
+        {
+            continue;
+        }
         if ((int32_t)(r.tick - tick) > 0)
         {
             r.pending = true;
@@ -155,41 +160,52 @@ void net::engine::ShotVisRollback(uint32_t tick)
 void net::engine::ShotVisFrame()
 {
     const uint32_t now = Cycle();
+    const Player* local = gGame_0x40 ? gGame_0x40->mLocalPlayer : NULL;
+    const Sprite* me = local && local->mPlayerPed ? PedSprite(local->mPlayerPed) : NULL;
+    const auto away = [&](float x, float y) {
+        return me ? sqrtf((x - me->mXy.x.ToFloat()) * (x - me->mXy.x.ToFloat()) + (y - me->mXy.y.ToFloat()) * (y - me->mXy.y.ToFloat())) : 0.0f;
+    };
     for (auto it = gRecords.begin(); it != gRecords.end();)
     {
         Record& r = it->second;
         See(r);
         const Sprite* ps = CharSprite(r.shooter);
-        if (r.pending || now - r.tick > kMostAge)
+        if (now - r.tick > kMostAge || (r.pending && !r.done))
         {
-            it = gRecords.erase(it); // never fired in the corrected game
+            it = gRecords.erase(it); // old enough, or never fired in the corrected game
             continue;
         }
+        if (r.done)
+        {
+            ++it;
+            continue;
+        }
+        r.done = true;
         if (!r.ended)
         {
-            if (!r.drawn && ps)
+            if (ps)
             {
                 PortInterp::SlideFrom(r.s, ps, kMuzzle, On());
                 if (LogOn())
                 {
-                    printf("net: SHOTVIS slide frame %u tick %u: model %d %u ticks old\n", port_FrameCount() + 1, now, r.model, now - r.tick);
+                    printf("net: SHOTVIS slide frame %u tick %u: model %d %u ticks old, %.1f blocks away\n", port_FrameCount() + 1, now, r.model,
+                           now - r.tick, away(r.x, r.y));
                 }
             }
-            r.drawn = true;
             ++it;
             continue;
         }
-        if (On() && !r.drawn && r.model != objects::rocket_bullet_128)
+        if (On() && r.model != objects::rocket_bullet_128)
         {
             // To where it hit: a tick on from where the last tick left it
             PortShotTrails::Add(ps, kMuzzle, r.x, r.y, r.z, r.lx + r.dx, r.ly + r.dy, r.lz);
             if (LogOn())
             {
-                printf("net: SHOTVIS trail frame %u tick %u: model %d made %u, %s\n", port_FrameCount() + 1, now, r.model, r.tick,
-                       r.seen ? "seen at a tick" : "gone in its first");
+                printf("net: SHOTVIS trail frame %u tick %u: model %d made %u, %s, %.1f blocks away\n", port_FrameCount() + 1, now, r.model,
+                       r.tick, r.seen ? "seen at a tick" : "gone in its first", away(r.x, r.y));
             }
         }
-        it = gRecords.erase(it);
+        ++it;
     }
 }
 
