@@ -771,7 +771,8 @@ farthest of the next ten cells walkable in a straight line with room either side
 brains walk with a `BotWalker`: stuck (under 0.3 blocks in 1.5 s), it backs off and turns; stuck again at the same
 cell within 10 s, it tries the next way out (the other side with the way it was crossing left out for 20 s, a jump,
 then the goal given up for 30 s). A goal its route gets no shorter to for 10 s (3 s with no route) is given up for
-30 s. Bots draw no random numbers and their searches are bounded in cells, so an arena match repeats for a seed.
+30 s. These brains draw no random numbers (only `human` and `nn` do) and their searches are bounded in cells, so an
+arena match of them repeats for a seed.
 
 **Stuck meter**: each arena bot's line `net: arena <slot> <brain> stuck S s longest L s searches N failed F giveups G
 recoveries R in a car C s` counts the time it spent alive pressing on without getting anywhere (under 0.3 blocks in
