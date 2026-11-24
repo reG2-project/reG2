@@ -12,7 +12,8 @@
 #   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown as the
 #           server has it at that tick, with its outcome (a flying death knocked down), and burning doesn't bleed
 #   shots   armed bots and a server's own rockets, grenades and molotovs, a bot client watching: it keeps the shots it
-#           predicted, makes the ones it lacks and removes one the server never had at the next snapshot
+#           predicted, makes the ones it lacks and removes one the server never had at the next snapshot; the game's
+#           random stream is the server's at every snapshot (cosmetics draw from their own)
 #   replay  recorded client sessions replayed against their saved logs: the same, or nondeterministic (it differs
 #           from itself too), else a regression
 # usage: port/net/scripts/net_check.sh [--quick] [--record] [--save] [arena|live|churn|maps|rounds|soak|throws|shots|replay ...]
@@ -283,36 +284,40 @@ shots() {
   (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_SHOTLOG=1 GTA2_NET_TESTARM=2:50,5:30,4:30 GTA2_NET_TESTSHOT=${list#,} exec "$BIN" --server --port $p \
     --map mp1-6p --players 6 --arena soldier,simple > "$OUT/shots_server.log" 2>&1) &
   sleep 2
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_SHOTLOG=1 GTA2_NET_TESTGHOSTSHOT=900 GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_SHOTLOG=1 GTA2_NET_TESTGHOSTSHOT=900 GTA2_NET_COMPARE=1 GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
     exec "$BIN" --connect 127.0.0.1:$p --name c_shots --bot human:fight --lag 60 --jitter 5 > "$OUT/shots_client.log" 2>&1) &
   sleep 50
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
   # Keys both had; keys the client missed: a projectile made, or a shot removed within the reach (beyond, its world is a
   # guess; a blast is made when the shot before it was beyond); the server's own shots made; the ghost. A debris made
-  # isn't one: those of a car's blast, and of one beyond the reach, are the server's
+  # isn't one: those of a car's blast, and of one beyond the reach, are the server's. A ghost that hit a wall at once is
+  # gone before any snapshot has it: removed by itself
   local result
   result=$(awk '
     FNR == 1 { file++ }
     file == 1 && /test shot key/ { test[$NF] = 1 }
     file == 1 && /SHOT server tick/ { server[$6] = 1 }
     file == 2 && /test ghost shot key/ { ghost = $NF }
-    file == 2 && /SHOT client tick/ { if ($6 in server) matched[$6] = 1; if ($6 == ghost && gone) back++ }
+    file == 2 && /SHOT client tick/ { if ($6 in server) matched[$6] = 1; if ($6 == ghost) seen++; if ($6 == ghost && gone) back++ }
+    file == 2 && /random stream as the server/ { same += $(NF - 3); snaps += $(NF - 1) }
     file == 2 && /SHOT made tick/ { if ($6 in test) made[$6] = 1; else if ($8 == 127) debris[$6] = 1; else if ($10 == 0) miss[$6] = 1 }
     file == 2 && /SHOT removed tick/ { if ($6 == ghost) gone = 1; else if (/within the reach/) miss[$6] = 1 }
     END {
       for (k in matched) m++; for (k in miss) x++; for (k in test) t++; for (k in made) tm++; for (k in debris) d++
-      printf "%d %d %d %d %d %d %d", m, x, t, tm, gone, back, d
+      if (ghost != "" && !seen) gone = 1
+      printf "%d %d %d %d %d %d %d %d %d", m, x, t, tm, gone, back, d, same, snaps
     }' "$OUT/shots_server.log" "$OUT/shots_client.log")
-  local matched missed tests made gone back debris crashes checks
-  read -r matched missed tests made gone back debris <<< "$result"
+  local matched missed tests made gone back debris same snaps crashes checks
+  read -r matched missed tests made gone back debris same snaps <<< "$result"
   crashes=$(grep -l "crashed" "$OUT"/shots_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/shots_*.log | grep -c "net: CHECK")
-  echo "  $matched shots both had, $missed the client made or removed, $debris debris made; $made of the server's $tests own made; the ghost removed: $gone, shown again $back ticks"
-  if [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ "${made:-0}" -lt 3 ] || [ "${gone:-0}" != 1 ] || [ "${back:-1}" != 0 ] || [ $((missed * 5)) -gt "${matched:-0}" ]; then
+  echo "  $matched shots both had, $missed the client made or removed, $debris debris made; $made of the server's $tests own made; the ghost removed: $gone, shown again $back ticks; the game's random stream the server's at $same of $snaps snapshots"
+  if [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ "${made:-0}" -lt 3 ] || [ "${gone:-0}" != 1 ] || [ "${back:-1}" != 0 ] || [ $((missed * 5)) -gt "${matched:-0}" ] ||
+    [ "${snaps:-0}" -lt 100 ] || [ "$same" != "$snaps" ]; then
     fail "shots: the client's shots aren't the server's ($BUILD/net_check/shots_*.log)"
   else
-    pass "shots: the client kept its predicted shots, made the server's own and removed its ghost at the next snapshot"
+    pass "shots: the client kept its predicted shots, made the server's own and removed its ghost at the next snapshot; its blasts' particles left the game's random stream as the server's"
   fi
 }
 

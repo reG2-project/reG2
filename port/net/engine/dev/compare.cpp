@@ -59,6 +59,7 @@ struct FieldTally
 std::vector<std::vector<FieldTally>> gTally; // [type][field]
 uint64_t gMissing[8]; // per type: in the snapshot, mapped, but not captured here
 uint64_t gAsleepHere, gAsleepThere; // cars with physics on one side only (asleep on the other)
+uint64_t gStreamSnaps, gStreamSame, gStreamCompared; // the world's random state (kWorldRand) against the server's
 
 bool IsCop(Ped* p)
 {
@@ -195,6 +196,11 @@ void net::engine::ComparePrediction(const Snapshot& snap)
 {
     EnsureTally(gTally);
     ForEachPair(snap, [](const EntityState& s, const EntityState& h, int group) {
+        if (s.type == kEntityWorld && gStreamSnaps++) // the first: drawn before this client had any of the server's
+        {
+            gStreamSame += h.f[kWorldRand] == s.f[kWorldRand];
+            gStreamCompared++;
+        }
         std::vector<FieldTally>& tally = group ? gTally[NetSchema().types.size() + group - 1] : gTally[s.type];
         for (size_t f = 0; f < tally.size(); f++)
         {
@@ -461,6 +467,10 @@ void net::engine::PrintPredictionStats(uint32_t frame)
         }
         printf("%s\n", medics.empty() ? " none" : "");
     }
+    // The shots check's: anything that draws from the game's stream here and not there (a cosmetic) shows here
+    printf("net: frame %u, the game's random stream as the server's at %llu of %llu snapshots\n", frame, (unsigned long long)gStreamSame,
+           (unsigned long long)gStreamCompared);
+    gStreamSame = gStreamCompared = 0;
     printf("net: frame %u, prediction against the server, the fields that differ most:", frame);
     for (size_t i = 0; i < rows.size() && i < 12; i++)
     {
