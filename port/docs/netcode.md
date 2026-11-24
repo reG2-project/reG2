@@ -349,9 +349,10 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   Everything else moves on by the game's own simulation in those ticks. Of the resimulated ticks only the first 4 are
   saved again (the next snapshots restore those; a save of the 3 MB world was three quarters of a rollback's time): the
   later ones keep their save from before, a world of that tick still, which a snapshot after 4 lost ones would restore
-  (counted in the log). Every snapshot is reconciled so, as routine: the client's log counts, every 300 frames, the
-  snapshots reconciled, those that changed something (any state the client predicts, the comparison check's fields
-  below, differed from its own at that tick: the local player's prediction error among them) and those that changed
+  (counted in the log). A snapshot whose save is lost (a jump) or was taken with another rollback set is applied on the
+  game as it is, and the ticks since run again the same way, so the game stays at the client's tick. Every snapshot is
+  reconciled so, as routine: the client's log counts, every 300 frames, the snapshots reconciled, those that changed something (a player's or its car's state the client predicts, or the
+  world's, differed from its own at that tick: the local player's prediction error among them) and those that changed
   nothing, the ticks resimulated each, and what a reconciliation takes.
 - **The blend**: what is shown, place and facing alike, moves a part of the way to the corrected state each tick: 0.3
   of a small error, rising to 0.5 of one near 2 blocks, and 0.5 of the local player's own (on foot or its car); more
@@ -461,7 +462,7 @@ the original's.
 | Car (`engine/cars.cpp`, `car_ai.cpp`) | place, its whole `CarPhysics` (but its two pointers), damage, its wreck's fire, lights, horn, colour, its roof turret's angle, the trailer it tows (towed trailers sent too), its proofs and alarm (`Car::mFlags`), its driver, and its AI (`CarAI`: route, speed, the cars it chases) |
 | Ped (`engine/ped_state.cpp`) | place, and the plain values its AI runs on (objectives, targets, speeds, timers, occupation, flags, health, death cause), its states, its references (targets, group), its car and seat, and its phase as a player's |
 | Pickup (`engine/pickups.cpp`) | model and place; roadblock barriers too (they are off the object pool's list), and the car weapons' mines and oil |
-| Shot (`engine/shots.cpp`, every shot in every snapshot) | a rocket's, grenade's, molotov's or throwing blast's start, keyed by prediction: place, model, blast type, timer or fuse, owner, the tick, its motion; a burning debris' state now (its fire's timer) |
+| Shot (`engine/shots.cpp`, those in the client's area) | a rocket's, grenade's, molotov's or throwing blast's start, keyed by prediction: place, model, blast type, timer or fuse, owner, the tick, its motion; a burning debris' state now (its fire's timer) |
 | Train (`engine/trains.cpp`, every train in every snapshot) | its lead's place, speed and driver (none, the traffic driver, a ped, a player), its carriages' car ids (the client's train of the same index takes them), which end leads (`Train::ReassignTrainHead`), its state, stop phase and timers, the station it heads for and that station's state, each carriage's damage and explosion timer |
 
 Health, deaths, weapons and scores are the server's. A death the server had is carried out on the client with the
@@ -502,18 +503,24 @@ count).
 **Shots** (`engine/shots.cpp`): rockets, grenades, molotovs and the blasts that throw (types 18, 19, 20, 32, 33) are
 simulated on both ends and matched by a prediction key both
 compute: a hash of the seed, the creator (the ped, car or service whose update runs, or the object whose update makes
-it: a rocket its blast), the tick and how many keyed objects that creator made in it
-(`PortRand::NextObjectKey`). The key lives in the object (`Object::mUnused28..2B`), so a restore brings it back with
-it. The server sends each shot once, to every client, as it was at the end of its first tick (place, model, type,
-timer or fuse, owner, that tick, its `Object_3C` motion): both ends simulate it on from there, so a shot costs nothing
-after it starts. At the snapshot's tick, inside the restore, a client keeps the shots it has the key of, makes those it
-lacks within the reach as the game makes them (the weapon's way; a molotov's fire and light), brought on to
-that tick by their own update, and removes, silently, those the server doesn't have (never fired there, or already
-gone). A blast made from a snapshot already hurt on the server: its damage there is the server's
+it: a rocket its blast) and how many keyed objects that creator made, in this tick for an entity (with the tick), in
+its life for an object (without: a rocket that hits a tick later on one end makes the same blast)
+(`PortRand::NextObjectKey`). The key lives in the object (`Object::mUnused28..2A`, its count in `2B`), so a restore
+brings it back with it. Two live shots with one key: the server's second takes another, a client drops its second.
+The server sends each shot in the client's area, new ones first, as it was at the end of its first tick (place, model,
+type, timer or fuse, owner, that tick, its `Object_3C` motion): both ends simulate it on from there, so a shot costs
+little after it starts. At the snapshot's tick, inside the restore, a client keeps the shots it has the key of (of the
+same model and blast type), makes those it lacks within the reach as the game makes them (the weapon's way; a
+molotov's fire and light), at most 32 a snapshot and with room left in the pools, brought on to that tick by their
+own update, each tick of it numbered as the server's for the draws (no blast, sound or rumble on the way: what it hits
+makes its blast on the server, which comes next), and removes, silently, those well inside the reach the server
+doesn't have (never fired there, or already gone). A new shot left out for room lowers the snapshot's
+reach below it. A blast made from a snapshot already hurt on the server: its damage there is the server's
 (`gPortBlastHurts`), its throws come with the players' state. Blasts riding on a car (its explosion) or an object (a
 molotov's fire) are their carrier's.
 The burning debris a large blast throws (loose fires: `explosion_fragments_127` with a fire and a light, at the blast's
-timers 89 to 59) are shots too, but sent as they are at each tick, place, motion and fire's timer (0: out), not as
+timers 89 to 59) are shots too, but sent as they are at each tick (every snapshot within the interest radius),
+place, motion and fire's timer (0: out), not as
 they started: their way is the blast's last particle's (`Explosion::mSpawnAngle`), which depends on what each end
 shows. A client puts its own at the server's state and makes the ones it lacks at it, with no catch-up. In a network game
 a blast throws them whether a player sees it or not (`gPortBlastDebris`; the cameras differ between the ends), and on a
