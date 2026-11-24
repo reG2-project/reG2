@@ -138,6 +138,10 @@ void net::Arena::Think(const Snapshot& world, uint32_t tick)
         LabelNavParts(*mNavMap);
     }
     Score(world);
+    if (mPickups.empty() || tick % 300 == 0)
+    {
+        engine::WeaponPickups(mPickups);
+    }
     uint64_t expanded = 0;
     for (const Bot& bot : mBots)
     {
@@ -151,6 +155,7 @@ void net::Arena::Think(const Snapshot& world, uint32_t tick)
         {
             FillBotView(mView, world, (int)i, tick, mNavMap.get());
             mView.stats = &bot.nav;
+            mView.pickups = &mPickups;
             // What a client's snapshots would have: every player and train, the rest within its area (server.hpp)
             const float x = mView.x, y = mView.y;
             mView.seen.erase(std::remove_if(mView.seen.begin(), mView.seen.end(),

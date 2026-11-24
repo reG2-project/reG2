@@ -64,9 +64,11 @@ struct BotView
         bool inCar; // for kPlayer: it drives
         int model; // for kCar: its model (car_model_enum: 11 a bus, 54 the tank, 59..61 and 6 a train's); for kPickup: its object model (a weapon: 200 + weapon)
         int held; // for kPlayer: the weapon in hand, -1 fists
+        float width, length; // for kCar: its size in blocks, across and along where it faces
     };
     std::vector<Seen> seen; // what the client's snapshot has, others only
     const engine::NavMap* map = nullptr;
+    const std::vector<engine::PickupSpot>* pickups = nullptr; // the weapon pickups its own game has (the map's spots)
     BotNavStats* stats = nullptr; // counted into when set (arena bots)
 };
 

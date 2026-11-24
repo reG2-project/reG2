@@ -71,6 +71,7 @@ class Arena
     std::vector<Bot> mBots;
     std::unique_ptr<engine::NavMap> mNavMap;
     BotView mView;
+    std::vector<engine::PickupSpot> mPickups; // the game's weapon pickups, listed every 10 s
     uint32_t mTicks = 0;
     uint64_t mExpanded = 0, mMaxExpanded = 0; // all bots' search cells, in total and in the worst tick
     int mSocket = -1; // to the trainer

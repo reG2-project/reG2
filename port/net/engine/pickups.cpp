@@ -203,6 +203,18 @@ void net::engine::ApplyPickups(const Snapshot& snap)
     }
 }
 
+void net::engine::WeaponPickups(std::vector<PickupSpot>& out)
+{
+    out.clear();
+    ForEachObject([&](Object* o) {
+        if (o->mModel >= 200 && o->mModel <= 227) // Ped::HandlePickupCollision
+        {
+            const Sprite* s = o->mSprite;
+            out.push_back(PickupSpot{s->mXy.x.ToFloat(), s->mXy.y.ToFloat(), s->mZpos.ToFloat(), o->mModel});
+        }
+    });
+}
+
 int net::engine::PickupModel(const EntityState& e)
 {
     return e.type == kEntityObject ? e.f[kObjModel] : 0;

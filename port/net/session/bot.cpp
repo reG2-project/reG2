@@ -112,13 +112,24 @@ int WantedWeapon(const net::BotView& v, bool targetInCar, float d)
     return best;
 }
 
-// The weapon pickups it has seen, by place: one seen again is refreshed, one not there while it stands within 8
-// blocks (in what its client sees) is taken, and left alone for 30 s
+// The weapon pickups it knows of, by place: the map's (its game's list) from the start, then as seen: one seen again is
+// refreshed, one not there while it stands within 8 blocks (in what its client sees) is taken, and left alone for 30 s
 class PickupMemory
 {
   public:
     void See(const net::BotView& v)
     {
+        for (size_t i = 0; v.pickups && i < v.pickups->size(); i++)
+        {
+            const net::engine::PickupSpot& p = (*v.pickups)[i];
+            if (!Find(p.x, p.y) && mSpots.size() < kMaxSpots)
+            {
+                net::BotView::Seen s = {};
+                s.kind = net::BotView::Seen::kPickup, s.id = kListedId + (uint32_t)i, s.player = -1;
+                s.x = p.x, s.y = p.y, s.z = p.z, s.weapon = true, s.model = p.model, s.held = -1;
+                mSpots.push_back(Spot{s, v.frame, 0});
+            }
+        }
         for (const net::BotView::Seen& s : v.seen)
         {
             if (s.kind != net::BotView::Seen::kPickup || !s.weapon)
@@ -126,7 +137,7 @@ class PickupMemory
                 continue;
             }
             Spot* spot = Find(s.x, s.y);
-            if (!spot && mSpots.size() < 64)
+            if (!spot && mSpots.size() < kMaxSpots)
             {
                 mSpots.push_back(Spot());
                 spot = &mSpots.back();
@@ -164,6 +175,8 @@ class PickupMemory
     }
 
   private:
+    static const size_t kMaxSpots = 128;
+    static const uint32_t kListedId = 0xFE000000; // a listed spot's id until seen (no entity's: engine.hpp's id bases)
     struct Spot
     {
         net::BotView::Seen s;
@@ -732,6 +745,10 @@ void net::FillBotView(BotView& view, const Snapshot& snap, int self, uint32_t fr
         s.inCar = false;
         s.held = -1;
         s.model = e.type == engine::kEntityObject ? engine::PickupModel(e) : engine::CarModel(e);
+        if (e.type != engine::kEntityCar || !engine::CarSize(s.model, &s.width, &s.length))
+        {
+            s.width = 0.8f, s.length = 1.6f;
+        }
         s.weapon = engine::PickupModel(e) >= 200 && engine::PickupModel(e) <= 227; // Ped::HandlePickupCollision
         uint32_t buttons = 0;
         if (engine::PlayerOf(e, &s.player, &buttons))

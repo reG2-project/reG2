@@ -160,6 +160,14 @@ int PlayerAmmo(const EntityState& e, int weapon); // 0..14 on foot, 15..27 a car
 // A pickup entity's Object::mModel (objects:: in Source/enums.hpp: 200..227 weapons, 228.. power-ups)
 int PickupModel(const EntityState& e);
 int CarModel(const EntityState& e); // a car entity's Car::mCarInfoIdx (car_model_enum in Source/enums.hpp), -1 for others
+// A car model's size in blocks (its sprite's, car_info w and h: across, along); false for an unknown model
+bool CarSize(int model, float* pWidth, float* pLength);
+struct PickupSpot
+{
+    float x, y, z;
+    int model; // Object::mModel: 200..227 weapons
+};
+void WeaponPickups(std::vector<PickupSpot>& out); // the weapon pickups this game has (the map script makes them on both ends)
 // The position of a player's ped or car, in blocks; false without a ped
 bool PlayerPosition(int player, float* pX, float* pY);
 bool PlayerPose(int player, float* pX, float* pY, float* pZ, int* pRot); // and its height and heading (0..1439)

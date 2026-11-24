@@ -229,6 +229,7 @@ class Client
     uint32_t mToken = 0; // our slot's (the welcome's): a rejoin's hello shows it to have the slot back as it was
     std::unique_ptr<engine::NavMap> mNavMap; // built once the game has its map
     BotView mBotView;
+    std::vector<engine::PickupSpot> mBotPickups; // its game's weapon pickups, listed every 10 s
     int mMarks = 0; // mark key presses (F12 or the key under Esc) (ChooseInput)
     engine::Round mRound; // the last one announced
     int mGeneration = 0; // engine::GameGeneration's, of the game running

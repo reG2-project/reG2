@@ -832,6 +832,11 @@ uint32_t net::Client::ChooseInput(uint32_t recordedInput)
             StartBot();
         }
         FillBotView(mBotView, mReceived[mLatestTick % kRing], mSlot, mFrame, mNavMap.get());
+        if (mBotPickups.empty() || mFrame % 300 == 0)
+        {
+            engine::WeaponPickups(mBotPickups);
+        }
+        mBotView.pickups = &mBotPickups;
         // The keyboard's key events go with a bot's controls: Escape and the leave prompt, the chat (GTA2_INPUT in tests)
         const uint32_t bot = mBot ? mBot->Think(mBotView) : 0;
         const bool idle = mTick >= Env().botIdleFrom && mTick < Env().botIdleTo;
