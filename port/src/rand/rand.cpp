@@ -30,9 +30,21 @@ void (*PortRand::gLog)(void* caller);
 // The owners' draws (owner.hpp)
 unsigned int (*PortRand::gPedKey)(const Ped* p);
 unsigned int (*PortRand::gCarKey)(const Car* c);
+unsigned int (*PortRand::gObjectKey)(const Object* o);
 bool PortRand::gOwned;
 void (*PortRand::gTickHook)();
 static unsigned int sOwner, sOwnerDraws, sSeed, sTick;
+static unsigned int sCreator, sCreatorMade; // who makes objects now, and how many keyed ones this update
+
+void PortRand::Scope::Create(unsigned int key)
+{
+    mCreating = key != 0;
+    mSavedCreator = sCreator, mSavedMade = sCreatorMade;
+    if (mCreating)
+    {
+        sCreator = key, sCreatorMade = 0;
+    }
+}
 
 void PortRand::Scope::Enter(unsigned int key)
 {
@@ -42,6 +54,7 @@ void PortRand::Scope::Enter(unsigned int key)
     {
         sOwner = key, sOwnerDraws = 0;
     }
+    Create(key);
 }
 
 PortRand::Scope::Scope(unsigned int serviceKey)
@@ -64,17 +77,27 @@ PortRand::Scope::Scope(const Car* c)
     Enter(gCarKey ? gCarKey(c) : 0);
 }
 
+PortRand::Scope::Scope(const Object* o) : mActive(false), mSavedKey(0), mSavedDraws(0)
+{
+    Create(gObjectKey ? gObjectKey(o) : 0);
+}
+
 PortRand::Scope::~Scope()
 {
     if (mActive)
     {
         sOwner = mSavedKey, sOwnerDraws = mSavedDraws;
     }
+    if (mCreating)
+    {
+        sCreator = mSavedCreator, sCreatorMade = mSavedMade;
+    }
 }
 
 void PortRand::TickStart(unsigned int cycle)
 {
     sTick = cycle;
+    sCreator = 0, sCreatorMade = 0;
     if (gTickHook)
     {
         gTickHook();
@@ -100,6 +123,17 @@ static int OwnedDraw()
     x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
     x ^= x >> 31;
     return (int)(x & 0x7FFF);
+}
+
+unsigned int PortRand::NextObjectKey()
+{
+    unsigned long long x = sSeed * 0x9E3779B97F4A7C15ull ^ sCreator * 0xC2B2AE3D27D4EB4Full ^ sTick * 0x165667B19E3779F9ull ^
+                           (++sCreatorMade) * 0xD6E8FEB86659FD93ull ^ 0x5851F42D4C957F2Dull;
+    x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ull;
+    x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
+    x ^= x >> 31;
+    const unsigned int key = (unsigned int)(x & 0xFFFFFF);
+    return key ? key : 1;
 }
 
 int port_rand_5EDEE1()
