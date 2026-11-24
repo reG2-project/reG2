@@ -1,14 +1,15 @@
 // port/net (port/docs/netcode.md, "Other players' shots shown"): a client's bullets of other players come from the ticks the
 // server forwarded, made in a resimulation, so already in flight when first drawn, or born and gone before any frame.
-// The first slide from the shooter's gun (PortInterp::SlideFrom), the others leave a flash and a tracer
-// (PortShotTrails). Display only: what is simulated and hit stays as it is.
+// Those in flight slide from the shooter's gun (PortInterp::SlideFrom), and each plays the game's muzzle flash from its
+// start (PortShotFlash). Display only: what is simulated and hit stays as it is.
 #include "internal.hpp"
 #include "port/src/interpolation.hpp"
 #include "port/src/rand/owner.hpp"
-#include "port/src/shot_trails.hpp"
+#include "port/src/shot_flash.hpp"
 #include "Source/Game.hpp"
-#include "Source/Object_3C.hpp"
 #include "Source/Object_5C.hpp"
+#include "Source/ParticleManager.hpp"
+#include "Source/Particle_4C.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
 #include "Source/enums.hpp"
@@ -66,9 +67,7 @@ struct Record
     int model;
     const Ped* shooter;
     uint32_t tick;
-    float x, y, z; // where it started
-    float lx, ly, lz; // where a tick last left it
-    float dx, dy; // a tick's way
+    float x, y; // where it started
     bool seen; // at the end of a tick
     bool done; // shown (slid or flashed): kept so that a resimulation making it again doesn't show it again
     bool ended;
@@ -77,10 +76,24 @@ struct Record
 
 std::map<Key, Record> gRecords;
 std::unordered_map<const Ped*, int> gMadeThisTick;
+std::unordered_map<const Ped*, uint32_t> gFlashTick; // the tick of the last shot its flash was shown for
 
 bool Alive(const Record& r)
 {
     return r.o->mSprite == r.s && r.s->mInstanceId == r.id && GunShot(r.o->mModel);
+}
+
+// The game's muzzle flash of the shooter's still in the world (ParticleManager::GunMuzzelFlash)
+bool Flashing(const Sprite* shooter)
+{
+    for (Particle_4C* p = gParticle_4C_Pool ? gParticle_4C_Pool->GetFirstUsed() : NULL; p; p = p->mpNext)
+    {
+        if (p->mState == 40 && p->mpSprite == shooter)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 void See(Record& r)
@@ -94,7 +107,6 @@ void See(Record& r)
         r.ended = true;
         return;
     }
-    r.lx = r.s->mXy.x.ToFloat(), r.ly = r.s->mXy.y.ToFloat(), r.lz = r.s->mZpos.ToFloat();
     r.seen = true;
     r.ended = r.o->mRemovalState != 0; // a hit: where it stops
 }
@@ -122,10 +134,7 @@ void net::engine::ShotVisMade(Object* o)
     }
     r = Record();
     r.o = o, r.s = o->mSprite, r.id = o->mSprite->mInstanceId, r.model = o->mModel, r.shooter = p, r.tick = Cycle();
-    r.x = r.lx = x, r.y = r.ly = y, r.z = r.lz = o->mSprite->mZpos.ToFloat();
-    const float speed = o->mObj3c ? o->mObj3c->mSpeed.ToFloat() : 0;
-    r.dx = o->mObj3c ? speed * Ang16::sine(o->mObj3c->mAngle).ToFloat() : 0;
-    r.dy = o->mObj3c ? speed * Ang16::cosine(o->mObj3c->mAngle).ToFloat() : 0;
+    r.x = x, r.y = y;
 }
 
 void net::engine::ShotVisTick()
@@ -181,36 +190,36 @@ void net::engine::ShotVisFrame()
             continue;
         }
         r.done = true;
-        if (!r.ended)
+        // A shot's pellets share its flash
+        auto last = gFlashTick.find(r.shooter);
+        if (ps && On() && (last == gFlashTick.end() || last->second != r.tick) && !Flashing(ps))
         {
-            if (ps)
-            {
-                PortInterp::SlideFrom(r.s, ps, kMuzzle, On());
-                if (LogOn())
-                {
-                    printf("net: SHOTVIS slide frame %u tick %u: model %d %u ticks old, %.1f blocks away\n", port_FrameCount() + 1, now, r.model,
-                           now - r.tick, away(r.x, r.y));
-                }
-            }
-            ++it;
-            continue;
+            PortShotFlash::Add(ps, now);
         }
-        if (On() && r.model != objects::rocket_bullet_128)
+        gFlashTick[r.shooter] = r.tick;
+        if (!r.ended && ps)
         {
-            // To where it hit: a tick on from where the last tick left it
-            PortShotTrails::Add(ps, kMuzzle, r.x, r.y, r.z, r.lx + r.dx, r.ly + r.dy, r.lz);
+            PortInterp::SlideFrom(r.s, ps, kMuzzle, On());
             if (LogOn())
             {
-                printf("net: SHOTVIS trail frame %u tick %u: model %d made %u, %s, %.1f blocks away\n", port_FrameCount() + 1, now, r.model,
-                       r.tick, r.seen ? "seen at a tick" : "gone in its first", away(r.x, r.y));
+                printf("net: SHOTVIS slide frame %u tick %u: model %d %u ticks old, %.1f blocks away\n", port_FrameCount() + 1, now, r.model,
+                       now - r.tick, away(r.x, r.y));
             }
+        }
+        else if (LogOn())
+        {
+            printf("net: SHOTVIS unseen frame %u tick %u: model %d made %u, %s, %.1f blocks away\n", port_FrameCount() + 1, now, r.model, r.tick,
+                   r.seen ? "seen at a tick" : "gone in its first", away(r.x, r.y));
         }
         ++it;
     }
+    PortShotFlash::SetTick(now);
 }
 
 void net::engine::ClearShotVis()
 {
     gRecords.clear();
     gMadeThisTick.clear();
+    gFlashTick.clear();
+    PortShotFlash::Clear();
 }

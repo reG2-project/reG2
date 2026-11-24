@@ -540,10 +540,12 @@ ticks the server forwarded, made in the resimulation after a snapshot, so they a
 the client first draws them, and the point-blank ones are made and gone before any frame. A shot of another player's
 on foot (its pistol, machine gun, shotgun or rocket; known by the ped whose update made it, `PortRand::gLastPed`, and
 kept by its shooter, tick and number across resimulations) that a frame shows for the first time is drawn from the
-shooter's drawn gun and slides to its place over 1.5 ticks, 3 frames at 60 fps (`PortInterp::SlideFrom`). One that came and went
-unseen leaves a muzzle flash at the gun and a tracer to a tick past where it was last, for one tick (`PortShotTrails`,
-drawn with the sprites' layers); its sound and hits are the game's own (the sound log plays them, the blood and sparks
-are particles). What is simulated, and the server's hits, stay as they are; the local player's own shots are drawn as
+shooter's drawn gun and slides to its place over 1.5 ticks, 3 frames at 60 fps (`PortInterp::SlideFrom`). The game's
+muzzle flash (`ParticleManager::GunMuzzelFlash`, three ticks) is made in the same resimulation and is mostly over by
+then: whenever the world has none at the shooter, its three sprites are drawn at the drawn gun from the frame the shot
+is first known (`PortShotFlash`, with the sprites' layers), as single player shows them. A point-blank shot, made and
+gone in one tick, shows that flash only, as in single player; its sound and hits are the game's own (the sound log
+plays them, the blood and sparks are particles). What is simulated, and the server's hits, stay as they are; the local player's own shots are drawn as
 before, and nothing of it draws random numbers. `GTA2_NET_SHOTVIS=0` turns it off (still measured: comfort's `shotdraw`).
 
 ### Random draws
@@ -972,7 +974,7 @@ off by default:
 | `GTA2_NET_TESTBLAST=<tick>:<player>:<tenths>,...` | server | a grenade's explosion that many tenths of a block east of the player (0: at its feet, a flying death) |
 | `GTA2_NET_TESTSHOT=<tick>:<player>:<model>,...` | server | a rocket (128), molotov (138) or grenade (183) thrown east from beside the player, made by the server alone |
 | `GTA2_NET_TESTGHOSTSHOT=<tick>` | client | a rocket beside the local player at that tick of the game's cycle, in every run of it: one the server never has |
-| `GTA2_NET_SHOTVIS=0` | client | other players' late shots drawn where they are, none of their flashes and tracers ("Other players' shots shown") |
+| `GTA2_NET_SHOTVIS=0` | client | other players' late shots drawn where they are, their muzzle flashes only while the world still has them ("Other players' shots shown") |
 | `GTA2_NET_SHOTSKEW=1` | client | its shots' keys none of the server's (the shots step's red run) |
 | `GTA2_NET_TESTPHASE=<tick>:<player>[:<what>],...` | server | the player on foot drowned (0) or electrocuted (1), seated in a car beside it (2), pulled out of its car (3); 10 to 13: the ambient ped nearest it drowned, electrocuted, knocked down, or blown up |
 | `GTA2_NET_TESTLOCALPHASE=<tick>:<what>,...` | client | its own player drowned (0), electrocuted (1) or knocked down (2) before each run of that tick, live and resimulated (the server never has it) |
