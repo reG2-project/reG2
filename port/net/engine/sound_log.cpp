@@ -34,7 +34,8 @@ struct SoundEvent
 };
 std::vector<SoundEvent> sHeard; // asked for by the live frames, or added as owed
 std::vector<SoundEvent> sWould; // asked for by resimulated ticks, the newest resimulation's of each tick
-uint32_t sSnapTick; // the last restore's
+uint32_t sSnapTick; // the last restore's, as the game's cycle
+uint32_t sCycleOffset; // a snapshot's tick less the game's cycle at it
 uint32_t sSettled; // the newest tick whose requests were given
 bool sRestored;
 const uint32_t kKeep = 64; // ticks of the logs
@@ -201,8 +202,14 @@ void LiveRequests(bool requested)
 }
 } // namespace
 
+void net::engine::SoundLogWorldAt(uint32_t tick)
+{
+    sCycleOffset = tick - Tick();
+}
+
 void net::engine::SoundLogRestored(uint32_t tick)
 {
+    tick -= sCycleOffset;
     gPortSoundRequestsHook = LiveRequests;
     sSnapTick = tick;
     sRestored = true;
@@ -267,4 +274,5 @@ void net::engine::SoundLogStop()
     sWould.clear();
     sRestored = false;
     sSettled = 0;
+    sCycleOffset = 0;
 }
