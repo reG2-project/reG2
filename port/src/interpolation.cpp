@@ -438,9 +438,15 @@ void LaidMoving(Sprite* pSprite, s32 dx, s32 dy)
     {
         return;
     }
-    sPoses[i] = PoseOf(*pSprite);
-    sPoses[i].mX -= dx;
-    sPoses[i].mY -= dy;
+    Pose from = PoseOf(*pSprite);
+    from.mX -= dx;
+    from.mY -= dy;
+    sPoses[i] = from;
+    // After a rollback an object is drawn from the corrected game's place (FromPose)
+    if (sResimValid)
+    {
+        sResimPoses[i] = from;
+    }
 }
 
 void Apply(f32 alpha)
