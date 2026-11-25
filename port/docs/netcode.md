@@ -813,7 +813,7 @@ best for its distance (machine guns, shotgun and rockets first); they hold the w
 a car from 4 blocks, nothing that blows up nearer), and hold fire while it is in range and faced (every gun on foot
 fires again while attack is held, `Weapon::CanFireWhileHeld`). Standing at someone, the fighter on foot (`simple`, the
 hunter) turns the last 20 degrees by one-tick taps (12 units, 3 degrees; a held turn overshoots): a shot goes where the
-shooter faces, or a player's machine gun's to the ped it locks on to (`Ped::ComputeAimAngle`, below in "Open").
+shooter faces, or a player's machine gun's to the ped it locks on to in front (`Ped::ComputeAimAngle`; "Open" has the original's lock behind).
 Against a player standing still within a block (2 seeds), a hunter's shots that hit it went from 44 of 2080 to 140 of
 212; between bots the frags stayed as they were (simple against simple, 8 seeds: 50 and 48; six bots on downtown and
 Industrial, 6 seeds each: 159 and 166). Fists hit within a quarter block and only knock a player under 30
@@ -1204,13 +1204,13 @@ own (`single`) and rollback in scenes with explosions (`explode`).
 
 ## Open
 
-- **The machine gun's lock on a shooter behind**: a player's machine gun aims at a ped within 16 degrees of the
-  facing, else (`Ped::FindBestTargetPed`'s fallback) at the nearest ped on the threat list within 4 blocks and 1 level,
-  whatever the facing. A ped is on that list when it fired a gun other than the silenced SMG on the tick before. With
-  everyone on machine guns (`--kit smg`) two players holding fire keep their 3-tick rhythm, so the lock takes every
-  shot or none: firing behind you is impossible while someone near shoots at you. The original's, solo and network
-  alike (checked in solo against FBI agents with shotguns, 2026-11-25). To drop it, a `GTA2_PORT` block in
-  `FindBestTargetPed` returning no fallback target for a player ped, in network games or behind a setting.
+- **The machine gun's lock on a shooter behind** (dropped in the port, solo and network): the original's machine gun
+  aims at a ped within 16 degrees of the player's facing, else (`Ped::FindBestTargetPed`'s fallback) at the nearest
+  ped on the threat list within 4 blocks and 1 level, whatever the facing; a ped is on that list when it fired a gun
+  other than the silenced SMG on the tick before. Two players holding machine guns keep their 3-tick rhythm, so that
+  lock took every shot or none, and firing behind you was impossible while someone near shot at you (checked in solo
+  against FBI agents with shotguns, 2026-11-25). The `GTA2_PORT` block at the top of `FindBestTargetPed`'s fallback
+  ends it for player peds; removing that block restores the original.
 - **Typing on the network page with a gamepad**: the address and name take the keyboard only.
 - **A blast's particles** are drawn only on screen and while the particle pool has room, and they set the debris'
   way: the two ends differ there until the snapshot (it brings the debris). The game's other on-screen tests spawn or
