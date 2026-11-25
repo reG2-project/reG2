@@ -773,7 +773,11 @@ farthest of the next ten cells walkable in a straight line with room either side
 brains walk with a `BotWalker`: stuck (under 0.3 blocks in 1.5 s), it backs off and turns; stuck again at the same
 cell within 10 s, it tries the next way out (the other side with the way it was crossing left out for 20 s, a jump,
 then the goal given up for 30 s). A goal its route gets no shorter to for 10 s (3 s with no route) is given up for
-30 s. These brains draw no random numbers (only `human` and `nn` do) and their searches are bounded in cells, so an
+30 s, except a player it has a route to (a player chased keeps moving). Going round a car, a corner it stands at counts
+as passed. A car it stands beside without getting in for 4 s is given up too. With nobody on its ways (Tiny Town's
+second arena slot starts on a raised spot), a fighter walks at the nearest player anyway. A car that stays within 2
+blocks of a spot for 5 s with nobody within 6 is wedged: the bot gets out and leaves it 30 s. After a fight on foot
+(the hunter: someone within 8 blocks), the hunter and the soldier stay on foot 5 s before going for a car. These brains draw no random numbers (only `human` and `nn` do) and their searches are bounded in cells, so an
 arena match of them repeats for a seed.
 
 **Stuck meter**: each arena bot's line `net: arena <slot> <brain> stuck S s longest L s searches N failed F giveups G
