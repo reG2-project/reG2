@@ -76,6 +76,39 @@ bool InLine(const net::BotView& v, const net::BotView::Seen& s)
     return !v.map || net::NavClear(*v.map, v.x, v.y, s.x, s.y);
 }
 
+// No car in a shot's way (the target's own aside), or with rockets one by the target, whose blast reaches it
+bool ShotClear(const net::BotView& v, const net::BotView::Seen& target)
+{
+    const net::BotView::Seen* car = net::ShotBlocker(v, v.x, v.y, target);
+    return !car || (v.weapon == 2 && hypotf(car->x - target.x, car->y - target.y) < 2.5f && hypotf(car->x - v.x, car->y - v.y) > 4);
+}
+
+const uint32_t kShotSpotId = 0xFD000000; // a step aside's goal id (no entity's), so giving up on it leaves the target alone
+
+// A car in the way of a shot: a step 1 to 3 blocks aside of the line to the target, round the car's nearer end, to
+// where it can walk straight and shoot clear; else on at the target (the walker goes round cars)
+uint32_t StepToShoot(const net::BotView& v, const net::BotView::Seen& target, net::BotWalker& walker)
+{
+    const float dx = target.x - v.x, dy = target.y - v.y, d = hypotf(dx, dy);
+    const net::BotView::Seen* car = net::ShotBlocker(v, v.x, v.y, target);
+    if (car && d > 0.1f)
+    {
+        const float px = -dy / d, py = dx / d, side = (car->x - v.x) * px + (car->y - v.y) * py > 0 ? -1.0f : 1.0f;
+        for (int k = 0; k < 6; k++)
+        {
+            net::BotView::Seen spot = target;
+            const float off = (k / 2 + 1) * (k % 2 ? -side : side);
+            spot.x = v.x + px * off, spot.y = v.y + py * off;
+            if ((!v.map || (net::NavClear(*v.map, v.x, v.y, spot.x, spot.y) && net::NavClear(*v.map, spot.x, spot.y, target.x, target.y))) &&
+                !net::ShotBlocker(v, v.x, v.y, spot) && !net::ShotBlocker(v, spot.x, spot.y, target))
+            {
+                return walker.Walk(v, kShotSpotId, spot.x, spot.y, v.z);
+            }
+        }
+    }
+    return walker.Walk(v, target.id, target.x, target.y, target.z);
+}
+
 // What a weapon is worth on foot (Source/enums.hpp, weapon_type), 0 for none: machine guns, shotgun and rockets most
 float WeaponValue(int w)
 {
@@ -579,6 +612,10 @@ class SimpleBot : public DecidingBot
             {
                 return mThrower.Think(v, *target, mMotions, mWalker);
             }
+            if (!fists && !ShotClear(v, *target))
+            {
+                return StepToShoot(v, *target, mWalker);
+            }
             const int err = TurnTo(v.rot, dx, dy);
             // Fists hit a body within a quarter block (Ped::FindNearbyPed): onto it, with the button held, never at a
             // car. Closing in with the walker, which gets it unstuck.
@@ -926,6 +963,10 @@ class SoldierBot : public DecidingBot
         if (Throwable(v.weapon))
         {
             return mThrower.Think(v, target, mMotions, mWalker);
+        }
+        if (!ShotClear(v, target))
+        {
+            return StepToShoot(v, target, mWalker);
         }
         // Rockets blow it up too up close: from 4 blocks. A car under fire burns and blows up: from 3.
         const bool rockets = v.weapon == 2;

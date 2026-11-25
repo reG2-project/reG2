@@ -159,6 +159,15 @@ int main()
     b = walker.Walk(v, 0x03000001, 110.5f, 100.5f, 3.0f);
     CHECK((b & net::kBtnForward) && (b & net::kBtnJump));
 
+    // A shot east at someone past the car hits the car; one at someone in it doesn't (its own car), nor one passing by it
+    net::BotView::Seen target = {};
+    target.kind = net::BotView::Seen::kPlayer, target.x = 104.5f, target.y = 100.5f, target.z = 3.0f;
+    CHECK(net::ShotBlocker(v, 100.5f, 100.5f, target) == &v.seen[0]);
+    target.x = 102.0f;
+    CHECK(!net::ShotBlocker(v, 100.5f, 100.5f, target));
+    target.x = 104.5f, target.y = 102.5f;
+    CHECK(!net::ShotBlocker(v, 100.5f, 102.5f, target));
+
     printf("net bot tests passed\n");
     return 0;
 }
