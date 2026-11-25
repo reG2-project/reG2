@@ -297,6 +297,49 @@ int net::Server::FreeSlot(const std::string& name, bool bot, bool kept) const
     return unclaimed < none ? unclaimed : any < none ? any : kept ? held : none;
 }
 
+// The bot whose slot a person joining a full server takes: the last arena bot, else the bot client that joined last
+// (-1: none)
+int net::Server::BotSlotForPerson() const
+{
+    int arena = -1, client = -1;
+    for (int i = 0; i < (int)mSlots.size(); i++)
+    {
+        const Slot& s = mSlots[i];
+        arena = s.used && s.peer == kArenaPeer ? i : arena;
+        client = s.used && s.bot && s.peer != kArenaPeer && (client < 0 || s.joined > mSlots[client].joined) ? i : client;
+    }
+    return arena >= 0 ? arena : client;
+}
+
+// A bot out for a person: its ped goes, a bot client is told why and disconnected, an arena bot stands aside
+void net::Server::MakeRoom(int slot)
+{
+    Slot& s = mSlots[slot];
+    const std::string name = s.name;
+    if (s.peer == kArenaPeer)
+    {
+        mArena.Bench(slot, true);
+    }
+    else
+    {
+        BitWriter w;
+        Reject reject;
+        reject.reason = "a player took your slot";
+        WriteReject(w, reject);
+        mTransport->Send(s.peer, kChannelReliable, w.Data().data(), w.ByteCount(), true);
+        mTransport->Flush();
+        mTransport->Disconnect(s.peer);
+    }
+    printf("net: player %d (%s) makes room for a player\n", slot, name.c_str());
+    mRounds.Left(slot);
+    s = Slot(); // the name and token aren't kept for a return
+    if (!engine::MapChangePending())
+    {
+        engine::NeverInGame(slot);
+    }
+    Notice(-1, name + " left for a player");
+}
+
 // A client back after its connection dropped, whose old connection may not have timed out here yet
 int net::Server::ReturningSlot(const Hello& hello) const
 {
@@ -335,7 +378,14 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
         }
         const int back = ReturningSlot(hello);
         std::string name = back >= 0 ? mSlots[back].name : PlayerName(hello.name, std::vector<std::string>());
-        int slot = back >= 0 ? back : FreeSlot(name, hello.bot, true);
+        const int none = (int)mSlots.size();
+        int slot = back >= 0 ? back : FreeSlot(name, hello.bot, false), room = -1;
+        if (slot == none)
+        {
+            // A person before any bot: one's slot, rather than one kept for a person who dropped
+            room = hello.bot ? -1 : BotSlotForPerson();
+            slot = room >= 0 ? room : FreeSlot(name, hello.bot, true);
+        }
         if (back < 0 && slot < (int)mSlots.size() && mSlots[slot].name != name)
         {
             name = PlayerName(name, taken); // a new player: a name nobody in the game has
@@ -356,6 +406,10 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
         }
         else
         {
+            if (slot == room)
+            {
+                MakeRoom(room);
+            }
             Slot& s = mSlots[slot];
             const bool stillIn = back >= 0 && s.used; // its old connection hasn't timed out: dropped, the player stays
             if (stillIn)
@@ -369,6 +423,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
             s.name = name;
             s.token = token;
             s.bot = hello.bot;
+            s.joined = ++mJoins;
             Welcome welcome;
             welcome.slot = (uint8_t)slot;
             welcome.players = (uint8_t)mSlots.size();
@@ -1201,7 +1256,7 @@ void net::Server::ChangeToMap(int map)
     const uint32_t tps = 1000 / (mConfig.game.tickMs > 0 ? mConfig.game.tickMs : 33);
     for (size_t i = 0; i < mSlots.size(); i++)
     {
-        taken[i] = mSlots[i].used;
+        taken[i] = mSlots[i].used || (int)i < mArena.Count(); // arena bot i plays slot i: those stay where they are
         kept[i] = !mSlots[i].used && !mSlots[i].name.empty() && mTick - mSlots[i].leftTick < kComeBackSec * tps;
     }
     const int open = (int)mSlots.size();

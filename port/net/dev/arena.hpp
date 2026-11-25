@@ -25,6 +25,7 @@ class Arena
     }
     void Think(const Snapshot& world, uint32_t tick); // each bot's buttons for the next tick
     uint32_t Buttons(int slot) const;
+    void Bench(int slot, bool benched); // a benched bot stands aside, its slot a person's
     // "net: arena <slot> <brain> frags F deaths D near N dealt H cars C pickups P", its stuck meter's line, and the
     // trainer's last message
     void Finish(const Snapshot& world);
@@ -41,6 +42,7 @@ class Arena
             uint32_t car = 0;
         };
         std::string kind;
+        bool benched = false;
         std::unique_ptr<BotBrain> brain; // NULL: remote
         uint32_t buttons = 0;
         Body last;

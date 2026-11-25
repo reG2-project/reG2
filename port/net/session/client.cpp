@@ -1001,7 +1001,7 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
             else if (type == kMsgReject && mConnected && ReadReject(r, reject))
             {
                 printf("net: frame %u, the server put us out: %s\n", mFrame, Printable(reject.reason).c_str());
-                const bool shown = reject.reason == "kicked by vote" || reject.reason == "the server closed";
+                const bool shown = reject.reason == "kicked by vote" || reject.reason == "the server closed" || reject.reason == "a player took your slot";
                 LeaveToMenu(shown ? reject.reason.c_str() : "the server put us out");
             }
             else if (type == kMsgReject && !mConnected && ReadReject(r, reject))

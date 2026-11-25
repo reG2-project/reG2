@@ -60,6 +60,7 @@ class Server
         std::string name;
         bool bot = false; // a bot client's (its hello): it plays but doesn't vote; kept with the name of one that left
         uint32_t token = 0; // the welcome's: a reconnect shows it to have this slot back as it was
+        uint32_t joined = 0; // mJoins at its welcome
         uint32_t leftTick = 0; // the tick its connection went (a map change keeps the slot of one that may come back)
         uint32_t lastCmdTick = 0; // the newest command tick received (late ones too)
         uint32_t cmdTick[kRing] = {}; // received commands by tick % kRing
@@ -109,6 +110,8 @@ class Server
     std::string Refusal(const Hello& hello, bool read) const; // why a hello's client can't play here ("": it can)
     bool KeptForReturn(const Slot& s) const;
     int FreeSlot(const std::string& name, bool bot, bool kept) const; // the slot a joining <name> gets (mSlots.size(): none)
+    int BotSlotForPerson() const;
+    void MakeRoom(int slot);
     int ReturningSlot(const Hello& hello) const; // the slot a reconnect's token is for, in use or not (-1: none)
     void OnCommands(int slot, BitReader& r);
     void StartGameOnce();
@@ -139,6 +142,7 @@ class Server
     std::vector<TransportEvent> mPending; // what Idle polled, for the next frame
     std::unordered_map<uint32_t, long long> mHelloWait; // peers connected that haven't said hello: since when (ms)
     uint32_t mTick = 0;
+    uint32_t mJoins = 0; // welcomes so far
     bool mStarted = false;
     uint32_t mGameStartTick = 0; // the tick the running game started at: its snapshots' first
     Stats mStats;
