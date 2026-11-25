@@ -60,6 +60,7 @@ struct PortSoundStats
     u32 far[2]; // beyond its range (CalculateDistance)
     u32 silent[2]; // at volume 0 (VolCalc)
     u32 frames, pausedFrames, noListenerFrames; // ServiceSoundEffects: paused (or the results), no camera entity
+    u32 resimTicks, resimPaused, resimOff; // a client's resimulated ticks: with the restored sound paused, or off (no pass)
     u32 started, refused, badSample, noRate; // ProcessActiveQueues' new samples: started, InitSampleForType said no...
     u32 busyMax; // channels playing at a frame's end, the most
     u32 entityAdds, entityFrees, addFails, cameraRefused; // AddSoundObject, FreeSoundEntry: a full table, a second camera

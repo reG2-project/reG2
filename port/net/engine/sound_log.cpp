@@ -277,11 +277,14 @@ void net::engine::SoundLogRestored(uint32_t tick)
 void net::engine::SoundLogResimTick(bool applied)
 {
     sound_obj& s = gSound_obj;
+    gPortSoundStats.resimTicks++;
     if (!s.mbSoundInitialized || !s.mServiceEnabled || !s.mType5Idx || !gPortSoundRequestsHook)
     {
         net::engine::gSoundStats[3] += gPortSoundRequestsHook != NULL;
+        gPortSoundStats.resimOff++;
         return;
     }
+    gPortSoundStats.resimPaused += s.mIsPaused; // the restored save's: its entities then ask for nothing
     // The channels and queues mirror the mixer (RestoreGame keeps them over a restore): as they were
     const size_t from = offsetof(sound_obj, msQueueSample), to = offsetof(sound_obj, mUnused1440);
     static unsigned char sChannels[offsetof(sound_obj, mUnused1440) - offsetof(sound_obj, msQueueSample)];

@@ -134,7 +134,7 @@ void net::engine::PrintSoundDiag(const char* when)
     PortMixerStats m;
     port_MixerStats(&m);
     printf("net: %s, sound: asked %s live, %s resim; unheard full %u/%u far %u/%u vol0 %u/%u; started %u (refused %u bad %u rate0 %u), "
-           "busy <=%u of %u; %u frames (paused %u, no listener %u); entities %s (+%u -%u, full %u, 2nd camera %u); on %d svc %d 3d %d "
+           "busy <=%u of %u; %u frames (paused %u, no listener %u), %u resim (paused %u, off %u); entities %s (+%u -%u, full %u, 2nd camera %u); on %d svc %d 3d %d "
            "vol %u, bank %s %s %d; listener %.1f,%.1f player %.1f,%.1f (%.1f) camera %s (local p%d); mixer %s %s%s: %u callbacks, "
            "%u starts (%u empty), voices <=%u, streams %u, peak %.2f\n",
            when,
@@ -155,6 +155,9 @@ void net::engine::PrintSoundDiag(const char* when)
            st.frames,
            st.pausedFrames,
            st.noListenerFrames,
+           st.resimTicks,
+           st.resimPaused,
+           st.resimOff,
            Entities().c_str(),
            st.entityAdds,
            st.entityFrees,
