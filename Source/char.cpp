@@ -6125,6 +6125,10 @@ void Char::UpdateImmobilized()
                         case ped_state_2::knocked_fatal_26:
                             mpPed->RestorePreviousPedState();
                             mpPed->Kill();
+#if defined(GTA2_PORT)
+                            // Port: a network game's dead player cries out (gPortPlayersDeathCry) instead of the thud
+                            if (!gPortPlayersDeathCry || !mpPed->is_player() || mpPed->mVoiceEvent != 4)
+#endif
                             mpPed->SetVoiceEventIfNotOnFire(27);
                             break;
                     }

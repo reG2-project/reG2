@@ -32,6 +32,10 @@
 #if defined(GTA2_PORT)
 #include "../port/src/rand/sound.hpp" // VC6's rand, on a stream of its own in a network game (port/docs/netcode.md)
 #include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
+#include "Char_Pool.hpp"
+
+// A car's own sounds take the sample indices 0 to 15 and 100 to 199
+static const u8 kCarDeathCrySampleIndex = 16;
 #endif
 
 // Forward declarations: the functions below are in address order
@@ -560,6 +564,18 @@ void sound_obj::ProcessCar(Sound_Params* pParams)
     Car* pCar = pParams->mpObj->mCarBcPtr;
     if (pCar)
     {
+#if defined(GTA2_PORT)
+        // Port: a player killed in a car has no char to cry out with: its car does, once a frame
+        for (Ped* pPed = gPortPlayersDeathCry ? gPedPool->GetFirstPed() : NULL; pPed; pPed = pPed->mpNext)
+        {
+            if (pPed->mCar == pCar && !pPed->mGameObject && pPed->is_player() && pPed->mVoiceEvent == 4)
+            {
+                pPed->TakeVoiceEvent();
+                PortPlayerDeathCry(pParams, kCarDeathCrySampleIndex);
+                break;
+            }
+        }
+#endif
         pParams->mbDrivenByPlayer = pCar->IsDrivenByPlayer();
 
         SoundPosEntry* pAlloc = mAudioEntities[msQueueSample.mEntityIndex].mpAlloc;
@@ -5960,10 +5976,11 @@ void sound_obj::HandlePedVoiceEvent(Sound_Params* pParams)
         samp = 59;
     }
 #if defined(GTA2_PORT)
-    // Port: a network game's players cry out at their death, the other peds' cry (gPortPlayersDeathCry)
+    // Port: a network game's player cries out at its death as the other peds do
     else if (voice == 4 && gPortPlayersDeathCry)
     {
-        samp = manRandomTable[static_cast<u32>(msQueueSample.mEntityIndex) % 5] % 5 + 228;
+        PortPlayerDeathCry(pParams, 2);
+        return;
     }
 #endif
 
@@ -6048,6 +6065,33 @@ void sound_obj::HandlePedVoiceEvent(Sound_Params* pParams)
         }
     }
 }
+
+#if defined(GTA2_PORT)
+// Port: a network game's players cry out at their death (gPortPlayersDeathCry) as the other peds do in HandlePedVoiceEvent
+void sound_obj::PortPlayerDeathCry(Sound_Params* pParams, u8 sample_index)
+{
+    if (!CalculateDistance(Fix16(81)) || !VolCalc(35, Fix16(9), pParams->mbHasSolidAbove))
+    {
+        return;
+    }
+    msQueueSample.mSampIdx = manRandomTable[static_cast<u32>(msQueueSample.mEntityIndex) % 5] % 5 + 228;
+    msQueueSample.mSoundIntensity = Fix16(9);
+    msQueueSample.mnEmittingVolume = 35;
+    msQueueSample.mMaxDistance = 18;
+    msQueueSample.mRate =
+        gSampManager.GetPlayBackRate(msQueueSample.mSampIdx) + RandomDisplacement(msQueueSample.mSampIdx);
+    msQueueSample.mType = 20;
+    msQueueSample.mSpeedMultiplier = 0;
+    msQueueSample.mSampleIndex = sample_index;
+    msQueueSample.mReleasingSoundFlag = 1;
+    msQueueSample.mReleasingVolumeModificator = 7;
+    msQueueSample.mbIs2D = false;
+    msQueueSample.mLoopStart = 0;
+    msQueueSample.mLoopEnd = -1;
+    msQueueSample.mLoopCount = 1;
+    AddSampleToRequestedQueue();
+}
+#endif
 
 MATCH_FUNC(0x4236C0)
 EXPORT bool Cooldown()
