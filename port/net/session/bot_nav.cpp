@@ -353,9 +353,15 @@ uint32_t net::BotWalker::Walk(const BotView& v, uint32_t id, float x, float y, f
     route.Next(v, x, y, &wx, &wy, z);
     bool jump = false;
     AvoidCars(v, id, x, y, &wx, &wy, &jump);
-    // Progress: the route two cells shorter than its shortest yet (no route at all is none)
+    // Progress: the route two cells shorter than its shortest yet (no route at all is none). A player with a route
+    // to it moves as it is chased: kept, else the bot left the one it fought for someone far.
+    bool player = false;
+    for (const BotView::Seen& s : v.seen)
+    {
+        player |= s.id == id && s.kind == BotView::Seen::kPlayer;
+    }
     const size_t left = route.none ? (size_t)-2 : route.path.size();
-    if (mBest == (size_t)-1 || left + 2 <= mBest)
+    if (mBest == (size_t)-1 || left + 2 <= mBest || (player && !route.none))
     {
         mBest = left, mGoalSince = v.frame;
     }
