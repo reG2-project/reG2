@@ -201,7 +201,13 @@ void net::engine::KeepPlayerArrows()
         for (Hud_Arrow& a : arrows.mArray)
         {
             const ArrowTrace& t = a.mTargets.mPrimaryTarget;
-            found = found || (a.mTargets.mGangInfo.mInUse && t.mTargetType == ArrowTargetType::Player_6 && t.mPlayer == p);
+            const bool mine = a.mTargets.mGangInfo.mInUse && t.mTargetType == ArrowTargetType::Player_6 && t.mPlayer == p;
+            // Made while its player had no ped (CreatePlayerArrows): uncoloured, sprite 0 (a cursor)
+            if (mine && a.mTargets.mArrowSprtIdx == 0)
+            {
+                a.SetPlayerArrowColour(p->mPlayerPed);
+            }
+            found = found || mine;
         }
         if (!found)
         {

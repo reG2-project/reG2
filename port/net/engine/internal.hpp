@@ -68,7 +68,7 @@ enum WorldField
     kWorldReach, // how far this client's snapshot reaches (blocks x 16): the farthest it kept, the rest cut for size
     kWorldIt, // the tag game's "it" (TagGame::mFugitive): player index + 1, 0 nobody
     kWorldItTime, // and the seconds each player has been it (mItTimeSecs), MAX_PLAYERS of them
-    kWorldZoneTurn = kWorldItTime + 6, // which restart zone is next (Map_0x370::GetNextZoneOfTypeRoundRobin): a respawn here goes where the server's does
+    kWorldZoneTurn = kWorldItTime + MAX_PLAYERS, // which restart zone is next (Map_0x370::GetNextZoneOfTypeRoundRobin): a respawn here goes where the server's does
     kWorldRound, // the round (rounds.cpp): its number, the last one's winner (player + 1) and the seconds left
     kWorldWinner,
     kWorldSecondsLeft,
@@ -242,7 +242,7 @@ void ClearRandOwners(); // back to the game's own streams (a single-player game 
 void KeepPlayerArrows(); // an arrow on the HUD to each other player in the game, made again when one is missing (guards.cpp)
 float SnapshotReach(const Snapshot& snap); // schema.cpp
 void ResetForNewGame(); // what the engine keeps of a game: the replicas, pickups, death counts (rounds.cpp)
-void SetNextMap(const std::string& gmp, const std::string& sty, const std::string& scr); // netplay.cpp: the next game's
+void SetNextMap(const std::string& gmp, const std::string& sty, const std::string& scr, int players, int localPlayer); // netplay.cpp: the next game's
 
 // Players (players.cpp)
 void CapturePlayer(int slot, Snapshot& out);

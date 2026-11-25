@@ -33,7 +33,7 @@ struct Network_PlayerInputs
 {
     Network_InputData mInputs[MAX_PLAYERS]; // 0x0
 };
-GTA2_ASSERT_SIZEOF_ALWAYS(Network_PlayerInputs, 0x30);
+GTA2_ASSERT_SIZEOF_ALWAYS(Network_PlayerInputs, MAX_PLAYERS * 8);
 
 union ReceivedPacket
 {

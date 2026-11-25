@@ -4,7 +4,13 @@
 #include "fix16.hpp"
 
 // Maximum number of players in a (network) game
-#define MAX_PLAYERS 6
+#if defined(GTA2_PORT)
+// Port: network games of more players (port/net/core/player_limit.hpp); the original has 6
+    #include "../port/net/core/player_limit.hpp"
+    #define MAX_PLAYERS NET_MAX_PLAYERS
+#else
+    #define MAX_PLAYERS 6
+#endif
 
 class Player;
 class Sprite;
@@ -143,7 +149,7 @@ class Game
     char_type mUnused3E; // 0x3E
     char_type mUnused3F; // 0x3F
 };
-GTA2_ASSERT_SIZEOF_ALWAYS(Game, 0x40);
+GTA2_ASSERT_SIZEOF_ALWAYS(Game, 0x40 + (MAX_PLAYERS - 6) * 4);
 
 EXTERN_GLOBAL(Game*, gGame_0x40);
 

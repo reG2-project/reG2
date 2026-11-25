@@ -2,6 +2,9 @@
 
 #include "Function.hpp"
 #include <windows.h>
+#if defined(GTA2_PORT)
+    #include "../port/net/core/player_limit.hpp"
+#endif
 
 struct STexture;
 
@@ -70,7 +73,12 @@ struct TextureCache
     bool mbFreeCarDamageTextures; // 0x1000
     bool mbFreeTileTextures; // 0x1001
     STexture* mCarDamageTextures[48]; // 0x1004
+#if defined(GTA2_PORT)
+    // Port: 16 per player (their RollingDigitCounters) for more than the original's 6 (port/net/core/player_limit.hpp)
+    DigitTexture mDigitTextures[16 * NET_MAX_PLAYERS];
+#else
     DigitTexture mDigitTextures[96]; // 0x10C4
+#endif
     STexture* mpSharedTexture; // 0x1544: 128x128, re-pointed at different pixel data on demand
     RemapTextureSet mSpriteTextures; // 0x1548
     RemapTextureSet mCarRemapTextures; // 0x155C
@@ -103,6 +111,8 @@ struct TextureCache
     EXPORT TextureCache();
     EXPORT ~TextureCache();
 };
+#if !defined(GTA2_PORT)
 GTA2_ASSERT_SIZEOF_ALWAYS(TextureCache, 0x15D8);
+#endif
 
 EXTERN_GLOBAL(TextureCache*, gTextureCache_15D8);

@@ -23,6 +23,7 @@ add_executable(test_transport ${NET}/tests/test_transport.cpp ${net_transport_sr
 target_link_libraries(test_transport PRIVATE enet)
 add_executable(test_bot ${NET}/tests/test_bot.cpp ${NET}/session/bot_nav.cpp)
 add_executable(test_rounds ${NET}/tests/test_rounds.cpp ${NET}/session/round_flow.cpp)
+target_compile_definitions(test_core PRIVATE NET_TESTDATA="${NET}/testdata")
 set(net_tests test_core test_transport test_bot test_rounds)
 foreach(t ${net_tests})
     target_compile_options(${t} PRIVATE ${arch_flags})
@@ -33,6 +34,13 @@ foreach(t ${net_tests})
         target_link_options(${t} PRIVATE -static)
     endif()
 endforeach()
+
+# The test map's script compiler (scripts/mis2scr.py), if there is a Python
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME test_mis2scr COMMAND Python3::Interpreter ${NET}/tests/test_mis2scr.py)
+    set_tests_properties(test_mis2scr PROPERTIES LABELS net)
+endif()
 
 # The rest is the game's: built into it with the game's flags (CMakeLists.txt). Its own NetPlay and NetUi stand in for
 # the game's DirectPlay ones (engine/netplay.cpp).

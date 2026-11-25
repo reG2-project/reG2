@@ -9,7 +9,7 @@ struct FragsByVictim
 {
     s16 mFragsOnVictim[MAX_PLAYERS]; // 0x0
 };
-GTA2_ASSERT_SIZEOF_ALWAYS(FragsByVictim, 0xC);
+GTA2_ASSERT_SIZEOF_ALWAYS(FragsByVictim, MAX_PLAYERS * 2);
 
 struct PlayerName
 {
@@ -192,7 +192,9 @@ struct GameSession
 
     EXPORT s16 GetFragsOnPlayer(u8 player_killer_idx, u8 player_victim_idx) const;
 };
+#if !defined(GTA2_PORT) // Port: bigger with more players (MAX_PLAYERS, Game.hpp)
 GTA2_ASSERT_SIZEOF_ALWAYS(GameSession, 0x578);
+#endif
 
 EXTERN_GLOBAL(GameSession, gGameSession);
 

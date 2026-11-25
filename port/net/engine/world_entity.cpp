@@ -97,11 +97,11 @@ void net::engine::ApplyWorld(const EntityState& w)
     r.phase = (uint8_t)w.f[kWorldPhase];
     r.phaseLeft = w.f[kWorldPhaseLeft];
     r.minPlayers = (uint8_t)w.f[kWorldMinPlayers];
-    r.ready = (uint8_t)w.f[kWorldReady];
+    r.ready = (SlotMask)w.f[kWorldReady];
     r.voteKind = (uint8_t)w.f[kWorldVote];
     r.voteArg = (uint8_t)w.f[kWorldVoteArg];
-    r.voteYes = (uint8_t)w.f[kWorldVoteYes];
-    r.voteNo = (uint8_t)w.f[kWorldVoteNo];
+    r.voteYes = (SlotMask)w.f[kWorldVoteYes];
+    r.voteNo = (SlotMask)w.f[kWorldVoteNo];
     r.voteLeft = (uint8_t)w.f[kWorldVoteLeft];
     for (int i = 0; i < kRoundSlots; i++)
     {

@@ -2,11 +2,13 @@
 // flow (session/round_flow.cpp) keeps it, the world entity carries it to the clients (engine/world_entity.cpp), and a
 // client shows it. No game types: the session and the engine both use it.
 #pragma once
+#include "player_limit.hpp"
 #include <stdint.h>
 
 namespace net
 {
-const int kRoundSlots = 8; // player slots the state has room for (bit masks, map choices)
+const int kRoundSlots = kMaxPlayers; // player slots the state has room for (bit masks, map choices)
+typedef uint16_t SlotMask; // a bit per slot
 
 enum RoundPhase : uint8_t
 {
@@ -33,10 +35,10 @@ struct RoundState
     int phaseLeft = 0; // seconds left of the warmup (0: waiting for players or for everyone ready), countdown (0: waiting
                        // for everyone to load the map) or results
     uint8_t minPlayers = 0; // for a round to start
-    uint8_t ready = 0; // bit per slot: ready in the warmup
+    SlotMask ready = 0; // bit per slot: ready in the warmup
     uint8_t voteKind = kVoteNone;
     uint8_t voteArg = 0;
-    uint8_t voteYes = 0, voteNo = 0; // bit per slot
+    SlotMask voteYes = 0, voteNo = 0; // bit per slot
     uint8_t voteLeft = 0; // seconds
     uint8_t mapChoice[kRoundSlots] = {}; // in the results: each slot's choice for the next map, 0 none, else its number + 1
 };

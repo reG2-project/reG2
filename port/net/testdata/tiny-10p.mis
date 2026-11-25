@@ -1,0 +1,32 @@
+// reG2's 10 player test map: Tiny Town (data/MP1-comp.gmp, bil.sty, from the game) with a player at each of its 10
+// restart zones, in 10 looks the HUD tells apart (port/src/player_looks.hpp), and a few weapons.
+// port/net/scripts/mis2scr.py tiny-10p.mis tiny-10p.scr
+
+// PLAYER_PED name = (x, y, z) look rotation; z 255.0: the ground
+PLAYER_PED p1 = (55.5, 191.5, 255.0) 10 0
+PLAYER_PED p2 = (121.5, 181.5, 255.0) 9 180
+PLAYER_PED p3 = (114.5, 170.5, 255.0) 8 90
+PLAYER_PED p4 = (77.5, 173.5, 255.0) 7 270
+PLAYER_PED p5 = (63.5, 185.5, 255.0) 11 0
+PLAYER_PED p6 = (93.5, 194.5, 255.0) 13 90
+PLAYER_PED p7 = (76.5, 194.5, 255.0) 5 180
+PLAYER_PED p8 = (99.5, 181.5, 255.0) 12 270
+PLAYER_PED p9 = (95.5, 166.5, 255.0) 0 0
+PLAYER_PED p10 = (55.5, 166.5, 255.0) 14 90
+
+// GENERATOR name = (x, y) rotation object min_delay max_delay ammo; COLLECT_NN: weapon or power-up NN
+GENERATOR machine_gun = (52.5, 164.5) 0 COLLECT_01 1000 3000 10
+GENERATOR shotgun = (92.5, 164.5) 0 COLLECT_06 1000 3000 10
+GENERATOR molotov = (97.5, 179.5) 0 COLLECT_04 1000 3000 10
+GENERATOR flamethrower = (119.5, 180.5) 0 COLLECT_08 1000 3000 10
+GENERATOR armour = (74.5, 192.5) 0 COLLECT_31 1000 3000 0
+
+LEVELSTART
+
+SWITCH_GENERATOR (machine_gun, ON)
+SWITCH_GENERATOR (shotgun, ON)
+SWITCH_GENERATOR (molotov, ON)
+SWITCH_GENERATOR (flamethrower, ON)
+SWITCH_GENERATOR (armour, ON)
+
+LEVELEND

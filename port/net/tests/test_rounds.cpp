@@ -9,9 +9,10 @@ const int kTps = 30;
 
 std::vector<net::RoundPlayer> Players(int in)
 {
-    std::vector<net::RoundPlayer> p(6);
+    std::vector<net::RoundPlayer> p(net::kRoundSlots);
     for (int i = 0; i < in; i++)
     {
+        p[i].taken = true;
         p[i].in = true;
         p[i].voter = true;
         p[i].name = "P" + std::to_string(i);
@@ -210,6 +211,90 @@ int main()
         CHECK(f.State().voteKind == net::kVoteMap);
         f.Command(tick, 0, "/yes", players, m);
         CHECK(m.changeMap == 1 && f.State().winner == 0);
+    }
+    // Every slot in: the last slot's ready and vote bits count, a kick vote of it passes with a majority
+    {
+        net::RoundFlow f;
+        f.Start(rules, maps, 0);
+        auto players = Players(net::kRoundSlots);
+        const int last = net::kRoundSlots - 1;
+        uint32_t tick = 1;
+        f.Tick(tick, players);
+        net::RoundActions a;
+        for (int i = 0; i < net::kRoundSlots; i++)
+        {
+            f.Command(tick, i, "/ready", players, a);
+        }
+        CHECK(f.State().ready >> last & 1);
+        f.Tick(++tick, players);
+        CHECK(f.State().phase == net::kPhaseCountdown);
+        f.NewGame(++tick, 0, players);
+        net::RoundActions k;
+        f.Command(tick, 0, "/kick P" + std::to_string(last), players, k);
+        CHECK(f.State().voteKind == net::kVoteKick && f.State().voteArg == last);
+        for (int i = 1; i < net::kRoundSlots / 2 + 1; i++)
+        {
+            f.Command(tick, i, "/yes", players, k);
+        }
+        CHECK(k.kick == last);
+    }
+    // Maps that take fewer players than are in: not voted for, not chosen, skipped by the rotation
+    {
+        net::RoundRules rot = rules;
+        rot.rotation = true;
+        net::RoundFlow f;
+        f.Start(rot, maps, 0);
+        f.SetMapPlayers({10, 6, 10});
+        auto eight = Players(8);
+        CHECK(f.Fits(0, eight) && !f.Fits(1, eight) && f.Fits(1, Players(6)));
+        auto gap = Players(2);
+        gap[7].taken = true; // connecting: counts, wherever its slot is (a map change renumbers them)
+        CHECK(f.Fits(1, gap));
+        auto seven = Players(6);
+        seven[9].taken = true;
+        CHECK(!f.Fits(1, seven));
+        uint32_t tick = RunTo(f, 1, net::kPhasePlaying, eight, 120 * kTps);
+        net::RoundActions m;
+        f.Command(tick, 0, "/map 2", eight, m);
+        CHECK(f.State().voteKind == net::kVoteNone && !m.notices.empty() && m.notices.back().second.find("takes 6") != std::string::npos);
+        tick = RunTo(f, tick, net::kPhaseResults, eight, 120 * kTps);
+        net::RoundActions c;
+        for (int i = 0; i < 8; i++)
+        {
+            f.Command(tick, i, "/map 2", eight, c); // refused: no choice made
+        }
+        net::RoundActions next;
+        RunTo(f, tick, net::kPhaseCountdown, eight, 30 * kTps, &next);
+        CHECK(next.changeMap == 2); // the rotation's next that fits, not mp2-6p
+    }
+    // A map change's slots: 0, 1 and 8 in, 4 kept for a reconnect: 0, 1, 2 and 3; on a map of 3 the kept one goes
+    {
+        std::vector<bool> taken(10), kept(10);
+        taken[0] = taken[1] = taken[8] = true;
+        kept[4] = true;
+        CHECK((net::CompactSlots(taken, kept, 6) == std::vector<int>{0, 1, -1, -1, 3, -1, -1, -1, 2, -1}));
+        CHECK((net::CompactSlots(taken, kept, 3) == std::vector<int>{0, 1, -1, -1, -1, -1, -1, -1, 2, -1}));
+        CHECK((net::CompactSlots(taken, kept, 2) == std::vector<int>{0, 1, -1, -1, -1, -1, -1, -1, -1, -1}));
+        // The flags, votes and choices follow: a kick vote on 8 is on 2 then; one on a slot gone closes
+        net::RoundFlow f;
+        f.Start(rules, maps, 0);
+        auto players = Players(0);
+        for (int i : {0, 1, 8})
+        {
+            players[i].taken = players[i].in = players[i].voter = true;
+            players[i].name = "P" + std::to_string(i);
+        }
+        net::RoundActions a;
+        f.Command(1, 8, "/ready", players, a);
+        f.Command(1, 0, "/kick p8", players, a);
+        f.Command(1, 1, "/no", players, a);
+        CHECK(f.State().voteKind == net::kVoteKick && f.State().voteArg == 8);
+        const std::vector<int> to = net::CompactSlots({true, true, false, false, false, false, false, false, true, false}, {}, 6);
+        f.Renumber(to);
+        CHECK(f.State().ready == 1u << 2 && f.State().voteKind == net::kVoteKick && f.State().voteArg == 2);
+        CHECK(f.State().voteYes == 1u << 0 && f.State().voteNo == 1u << 1);
+        f.Renumber({0, 1, -1});
+        CHECK(f.State().voteKind == net::kVoteNone && !f.State().ready && !f.State().voteYes && !f.State().voteNo);
     }
     // Off (an arena): the round from the start, the frag limit starts the next at once
     {
