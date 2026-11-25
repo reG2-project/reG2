@@ -39,7 +39,27 @@ void SetPlayerTyped(int player, uint32_t buttons, uint16_t typed);
 uint16_t TypedChar(uint32_t buttons); // a client's: the character its key press in <buttons> typed here (0: none)
 // The length of a network tick (the game's own setting offers 50, 40 or 33 ms)
 void SetTickMs(int ms);
-void ShowLeavePrompt(bool shown); // the client's "Leave the game?": the gamepad's A and B answer it (net_hooks.hpp)
+// The client's pause menu (port/src/pause_menu.cpp), over the game going on: Escape opens it, a key while open is its own
+// (with the character it typed), and what was chosen in it is taken once
+bool MenuOpen();
+void MenuKey(uint32_t dik, uint16_t typed);
+enum MenuChoice
+{
+    kMenuNothing,
+    kMenuLeave,
+    kMenuReady,
+    kMenuYes,
+    kMenuNo,
+};
+MenuChoice TakeMenuChoice();
+struct MenuPlayer
+{
+    std::string name;
+    int score, deaths, ping; // ping: -1 unknown
+    bool you;
+};
+// What it shows while open: PLAYERS, READY (1) or NOT READY (2) or neither (0), an open vote's question ("": none)
+void OfferMenu(const std::vector<MenuPlayer>& players, const char* scoreHeading, int ready, const std::string& vote);
 // The client's round keys on the gamepad: Back as F1, and in the results the d-pad and A as the arrows and Enter
 void SetRoundPad(bool results);
 bool PadMode(); // the gamepad gave the last input: the hints name its buttons

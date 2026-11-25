@@ -4,7 +4,9 @@
 // (running, the player count, the inputs, the tick) and a client's view of what is shown.
 #include "internal.hpp"
 #include "port/src/rand/owner.hpp"
+#include "port/src/menu.hpp"
 #include "port/src/net_hooks.hpp"
+#include "port/src/pause_menu.hpp"
 #include "port/src/rand/state.hpp"
 #include "Source/Car.hpp"
 #include "Source/Char_Pool.hpp"
@@ -18,6 +20,7 @@
 #include "Source/rng.hpp"
 #include "Source/sprite.hpp"
 #include "Source/GameSession.hpp"
+#include <ctype.h>
 #include <math.h>
 #include <string.h>
 #include <unordered_map>
@@ -217,9 +220,56 @@ uint16_t net::engine::TypedChar(uint32_t buttons)
     return buttons & kKeyDown ? port_TypedChar((int)((buttons >> 12) & 0x1FF)) : 0;
 }
 
-void net::engine::ShowLeavePrompt(bool shown)
+bool net::engine::MenuOpen()
 {
-    gPortLeavePromptShown = shown;
+    return PortPauseMenu::IsOpen();
+}
+
+void net::engine::MenuKey(uint32_t dik, uint16_t typed)
+{
+    PortPauseMenu::HandleNetworkKey((s32)dik, typed);
+}
+
+net::engine::MenuChoice net::engine::TakeMenuChoice()
+{
+    return (MenuChoice)PortPauseMenu::TakeNetworkChoice();
+}
+
+void net::engine::OfferMenu(const std::vector<MenuPlayer>& players, const char* scoreHeading, int ready, const std::string& vote)
+{
+    if (!PortPauseMenu::IsOpen())
+    {
+        return;
+    }
+    PortMenu::NetworkPlayer rows[PortMenu::kMaxNetworkPlayers];
+    int n = 0;
+    for (size_t i = 0; i < players.size() && n < PortMenu::kMaxNetworkPlayers; i++, n++)
+    {
+        PortMenu::NetworkPlayer& row = rows[n];
+        size_t c = 0;
+        for (; c < players[i].name.size() && c < GTA2_COUNTOF(row.mName) - 1; c++)
+        {
+            row.mName[c] = (wchar_t)(unsigned char)toupper((unsigned char)players[i].name[c]); // as the menu's fonts have them
+        }
+        row.mName[c] = 0;
+        row.mScore = players[i].score;
+        row.mDeaths = players[i].deaths;
+        row.mPing = players[i].ping;
+        row.mYou = players[i].you;
+    }
+    static wchar_t sHeading[16], sVote[64];
+    size_t c = 0;
+    for (; scoreHeading[c] && c < GTA2_COUNTOF(sHeading) - 1; c++)
+    {
+        sHeading[c] = (wchar_t)scoreHeading[c];
+    }
+    sHeading[c] = 0;
+    for (c = 0; c < vote.size() && c < GTA2_COUNTOF(sVote) - 1; c++)
+    {
+        sVote[c] = (wchar_t)(unsigned char)toupper((unsigned char)vote[c]);
+    }
+    sVote[c] = 0;
+    PortMenu::OfferNetwork(rows, n, sHeading, ready, vote.empty() ? NULL : sVote);
 }
 
 bool port_PadMode(); // compat/src/pad.cpp

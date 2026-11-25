@@ -47,7 +47,7 @@ bool port_DebugKeys()
 bool port_QuitMessageShown()
 {
     return port_GameRunning() && gGame_0x40->mLocalPlayer &&
-           (gGame_0x40->mLocalPlayer->mShowQuitMessage || PortPauseMenu::IsOpen() || gPortLeavePromptShown);
+           (gGame_0x40->mLocalPlayer->mShowQuitMessage || PortPauseMenu::IsOpen());
 }
 
 namespace

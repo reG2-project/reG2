@@ -782,34 +782,30 @@ uint32_t net::Client::ChooseInput(uint32_t recordedInput)
         }
         mMarkFrame = mFrame;
     }
-    // Escape, and Y or N while its prompt shows, are this client's: the prompt to leave, drawn over the frame (ShowStatus).
-    // Neither the game here nor the server gets them: the game's own quit prompt is on its player, which the snapshots
-    // and resimulations set again (it showed for a moment), and the server's yes ended everyone's game
-    // Enter says yes too: a gamepad's A while the prompt shows (port_QuitMessageShown)
-    // While a chat line is typed, Escape is the line's (dropped: the game has no use for it there), and while the prompt
-    // shows any other key says no, so typing on doesn't answer it
-    const uint32_t kKeyBits = 0x1FF000, kEscape = 0x01, kEnter = 0x1C; // DIK_ESCAPE, DIK_RETURN
-    const bool chatting = !mLeavePrompt && engine::TakeLocalChat().chatting;
-    if (!mReplay && (local & kKeyDown) && (key == kEscape || mLeavePrompt))
+    // Escape, and every key while the pause menu shows, are this client's: the menu, over the game going on (MenuKey).
+    // Neither the game here nor the server gets them: the game's own pause and quit prompt are on its player, which the
+    // snapshots and resimulations set again, and the server's quit ended everyone's game. While the menu shows the
+    // player stands still: no controls go. While a chat line is typed, Escape is the line's (dropped: the game has no
+    // use for it there)
+    const uint32_t kKeyBits = 0x1FF000, kEscape = 0x01; // DIK_ESCAPE
+    const bool menu = engine::MenuOpen();
+    const bool chatting = !menu && engine::TakeLocalChat().chatting;
+    if (!mReplay && (local & kKeyDown) && (key == kEscape || menu))
     {
-        if (mFrame != mPromptKeyFrame + 1 && !chatting) // held: once
+        if ((mFrame != mMenuKeyFrame + 1 || key != mMenuKey) && !chatting) // held: once
         {
-            if (mLeavePrompt && (tolower(engine::TypedChar(local) & 0xFF) == 'y' || key == kEnter))
-            {
-                printf("net: frame %u, left the game\n", mFrame);
-                mLeavePrompt = false;
-                LeaveToMenu("");
-            }
-            else
-            {
-                mLeavePrompt = key == kEscape && !mLeavePrompt;
-            }
+            engine::MenuKey(key, engine::TypedChar(local));
         }
-        mPromptKeyFrame = mFrame;
-        net::engine::ShowLeavePrompt(mLeavePrompt);
+        mMenuKeyFrame = mFrame;
+        mMenuKey = key;
         local &= ~(kKeyDown | kKeyBits);
     }
-    if (!mReplay && !mLeavePrompt && (local & kKeyDown))
+    if (!mReplay && engine::MenuOpen())
+    {
+        local = 0;
+    }
+    ActOnMenu();
+    if (!mReplay && (local & kKeyDown))
     {
         CompleteChat(local, key);
         RoundKeys(local, key);
@@ -820,6 +816,28 @@ uint32_t net::Client::ChooseInput(uint32_t recordedInput)
     }
     mProbe.Input(mFrame, local);
     return local;
+}
+
+void net::Client::ActOnMenu()
+{
+    switch (engine::TakeMenuChoice())
+    {
+        case engine::kMenuLeave:
+            printf("net: frame %u, left the game\n", mFrame);
+            LeaveToMenu("");
+            break;
+        case engine::kMenuReady:
+            SendCommand("/ready");
+            break;
+        case engine::kMenuYes:
+            SendCommand("/yes");
+            break;
+        case engine::kMenuNo:
+            SendCommand("/no");
+            break;
+        default:
+            break;
+    }
 }
 
 // For the test log: the deaths this game carried out, and how often it had a player in or out of a car otherwise than
@@ -1342,10 +1360,6 @@ void net::Client::ShowStatus()
     {
         centre = "";
     }
-    else if (mLeavePrompt)
-    {
-        centre = "Leave the game?  Y / N";
-    }
     else if (!mConnected)
     {
         centre = "Lost the server, reconnecting";
@@ -1660,7 +1674,7 @@ void net::Client::ShowRound()
     engine::SetRoundPad(r.phase == kPhaseResults && !mMaps.empty());
     const bool pad = engine::PadMode();
     std::string banner;
-    const bool hidden = !mConnected || mLeft || mLeavePrompt; // the leave prompt (ShowStatus) alone over the frame
+    const bool hidden = !mConnected || mLeft || engine::MenuOpen(); // the pause menu alone over the frame
     if (r.phase == kPhaseCountdown && !hidden)
     {
         // Large, in the middle; 0: the server waits for everyone to load the map
@@ -1693,7 +1707,7 @@ void net::Client::ShowRound()
         {
             lines.push_back("You are ready");
         }
-        lines.push_back(pad ? "Back ready   Start leave" : "F1 ready   F10 chat   Esc leave");
+        lines.push_back(pad ? "Back ready   Start menu" : "F1 ready   F10 chat   Esc menu");
     }
     else if (r.phase == kPhaseResults)
     {
@@ -1728,12 +1742,29 @@ void net::Client::ShowRound()
             lines.push_back(std::to_string(m + 1) + "\t" + name + "\t" + (votes ? std::to_string(votes) : std::string("-")) + "\t" + (mine ? "you" : ""));
         }
     }
+    const std::string what = r.voteKind == kVoteNone    ? std::string()
+                             : r.voteKind == kVoteStart ? "start the round"
+                             : r.voteKind == kVoteMap   ? "change to " + (r.voteArg < mMapTitles.size() ? mMapTitles[r.voteArg] : std::string("a map"))
+                                                        : "kick " + engine::PlayerName(r.voteArg);
+    const bool mine = mSlot < kRoundSlots && ((r.voteYes | r.voteNo) >> mSlot & 1);
+    if (engine::MenuOpen())
+    {
+        // The pause menu's PLAYERS, by score (the ping is only ours: the others' isn't sent), its READY and the open vote
+        std::vector<engine::MenuPlayer> players;
+        for (const ScoreRow& row : rows)
+        {
+            const int score = mGameType == 3 ? row.tag : mGameType == 2 ? row.points : row.frags;
+            const bool you = row.slot == mSlot;
+            players.push_back({engine::PlayerName(row.slot), score, row.deaths, you && mConnected && mPingShown ? (int)mPingShown : -1, you});
+        }
+        std::stable_sort(players.begin(), players.end(), [](const engine::MenuPlayer& a, const engine::MenuPlayer& b) { return a.score > b.score; });
+        const bool ready = mSlot < kRoundSlots && (r.ready >> mSlot & 1);
+        engine::OfferMenu(players, mGameType == 3 ? "IT" : mGameType == 2 ? "POINTS" : "FRAGS",
+                          r.phase == kPhaseWarmup && r.minPlayers ? (ready ? 2 : 1) : 0,
+                          r.voteKind != kVoteNone && !mine ? "Vote to " + what : std::string());
+    }
     if (r.voteKind != kVoteNone && !hidden)
     {
-        const std::string what = r.voteKind == kVoteStart ? "start the round"
-                                 : r.voteKind == kVoteMap ? "change to " + (r.voteArg < mMapTitles.size() ? mMapTitles[r.voteArg] : std::string("a map"))
-                                                          : "kick " + engine::PlayerName(r.voteArg);
-        const bool mine = mSlot < kRoundSlots && ((r.voteYes | r.voteNo) >> mSlot & 1);
         lines.push_back("");
         lines.push_back("Vote: " + what + "   " + std::to_string(bits(r.voteYes)) + " yes, " + std::to_string(bits(r.voteNo)) + " no   " +
                         std::to_string(r.voteLeft) + " s" + (mine ? "" : pad ? "   Back: yes" : "   Y / N"));

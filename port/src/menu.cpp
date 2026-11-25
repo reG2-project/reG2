@@ -55,6 +55,7 @@ enum Page
     kSavesPage,
     kLoadPage,
     kQuitPage,
+    kPlayersPage,
     kNumPages,
 };
 
@@ -72,6 +73,9 @@ enum Kind
     kContinue,
     kSaveAndQuit,
     kRadio,
+    kReady,
+    kVoteYes,
+    kVoteNo,
 };
 
 struct Item
@@ -84,7 +88,7 @@ struct Item
 
 const s32 kMaxItems = 20;
 const wchar_t* const kTitles[kNumPages] = {L"OPTIONS", L"GAME", L"GRAPHICS", L"DISPLAY", L"SOUND", L"CONTROLS", L"STATISTICS",
-                                           L"MISSION TRANSCRIPT", L"LOAD GAME", L"LOAD GAME", L"QUIT GAME"};
+                                           L"MISSION TRANSCRIPT", L"LOAD GAME", L"LOAD GAME", L"QUIT GAME", L"PLAYERS"};
 
 const s32 kNumControls = 12;
 // SPECIAL 3, the last control, does nothing in the game: it keeps its bindings but is not shown.
@@ -154,6 +158,13 @@ const wchar_t* sRadio;
 // QUIT GAME's choices offered, and why SAVE AND QUIT is greyed, NULL if it is not.
 bool sQuitChoices;
 const wchar_t* sQuitBlocked;
+// A network game's menu (OfferNetwork): its players, the score's heading, READY (1) or NOT READY (2), the open vote.
+bool sNetwork;
+NetworkPlayer sPlayers[kMaxNetworkPlayers];
+s32 sNumPlayers;
+const wchar_t* sScoreHeading = L"FRAGS";
+s32 sReady;
+wchar_t sVote[kTextLength];
 s32 sColumn; // a Column
 s32 sCapturing = -1; // control waiting for a key or pad input
 bool sDragging; // a slider's knob, with the left button held
@@ -203,6 +214,19 @@ s32 Items(Page page, Item* pItems)
             {
                 pItems[n++] = Item{kResume, 0, sRetry != PortSaves::kNoCheckpoint};
             }
+            if (inGame && sNetwork && sReady)
+            {
+                pItems[n++] = Item{kReady, 0, false};
+            }
+            if (inGame && sNetwork && sVote[0])
+            {
+                pItems[n++] = Item{kVoteYes, 0, false, sVote};
+                pItems[n++] = Item{kVoteNo, 0, false};
+            }
+            if (inGame && sNetwork)
+            {
+                pItems[n++] = Item{kGoTo, kPlayersPage, !!sVote[0]};
+            }
             if (inGame && sRadio)
             {
                 pItems[n++] = Item{kRadio, 0, false};
@@ -219,9 +243,9 @@ s32 Items(Page page, Item* pItems)
             {
                 pItems[n++] = Item{kGoTo, kLoadPage, false};
             }
-            for (s32 page = kGamePage; page <= kControlsPage; page++)
+            for (s32 page = sNetwork ? kGraphicsPage : kGamePage; page <= kControlsPage; page++)
             {
-                pItems[n++] = Item{kGoTo, page, inGame && page == kGamePage};
+                pItems[n++] = Item{kGoTo, page, inGame && (page == kGamePage || (sNetwork && page == kGraphicsPage))};
             }
             pItems[n++] = Item{inGame ? kQuit : kBack, 0, true};
             break;
@@ -235,6 +259,7 @@ s32 Items(Page page, Item* pItems)
             return SettingsPage(pItems, PortSettings::kSoundSettings, PortSettings::kNumSoundSettings);
         case kStatsPage:
         case kTranscriptPage:
+        case kPlayersPage:
             pItems[n++] = Item{kBack, 0, false};
             break;
         case kSavesPage:
@@ -252,7 +277,10 @@ s32 Items(Page page, Item* pItems)
             pItems[n++] = Item{kBack, 1, false};
             break;
         case kQuitPage:
-            pItems[n++] = Item{kSaveAndQuit, 0, false};
+            if (!sNetwork)
+            {
+                pItems[n++] = Item{kSaveAndQuit, 0, false};
+            }
             pItems[n++] = Item{kQuit, 1, false};
             pItems[n++] = Item{kBack, 1, false};
             break;
@@ -292,6 +320,10 @@ const wchar_t* EnglishName(const Item& item)
         case kResume:
             return L"RESUME";
         case kQuit:
+            if (sNetwork)
+            {
+                return item.mArg ? L"LEAVE" : L"LEAVE GAME";
+            }
             return item.mArg ? L"QUIT" : L"QUIT GAME";
         case kSaveAndQuit:
             return L"SAVE AND QUIT";
@@ -315,6 +347,12 @@ const wchar_t* EnglishName(const Item& item)
             return L"CONTINUE";
         case kRadio:
             return L"RADIO";
+        case kReady:
+            return sReady == 2 ? L"NOT READY" : L"READY";
+        case kVoteYes:
+            return L"VOTE YES";
+        case kVoteNo:
+            return L"VOTE NO";
         default:
             return item.mArg ? L"CANCEL" : L"BACK";
     }
@@ -683,8 +721,20 @@ void DrawSlider(const Slider& slider, f32 x, f32 y, bool selected, bool dim)
     Rect(knob - 3, middle - 7, knob + 3, middle + 7, colour);
 }
 
+// What a network game turns off (port/docs/netcode.md): TWIN STICK with its settings, and ZOOM.
+bool OffInNetworkGame(const Item& item)
+{
+    const PortSettings::Id id = static_cast<PortSettings::Id>(item.mArg);
+    return sNetwork && item.mKind == kSetting &&
+        (id == PortSettings::kControls || id == PortSettings::kZoom || PortSettings::Requirement(id) == PortSettings::kControls);
+}
+
 bool IsEnabled(const Item& item)
 {
+    if (OffInNetworkGame(item))
+    {
+        return false;
+    }
     if (item.mKind == kSaveAndQuit)
     {
         return !sQuitBlocked;
@@ -695,6 +745,11 @@ bool IsEnabled(const Item& item)
 // Under the page, for a greyed setting: the one it needs.
 void DrawRequirement(const Item& item, f32 x, f32 y)
 {
+    if (OffInNetworkGame(item))
+    {
+        Text(Translate(L"NOT IN NETWORK GAMES"), x, y, MenuFont());
+        return;
+    }
     const PortSettings::Id requirement = PortSettings::Requirement(static_cast<PortSettings::Id>(item.mArg));
     wchar_t text[64];
     const wchar_t* pName = requirement == PortSettings::kLighting ? L"DAY-NIGHT CYCLE"
@@ -1097,7 +1152,7 @@ void GetLayout(Layout* pLayout)
         }
     }
     // The statistics' and the transcript's BACK centred as their rows.
-    const bool centred = sPage == kStatsPage || sPage == kTranscriptPage;
+    const bool centred = sPage == kStatsPage || sPage == kTranscriptPage || sPage == kPlayersPage;
     const f32 x = controls ? 80.0f : (saves ? 40.0f : (centred ? 320 - Width(ItemName(pItems[0]), normal) / 2 : 140.0f));
     f32 columnX[kNumColumns];
     f32 right;
@@ -1131,7 +1186,7 @@ void GetLayout(Layout* pLayout)
     pLayout->mPanelRight = Max(600, right - shift + (controls || saves ? 20 : kArrowGap + 16));
     // In game the hints go under the page, on a panel that ends with them, and two lines are kept under the page for
     // a setting's help or requirement.
-    bool help = sPage == kQuitPage;
+    bool help = sPage == kQuitPage && !sNetwork;
     for (s32 i = 0; i < count; i++)
     {
         const PortSettings::Id id = static_cast<PortSettings::Id>(pItems[i].mArg);
@@ -1147,6 +1202,7 @@ void GetLayout(Layout* pLayout)
         f32 y = ListTop() + (sPage == kStatsPage ? sStatRows * kStatStep + kGapStep - kLineStep : 0);
         y += sPage == kTranscriptPage ? Max(sTranscript, kLineStep) + kGapStep - kLineStep : 0;
         y += sPage == kLoadPage ? kLineStep + kGapStep : 0;
+        y += sPage == kPlayersPage ? sNumPlayers * kLineStep + kGapStep : 0;
         y += saves ? (count == 1 ? kTabsStep - kHeadingsStep + kGapStep : kTabsStep) : 0;
         for (s32 i = 0; i < count; i++)
         {
@@ -1433,6 +1489,10 @@ void Open()
     sQuitChoices = false;
     sQuitBlocked = NULL;
     sRadio = NULL;
+    sNetwork = false;
+    sNumPlayers = 0;
+    sReady = 0;
+    sVote[0] = 0;
     sCapturing = -1;
     sDragging = false;
     DiscardMouse();
@@ -1508,6 +1568,34 @@ void OpenSaves(const PortSaves::Entry* pEntries, s32 count, const bool* pCities)
     Open();
     OfferSaves(pEntries, count, pCities);
     GoTo(kSavesPage);
+}
+
+void OfferNetwork(const NetworkPlayer* pPlayers, s32 count, const wchar_t* pScoreHeading, s32 ready, const wchar_t* pVote)
+{
+    Item items[kMaxItems];
+    s32 n = Items(kMainPage, items);
+    s32& selected = sSelected[kMainPage];
+    const Item was = items[selected < n ? selected : n - 1];
+    sNetwork = true;
+    sNumPlayers = count < kMaxNetworkPlayers ? count : kMaxNetworkPlayers;
+    memcpy(sPlayers, pPlayers, sNumPlayers * sizeof(sPlayers[0]));
+    sScoreHeading = pScoreHeading;
+    sReady = ready;
+    wcsncpy(sVote, pVote ? pVote : L"", kTextLength - 1);
+    sVote[kTextLength - 1] = 0;
+    n = Items(kMainPage, items);
+    s32 i = 0;
+    while (i < n && !(items[i].mKind == was.mKind && items[i].mArg == was.mArg))
+    {
+        i++;
+    }
+    // A line gone (a vote ended): the one in its place.
+    selected = i < n ? i : (selected < n ? selected : n - 1);
+}
+
+bool OnLeaveQuestion()
+{
+    return sNetwork && sPage == kQuitPage;
 }
 
 bool OnSaves()
@@ -1610,6 +1698,12 @@ Result HandleInput(Input input)
                     return kClosed;
                 case kRadio:
                     return kNextStation;
+                case kReady:
+                    return kReadyChosen;
+                case kVoteYes:
+                    return kVotedYes;
+                case kVoteNo:
+                    return kVotedNo;
                 case kSave:
                     return kLoadSave;
                 case kRetry:
@@ -1621,7 +1715,7 @@ Result HandleInput(Input input)
                 case kSaveAndQuit:
                     return IsEnabled(item) ? kSaveAndQuitGame : kNothing;
                 default:
-                    if (sQuitChoices && !item.mArg)
+                    if ((sQuitChoices || sNetwork) && !item.mArg)
                     {
                         GoTo(kQuitPage);
                         return kEntered;
@@ -1778,7 +1872,39 @@ Result HandleMouse(f32 scale, f32 left, f32 top)
 
 const wchar_t* Title()
 {
-    return Translate(kTitles[sPage]);
+    return Translate(sNetwork && sPage == kQuitPage ? L"LEAVE GAME" : kTitles[sPage]);
+}
+
+// PLAYERS: a heading, then a line per player, the local one in red.
+static void DrawPlayers()
+{
+    const s16 font = MenuFont();
+    const f32 kNameX = 80;
+    const f32 kRights[3] = {350, 460, 560};
+    const auto row = [&](wchar_t (*pTexts)[kTextLength], f32 y, bool selected, bool dim) {
+        Text(pTexts[0], kNameX, y, font, selected, dim);
+        for (s32 c = 1; c < 4; c++)
+        {
+            Text(pTexts[c], kRights[c - 1] - Width(pTexts[c], font), y, font, selected, dim);
+        }
+    };
+    wchar_t texts[4][kTextLength];
+    const wchar_t* const headings[4] = {L"PLAYER", sScoreHeading, L"DEATHS", L"PING"};
+    for (s32 c = 0; c < 4; c++)
+    {
+        swprintf(texts[c], L"%ls", Translate(headings[c]));
+    }
+    row(texts, ListTop(), false, true);
+    for (s32 i = 0; i < sNumPlayers; i++)
+    {
+        const NetworkPlayer& player = sPlayers[i];
+        swprintf(texts[0], L"%ls", player.mName);
+        FitText(texts[0], kRights[0] - kNameX - 60);
+        swprintf(texts[1], L"%d", player.mScore);
+        swprintf(texts[2], L"%d", player.mDeaths);
+        swprintf(texts[3], player.mPing < 0 ? L"-" : L"%d", player.mPing);
+        row(texts, ListTop() + (i + 1) * kLineStep, player.mYou, false);
+    }
 }
 
 void Draw(f32 scale, f32 left, f32 top, bool panel)
@@ -1816,6 +1942,10 @@ void Draw(f32 scale, f32 left, f32 top, bool panel)
     {
         const wchar_t* pEmpty = Translate(L"NO MESSAGES YET");
         Text(pEmpty, 320 - Width(pEmpty, normal) / 2, ListTop(), normal, false, true);
+    }
+    if (sPage == kPlayersPage)
+    {
+        DrawPlayers();
     }
     if (sPage == kLoadPage)
     {
@@ -1858,7 +1988,7 @@ void Draw(f32 scale, f32 left, f32 top, bool panel)
         const wchar_t* pHelp = item.mKind == kSetting ? PortSettings::Help(static_cast<PortSettings::Id>(item.mArg)) : NULL;
         // QUIT GAME's choices: why SAVE AND QUIT is greyed, what QUIT loses.
         const wchar_t* pLost = L"PROGRESS SINCE YOUR LAST SAVE WILL BE LOST";
-        pHelp = item.mKind == kSaveAndQuit ? sQuitBlocked : (item.mKind == kQuit && item.mArg ? pLost : pHelp);
+        pHelp = item.mKind == kSaveAndQuit ? sQuitBlocked : (item.mKind == kQuit && item.mArg && !sNetwork ? pLost : pHelp);
         if (selected && (!dim || item.mKind != kSetting) && pHelp)
         {
             DrawHelp(Translate(pHelp), Max(layout.mX, helpLeft), underPage, helpLeft, helpRight);
