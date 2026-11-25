@@ -482,6 +482,22 @@ void net::BotWalker::GiveUp(const BotView& v, uint32_t id)
     }
 }
 
+uint32_t net::BotWalker::Enter(const BotView& v, uint32_t id, uint32_t press)
+{
+    if (id != mEnterId || v.frame - mEnterLast > 30 || v.frame < mEnterLast)
+    {
+        mEnterId = id, mEnterSince = v.frame;
+    }
+    mEnterLast = v.frame;
+    if (v.frame - mEnterSince > 120)
+    {
+        GiveUp(v, id);
+        mEnterId = 0;
+        return 0;
+    }
+    return press;
+}
+
 // Stuck: the next way out of the ones it tried here in the last 10 s
 void net::BotWalker::Recover(const BotView& v)
 {

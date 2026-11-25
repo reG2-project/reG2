@@ -64,7 +64,7 @@ uint32_t ApproachCar(const net::BotView& v, net::BotWalker& walker)
     }
     if (d < 2.5f)
     {
-        return v.frame % 20 < 2 ? net::kBtnEnterExit : 0;
+        return walker.Enter(v, car->id, v.frame % 20 < 2 ? net::kBtnEnterExit : 0);
     }
     return walker.Walk(v, car->id, car->x, car->y, car->z);
 }
@@ -516,7 +516,7 @@ class SimpleBot : public DecidingBot
             mMotions.Velocity(target->id, &vx, &vy);
             if (best < 8 && hypotf(vx, vy) < 0.05f)
             {
-                return best < 2.5f ? Press(v, net::kBtnEnterExit) : mWalker.Walk(v, target->id, target->x, target->y, target->z);
+                return best < 2.5f ? mWalker.Enter(v, target->id, Press(v, net::kBtnEnterExit)) : mWalker.Walk(v, target->id, target->x, target->y, target->z);
             }
             target = Nearest(v, net::BotView::Seen::kPlayer, &best, false, &mWalker, true);
         }
@@ -856,7 +856,7 @@ class SoldierBot : public DecidingBot
         // Unarmed and someone drives near: its car, with it pulled out (the game does that on enter)
         if (target && target->inCar && !v.guns && d < 8)
         {
-            return d < 2.5f ? Press(v, net::kBtnEnterExit) : Walk(v, *target);
+            return d < 2.5f ? mWalker.Enter(v, target->id, Press(v, net::kBtnEnterExit)) : Walk(v, *target);
         }
         // Unarmed: to a weapon whatever happens (fistfights between players get stuck, with no harm done)
         float far = 0;
@@ -873,7 +873,7 @@ class SoldierBot : public DecidingBot
         const net::BotView::Seen* car = Nearest(v, net::BotView::Seen::kCar, &far, false, &mWalker);
         if (car && far < 15 && mCommit.Settled(v) && (mTargetDist < 0 || mTargetDist >= 10))
         {
-            return far < 2.5f ? Press(v, net::kBtnEnterExit) : Walk(v, *car); // the game walks it to the door
+            return far < 2.5f ? mWalker.Enter(v, car->id, Press(v, net::kBtnEnterExit)) : Walk(v, *car); // the game walks it to the door
         }
         // Nobody on its ways (a roof it can't see down from): at the nearest anyway, the walker gets it off
         return walkable ? Walk(v, *walkable) : target ? Walk(v, *target) : 0;

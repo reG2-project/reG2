@@ -134,6 +134,8 @@ class BotWalker
     // On the map's ways from where it stands (true when it isn't on a known cell: it may try)
     bool Reachable(const BotView& v, float x, float y, float z) const;
     void GiveUp(const BotView& v, uint32_t id); // <id> left alone for 30 s
+    // <press> to get into car <id> beside it (or a player's); still on foot after 4 s of it, <id> is given up
+    uint32_t Enter(const BotView& v, uint32_t id, uint32_t press);
     BotRoute route;
 
   private:
@@ -155,6 +157,7 @@ class BotWalker
     uint32_t mAvoidCar = 0; // the car it last went round, and by which corner
     int mAvoidCorner = -1;
     float mCheckX = 0, mCheckY = 0;
+    uint32_t mEnterId = 0, mEnterSince = 0, mEnterLast = 0;
 };
 
 // The network bots decide every this many ticks and hold their buttons in between, in training (arena.cpp) and
