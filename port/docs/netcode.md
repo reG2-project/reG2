@@ -893,7 +893,7 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
   respawn: a test blast is the server's alone, and an invulnerable bot walks into it again and again), another bot set on fire, a bot
   client watching with the blend off: every tick it shows a player thrown, the server had it thrown there with the
   same outcome, once a snapshot it applied had the
-  server's throw (before that, it shows its own prediction of that player). The server listens at the client's player
+  tick that throw started at, the server's or its own (before that, it shows its own prediction of that player). The server listens at the client's player
   (`GTA2_NET_SFXLOG=2`): the client plays each fatal landing's thud the server played.
   The burning bot is also electrocuted and drowned (`GTA2_NET_TESTPHASE`): the client still shows it in that state at
   the tick the server's dies. It is also put in a car and pulled out of it: the client shows it at the door only on ticks the
