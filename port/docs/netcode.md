@@ -790,7 +790,12 @@ car within 6 blocks of someone on foot. The fighters (`simple`, the hunter on fo
 pickups they have seen by place (one missing while they stand within 8 blocks is taken, and left 30 s) and fetch the
 best for its distance (machine guns, shotgun and rockets first); they hold the weapon that suits the target (rockets at
 a car from 4 blocks, nothing that blows up nearer), and hold fire while it is in range and faced (every gun on foot
-fires again while attack is held, `Weapon::CanFireWhileHeld`). Fists hit within a quarter block and only knock a player under 30
+fires again while attack is held, `Weapon::CanFireWhileHeld`). Standing at someone, the fighter on foot (`simple`, the
+hunter) turns the last 20 degrees by one-tick taps (12 units, 3 degrees; a held turn overshoots): a shot goes where the
+shooter faces, or a player's machine gun's to the ped it locks on to within 16 degrees of that (`Ped::ComputeAimAngle`).
+Against a player standing still within a block (2 seeds), a hunter's shots that hit it went from 44 of 2080 to 140 of
+212; between bots the frags stayed as they were (simple against simple, 8 seeds: 50 and 48; six bots on downtown and
+Industrial, 6 seeds each: 159 and 166). Fists hit within a quarter block and only knock a player under 30
 health down, so an unarmed bot punches only an unarmed target above that it hurt in the last 4 s, else it fetches a
 weapon. A car coming within a block in the next 20 ticks makes a bot on foot step aside, or jump when it is about to
 hit. Cars aren't in the walking map: a car's box (its sprite's size, its heading) within 3 blocks on the way makes the

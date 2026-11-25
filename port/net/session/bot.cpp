@@ -558,7 +558,14 @@ class SimpleBot : public DecidingBot
             const int err = TurnTo(v.rot, dx, dy);
             // Fists hit a body within a quarter block (Ped::FindNearbyPed): onto it, with the button held, never at a
             // car. Closing in with the walker, which gets it unstuck.
-            uint32_t b = best > (fists ? 0.2f : 1.2f) ? mWalker.Walk(v, target->id, target->x, target->y, target->z) : Steer(err);
+            const bool standing = best <= (fists ? 0.2f : 1.2f);
+            uint32_t b = standing ? Steer(err) : mWalker.Walk(v, target->id, target->x, target->y, target->z);
+            // Standing, the last 20 degrees by one-tick taps (12 units each: a held turn overshoots). A shot goes where
+            // it faces, or a machine gun's to the ped it locks on to, within 16 degrees of that (Ped::ComputeAimAngle).
+            if (standing && !b && abs(err) > 16 && v.frame % 3 == 0)
+            {
+                b = err > 0 ? net::kBtnLeft : net::kBtnRight;
+            }
             // Held: every gun on foot fires again as its reload allows (Weapon::CanFireWhileHeld)
             const bool fire = fists ? best < 0.5f && !target->inCar && !CarAt(v, 0.6f) : InRange(v.weapon, best);
             if (abs(err) < 100 && fire)
