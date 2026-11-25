@@ -11,9 +11,15 @@ Client/server multiplayer for the port (`../README.md`), in the style of Quake 3
 It replaces the original's DirectPlay lockstep game. The game's own code runs unchanged: the netcode sits where
 DirectPlay sat (`NetPlay`), and the few changes to `Source/` are port-only hooks ("The game's code").
 
-What works: 1-6 players on the game's multiplayer maps, frags, points and tag games, police, traffic, trains and ambient peds,
+What works: 1-10 players on the game's multiplayer maps, frags, points and tag games, police, traffic, trains and ambient peds,
 joining and leaving mid-game, rounds with warmup, results and votes, map rotations, chat with commands, reconnecting,
-a frontend page to join, bots (scripted and trained), recordings that replay without a server. Protocol 27.
+a frontend page to join, bots (scripted and trained), recordings that replay without a server. Protocol 30.
+
+The player limit is `NET_MAX_PLAYERS` (`core/player_limit.hpp`, 10), the port build's `MAX_PLAYERS`; the original and
+the MSVC build have 6. The map decides how many play on it ("Maps and players"). Each look a script gives a player has
+its HUD colour and arrow from one table (`port/src/player_looks.hpp`): the original's, and three more looks (the police,
+Elvis, the fireman) for 10 apart. What stays as the game has it: the police chase 4 criminals at once, the ambient
+traffic and peds are 3 players' worth for everyone, and Residential has 4 restart zones (players start two to a zone).
 
 ## Running
 
@@ -30,12 +36,53 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 
 | | Options |
 |---|---|
-| Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players 1-6`, `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
+| Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players N` (1-10, a cap; by default what the maps take), `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
 | Round flow | `--minplayers N` (2), `--warmup s` (60), `--results s` (15), `--votes start,map,kick` (or `none`), `--rounds on\|off` |
 | Arena | `--arena brain,...` (bots on the server itself), `--ticks N` (the result printed and the server ended at tick N), `--seed N` |
 | Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` |
 | Either end | `--lag ms`, `--jitter ms`, `--loss %`, `--lossburst N`, `--spike ms:on:every`: a link conditioner on this end's sends (losses in bursts of N on average; ms more delay for `on` s every `every` s); `--mtu N`: the link's MTU (IP packets, 1280 by default, which fits the VPNs people play over: Tailscale 1280, WireGuard 1420, Hamachi 1404; 1428 the most) |
 | Any | `--data <folder>` (the game folder, or its `data/`: else `GTA2_DIR`...), `--help` |
+
+### Maps and players
+
+A map's script makes a ped for each of its players (`PLAYER_PED`, `ScriptThread::Handle_PLAYER_PED`) and the game has no
+other, so a map takes as many players as its script has `PLAYER_PED`s, at most its `.mmp`'s `PlayerCount` when it has
+one (maps since Vike's 11.3 leave it out: any number; Mini City has one script and an `.mmp` for each of 2 to 6
+players), at most 10 (`core/map_players.cpp`). The game's maps take 6.
+
+A server has as many slots as its biggest map takes, fewer with `--players N` (more than the maps take are cut, with a
+message). The game on a map has that map's players: past them a client is turned away ("the server is full: Downtown
+takes 6 players"), and the slots open again with a map that takes more. Slot N is the map's N-th `PLAYER_PED`. A join
+takes the first free slot of the current map; at a map change the taken slots are numbered again from 0 in their order
+(`CompactSlots`: 0, 1, 8 become 0, 1, 2), then those of players who dropped in the last 40 s (their reconnect), as far
+as the map goes; the other names are forgotten. Each client hears its new slot in its `kMsgMapChange` and takes it with
+the new game (its local player); the server moves each slot's token, name, commands, ready flag, votes and map choice
+with it, and holds every input through the pause. A vote, a results' choice and the rotation go to a map only if it
+takes as many players as are in or connecting (`RoundFlow::Fits`).
+
+A player's look is the remap its `PLAYER_PED` gives the ped, and the HUD tells players apart by it (the digits' colour,
+the arrow's). For a map of its own, give each player a different one of these 10:
+
+| Remap | Look | HUD digits | Arrow |
+|---|---|---|---|
+| 0 | police | steel blue | rust |
+| 5 | red-head redneck | the original's | the original's |
+| 7 | scientist | the original's | the original's |
+| 8 | Zaibatsu | the original's | the original's |
+| 9 | Krishna | the original's | the original's |
+| 10 | Russian | the original's | the original's |
+| 11 | Loonie | the original's | the original's |
+| 12 | Elvis | cyan | cyan |
+| 13 | Yakuza | the original's | the original's |
+| 14 | fireman | pink | purple |
+
+Other remaps give players the HUD can't tell apart: 6 (the blond redneck) has the red-head's colours, as in the
+original, and 1-4 and those past 14 have none of their own (the digits' and the arrow's default).
+
+`port/net/testdata/tiny-10p` is a 10-player map on the game's Tiny Town (`MP1-comp.gmp`, `bil.sty`): a player at each
+of its 10 restart zones in 10 looks, a few weapon generators. Its script is ours, `tiny-10p.mis`, compiled by
+`port/net/scripts/mis2scr.py` (only what it needs: `PLAYER_PED`, `GENERATOR`, `SWITCH_GENERATOR`, `LEVELSTART`,
+`LEVELEND`). To play it, copy `tiny-10p.mmp` and `tiny-10p.scr` into `data/`: `--map tiny-10p`.
 
 ## Hosting a game
 
@@ -118,7 +165,9 @@ last inputs held for 5 ticks after the last snapshot, then without fire, then fr
 the connection (after 5-10 s) it shows **Lost the server, reconnecting** and connects again every 3 s with its slot's
 token (the welcome's): the server gives the slot back with its score and ammo, also while it still has the old
 connection (dropped then, the player stays where it is), else at a restart zone. A game the server went on to
-meanwhile (a round's fresh game, another map) starts here as a map change does. After 30 s it goes back to the
+meanwhile (a round's fresh game, another map) starts here as a map change does, in the slot the welcome gives (a map
+change may have renumbered it; a dropped player's slot is kept if the map has room after those in, else he joins again as
+a new one). After 30 s it goes back to the
 network page. A new join under the name of a player who left takes that slot, with an empty score.
 
 **Chat** is the game's own: F10 starts a line, each key types into it, Enter ends it, and every machine shows
@@ -426,7 +475,7 @@ A little-endian bitstream (`core/bitstream.cpp`), never a copy of a struct: clie
 | `kMsgLeave` | reliable | why a client leaves (its copy of the map differs) |
 | `kMsgCommands` | unreliable | the last few commands (tick and input bits, each delta-coded against the one before; a key press with the character it typed) and the newest snapshot the client has |
 | `kMsgSnapshot`, `kMsgSnapshotPart` | unreliable | server tick, the baseline it is made against, the other players' forwarded controls, entities with field masks and changed fields (`core/snapshot.cpp`) |
-| `kMsgMapChange` | reliable | the next map, after a round, with its files' CRC-32s |
+| `kMsgMapChange` | reliable | the next map, after a round, with its files' CRC-32s, the players of its game and the client's slot in it |
 | `kMsgPing`, `kMsgPong` | unreliable | the client's clock, sent back at once |
 | `kMsgCommand`, `kMsgNotice` | reliable | a player's command; a line to show (a vote, a player ready) |
 
@@ -441,7 +490,8 @@ the input, to `recordings/session-<n>.rec` (the newest 10, each stopped at 200 M
 `GTA2_NET_RECORD=<file>` elsewhere, `off` none). A client does nothing but react to what arrives and to its own input,
 so `--replay <file>` plays the session again without a server, tick for tick, as fast as the game runs: a minute in
 about 2 s, the same every time. **F12, or the key under Esc, marks a moment** in play: the client and its replay print
-`net: mark <n> at frame <f>`, so a bug seen in play is "the last session, mark 2".
+`net: mark <n> at frame <f>`, so a bug seen in play is "the last session, mark 2". A recording replays only on a build
+of the same protocol (its welcome's version): another one's is refused with both numbers.
 
 ## Security
 
@@ -571,6 +621,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Car.cpp` | `Car::TryHonkHorn` | a train's lead without a driver (a player got out of a carriage that stood still) doesn't read it |
 | `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`), `gPortChatChar` | the chat types the keyboard layout's characters; a server, those its clients typed |
 | `Hud.cpp` | `gPortServerKillNotices` | a client's kill notices are the server's deaths only |
+| `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
 | `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
 | `Pool.hpp`, `Car.cpp`, `Char_Pool.cpp`, `Game.cpp` | `PortRand::Scope` (`port/src/rand/owner.hpp`) | who a random draw belongs to |
@@ -736,9 +787,6 @@ own (`single`) and rollback in scenes with explosions (`explode`).
 - **An instant gang doesn't board a bus** (on the server, so the game's own AI): the members walk to the doors and stay
   there; normal cars work. To check against a traffic bus, then the original under wine.
 - **The game's results page** instead of the overlay's text; a minimum of players that counts people only.
-- **More than 6 players**: about 45-50 places in the game depend on the count (arrays sized `MAX_PLAYERS`, a few
-  literal 6s, a `u8` bitmask, the results screen, colours, the scripts' six `PLAYER_PED`s). A port-only cap with a
-  runtime count covers most; spawn points beyond the scripts' from the restart zones.
 - **Modes** beyond the game's frags, points and tag (team deathmatch, CTF) as a mode module, reusing the game's assets.
 - **Hardening**: the game's loaders (GMP, STY, SCR) on a hostile map pack: port-only checks in their write paths
   first (a sprite delta's apply, `LoadMissionScript`, `LoadStringTbl`), then a validator; rate limits on a server;

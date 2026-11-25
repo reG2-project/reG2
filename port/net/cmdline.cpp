@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define NET_STR2(x) #x
+#define NET_STR(x) NET_STR2(x)
+
 namespace
 {
 const char kUsage[] =
@@ -21,7 +24,7 @@ const char kUsage[] =
     "  --port N              UDP port, 27920\n"
     "  --map <mmp>           a multiplayer map in data/, downtown-6p\n"
     "  --maps <mmp>,<mmp>    a rotation: a round on each in turn, the first instead of --map\n"
-    "  --players N           1-6, 6\n"
+    "  --players N           player slots at most (1-" NET_STR(NET_MAX_PLAYERS) "); by default what the maps take (their PLAYER_PEDs)\n"
     "  --gametype 1-3        frags, points, tag\n"
     "  --fraglimit N         10 (a points game's is money: 10000)\n"
     "  --timelimit min       a round's time limit\n"
@@ -56,7 +59,7 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
 {
     ServerConfig& sc = o.sc;
     ClientConfig& cc = o.cc;
-    sc.game.players = 6;
+    sc.game.players = 0; // no --players: the maps decide (SetUpMaps)
     std::vector<std::string> rest;
     // A server's options: an error without --server, so a single-player game never takes one (--traffic) or drops it
     static const char* const kServerOnly[] = {"--window", "--port", "--map", "--maps", "--minplayers", "--warmup", "--results",
@@ -127,7 +130,13 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
         }
         else if (a == "--players" && more)
         {
-            sc.game.players = atoi(args[++i].c_str());
+            const int players = atoi(args[++i].c_str());
+            if (players < 1 || players > kMaxPlayers)
+            {
+                fprintf(stderr, "net: --players %s: 1-%d\n", args[i].c_str(), kMaxPlayers);
+                return false;
+            }
+            sc.game.players = players;
         }
         else if (a == "--gametype" && more)
         {

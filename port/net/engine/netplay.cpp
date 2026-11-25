@@ -24,6 +24,8 @@ bool gActive;
 bool gChecked;
 net::engine::FrameHook gHook;
 bool gNextPending; // a map change: the game that ends goes straight into the next (gPortNextNetworkGame)
+int gNextPlayers; // its players: PlayerCount stays the running game's until then
+int gNextLocal; // this machine's player in it
 int gGeneration; // the games started since the boot's
 void* gHookUser;
 bool NextNetworkGame(); // gPortNextNetworkGame
@@ -57,7 +59,12 @@ void CheckEnvironment()
         p = end ? end + 1 : p + strlen(p);
     }
     net::engine::NetworkGame g;
-    g.players = atoi(fields[0].c_str());
+    const int players = atoi(fields[0].c_str());
+    g.players = players < 1 ? 1 : players > MAX_PLAYERS ? MAX_PLAYERS : players;
+    if (g.players != players)
+    {
+        printf("net: GTA2_OFFLINE_MP: %d players, not %s (1-%d)\n", g.players, fields[0].c_str(), MAX_PLAYERS);
+    }
     g.gmp = fields[1];
     g.sty = fields[2];
     g.scr = fields[3];
@@ -167,14 +174,19 @@ bool NextNetworkGame()
     gGameSession.SetStyleName(path);
     snprintf(path, sizeof(path), "data\\%s", gNetGame.scr.c_str());
     gGameSession.SetScriptName(path);
+    gNetGame.players = gNextPlayers;
+    gNetGame.localPlayer = gNextLocal;
+    gNetPlay.mPlayerIdx = gNextLocal; // the new Game's mLocalPlayerIdx (winmain.cpp)
     net::engine::ResetForNewGame();
     gGeneration++;
     return true;
 }
 } // namespace
 
-void net::engine::SetNextMap(const std::string& gmp, const std::string& sty, const std::string& scr)
+void net::engine::SetNextMap(const std::string& gmp, const std::string& sty, const std::string& scr, int players, int localPlayer)
 {
+    gNextPlayers = players;
+    gNextLocal = localPlayer;
     gNetGame.gmp = gmp;
     gNetGame.sty = sty;
     gNetGame.scr = scr;

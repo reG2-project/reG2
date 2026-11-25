@@ -2050,6 +2050,14 @@ bool Ped::HandlePedHitByObject(Object* pObj)
     Ang16 angle;
     Ped* pBlamedPed = NULL;
 
+#if defined(GTA2_PORT)
+    // Port: a char hit as its ped got into a car (the ped's char already gone) crashed below; a ped in a car isn't hit
+    if (!mGameObject)
+    {
+        return false;
+    }
+#endif
+
     if ((mPedState1 == ped_state_1::immobilized_8 ||
          mPedState1 == ped_state_1::dead_9 && pObj->mModel != objects::water_hitting_198) &&
         mPedState2 != ped_state_2::lying_on_floor_22)

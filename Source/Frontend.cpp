@@ -648,12 +648,29 @@ void Frontend::ChangeMenuPage(u16 menu_page_idx)
                 wcsncpy(player_name, gGameSession.GetPlayerName(player)->mName, 50);
             }
             gText_0x14->StrToUpper(player_name);
+#if defined(GTA2_PORT)
+            // Port: the page has rows for 6 players (1-6, the opponents 8-12): with more, the names past them aren't
+            // written, where the original's would run past mElementsArray[15].
+            if (player + 1 <= 6)
+            {
+                wcsncpy(mMenuPagesArray[7].mElementsArray[player + 1].mElementNameStr, player_name, 50);
+            }
+            if (player != user_idx)
+            {
+                if (opponent_idx + 8 <= 12)
+                {
+                    wcsncpy(mMenuPagesArray[7].mElementsArray[opponent_idx + 8].mElementNameStr, player_name, 50);
+                }
+                opponent_idx++;
+            }
+#else
             wcsncpy(mMenuPagesArray[7].mElementsArray[player + 1].mElementNameStr, player_name, 50);
             if (player != user_idx)
             {
                 wcsncpy(mMenuPagesArray[7].mElementsArray[opponent_idx + 8].mElementNameStr, player_name, 50);
                 opponent_idx++;
             }
+#endif
         }
 
         // A quitter loses and a game without a known mode draws: both go through user_value (the tests

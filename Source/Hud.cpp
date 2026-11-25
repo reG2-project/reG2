@@ -37,6 +37,7 @@
 #include "winmain.hpp"
 #if defined(GTA2_PORT)
 #include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
+#include "../port/src/player_looks.hpp"
 #endif
 
 #if defined(GTA2_PORT_SDL)
@@ -939,6 +940,26 @@ void Hud_Arrow::DrawArrow()
             pPlayer = gGame_0x40->mLocalPlayer;
             pCam = pPlayer->get_camera();
 
+#if defined(GTA2_PORT)
+            // Port: a look's arrow may have a palette of its own (PortArrowIndex, SetPlayerArrowColour)
+            s32 arrow_sprite, arrow_type, arrow_remap;
+            PortArrowDecode(mTargets.mArrowSprtIdx, &arrow_sprite, &arrow_type, &arrow_remap);
+            if (arrow_type)
+            {
+                arrow_palette_type = arrow_type;
+            }
+            DrawFigure(sprite_types_enum::user_6,
+                       (s16)arrow_sprite,
+                       mScreenPosX,
+                       mScreenPosY,
+                       mRotation,
+                       pCam->mUiScale,
+                       arrow_palette_type,
+                       (s16)arrow_remap,
+                       1,
+                       14u,
+                       true);
+#else
             DrawFigure(sprite_types_enum::user_6,
                        mTargets.mArrowSprtIdx,
                        mScreenPosX,
@@ -950,6 +971,7 @@ void Hud_Arrow::DrawArrow()
                        1,
                        14u,
                        true);
+#endif
 
             s16 colour_related;
             switch (this->mTargets.mArrowColour)
@@ -1002,6 +1024,14 @@ inline s32 TagGame::GetPlayerTime(Player* pPlayer)
 MATCH_FUNC(0x5d0dc0)
 void Hud_Arrow::SetPlayerArrowColour(Ped* pPed)
 {
+#if defined(GTA2_PORT)
+    // Port: each look's arrow from one table (port/src/player_looks.hpp), its palette with it (DrawArrow)
+    const PortPlayerLook* pLook = PortLookOf(pPed->mRemap);
+    if (pLook && pLook->mArrowSprite)
+    {
+        mTargets.mArrowSprtIdx = PortArrowIndex(*pLook);
+    }
+#else
     switch (pPed->mRemap)
     {
         case 11:
@@ -1030,6 +1060,7 @@ void Hud_Arrow::SetPlayerArrowColour(Ped* pPed)
         default:
             return;
     }
+#endif
 }
 
 MATCH_FUNC(0x5d0e40)

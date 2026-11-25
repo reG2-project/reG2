@@ -1,8 +1,9 @@
 #include "Player.hpp"
 #if defined(GTA2_PORT)
-// Port: the autosave's restore and TWIN STICK.
+// Port: the autosave's restore, TWIN STICK and the network players' HUD colours.
 #include "../port/src/saves.hpp"
 #include "../port/src/twin_stick.hpp"
+#include "../port/src/player_looks.hpp"
 #endif
 #include "car_shop_type.hpp"
 #include "hud_message_priority.hpp"
@@ -2470,6 +2471,17 @@ void Player::ChangeLifeCountByAmount(s32 amount)
 MATCH_FUNC(0x569A10)
 void Player::ColorScoreFromRemap()
 {
+#if defined(GTA2_PORT)
+    // Port: each look's colour from one table (port/src/player_looks.hpp), the original's and more for more players
+    const PortPlayerLook* pLook = PortLookOf(mPlayerPed->mRemap);
+    if (pLook && pLook->mHudPalette)
+    {
+        mScores.GetScoreDigits()->ColorDigits(palette_types_enum::user_remaps_7, pLook->mHudPalette);
+        mScores.GetMultiplayerFragDigits()->ColorDigits(palette_types_enum::user_remaps_7, pLook->mHudPalette);
+        mHudPalette = pLook->mHudPalette;
+        mHudPaletteType = palette_types_enum::user_remaps_7;
+    }
+#else
     switch (mPlayerPed->mRemap)
     {
         case ped_remap_enum::ped_remap_yakuza:
@@ -2525,6 +2537,7 @@ void Player::ColorScoreFromRemap()
         default:
             return;
     }
+#endif
 }
 
 MATCH_FUNC(0x569C20)

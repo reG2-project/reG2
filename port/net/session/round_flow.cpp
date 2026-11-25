@@ -130,10 +130,10 @@ void net::RoundFlow::Left(int slot)
     {
         return;
     }
-    const uint8_t bit = (uint8_t)(1u << slot);
-    mState.ready &= (uint8_t)~bit;
-    mState.voteYes &= (uint8_t)~bit;
-    mState.voteNo &= (uint8_t)~bit;
+    const SlotMask bit = (SlotMask)(1u << slot);
+    mState.ready &= (SlotMask)~bit;
+    mState.voteYes &= (SlotMask)~bit;
+    mState.voteNo &= (SlotMask)~bit;
     mState.mapChoice[slot] = 0;
     if (mState.voteKind == kVoteKick && mState.voteArg == slot)
     {
@@ -155,7 +155,7 @@ net::RoundActions net::RoundFlow::Tick(uint32_t tick, const std::vector<RoundPla
             in++;
             if (players[i].alwaysReady && mState.phase == kPhaseWarmup)
             {
-                mState.ready |= (uint8_t)(1u << i); // shown ready to the clients, as it counts
+                mState.ready |= (SlotMask)(1u << i); // shown ready to the clients, as it counts
             }
             allReady = allReady && (players[i].alwaysReady || (mState.ready >> i & 1));
             allLoaded = allLoaded && players[i].loaded;
@@ -231,7 +231,7 @@ net::RoundActions net::RoundFlow::Tick(uint32_t tick, const std::vector<RoundPla
             mState.phaseLeft = Seconds(mPhaseEnd > tick ? mPhaseEnd - tick : 0);
             if (tick >= mPhaseEnd)
             {
-                const int next = NextMap();
+                const int next = NextMap(players);
                 FreshGame(tick, next >= 0 ? next : mCurrentMap, out); // NewGame: the warmup instead if too few are left
             }
             break;
@@ -272,7 +272,7 @@ void net::RoundFlow::EndRound(uint32_t tick, const std::vector<RoundPlayer>& pla
     if (!mRules.enabled)
     {
         // Without the round flow: the next round at once, or the rotation's next map
-        const int next = mRules.rotation && mMaps.size() > 1 ? (mCurrentMap + 1) % (int)mMaps.size() : mCurrentMap;
+        const int next = RotationNext(players);
         if (next != mCurrentMap)
         {
             out.changeMap = next;
@@ -288,14 +288,87 @@ void net::RoundFlow::EndRound(uint32_t tick, const std::vector<RoundPlayer>& pla
     Enter(tick, kPhaseResults, out);
 }
 
-int net::RoundFlow::NextMap() const
+bool net::RoundFlow::Fits(int map, const std::vector<RoundPlayer>& players) const
+{
+    const int takes = map >= 0 && map < (int)mTakes.size() ? mTakes[map] : kRoundSlots;
+    int taken = 0;
+    for (const RoundPlayer& p : players)
+    {
+        taken += p.taken;
+    }
+    return taken <= takes;
+}
+
+std::vector<int> net::CompactSlots(const std::vector<bool>& taken, const std::vector<bool>& kept, int count)
+{
+    std::vector<int> to(taken.size(), -1);
+    int next = 0;
+    for (int pass = 0; pass < 2; pass++)
+    {
+        for (size_t i = 0; i < taken.size(); i++)
+        {
+            const bool wanted = pass == 0 ? taken[i] : !taken[i] && i < kept.size() && kept[i];
+            if (wanted && next < count)
+            {
+                to[i] = next++;
+            }
+        }
+    }
+    return to;
+}
+
+void net::RoundFlow::Renumber(const std::vector<int>& to)
+{
+    RoundState was = mState;
+    mState.ready = mState.voteYes = mState.voteNo = 0;
+    for (uint8_t& c : mState.mapChoice)
+    {
+        c = 0;
+    }
+    for (size_t i = 0; i < to.size() && i < (size_t)kRoundSlots; i++)
+    {
+        const int n = to[i];
+        if (n < 0 || n >= kRoundSlots)
+        {
+            continue;
+        }
+        const SlotMask bit = (SlotMask)(1u << n);
+        mState.ready |= (was.ready >> i & 1) ? bit : 0;
+        mState.voteYes |= (was.voteYes >> i & 1) ? bit : 0;
+        mState.voteNo |= (was.voteNo >> i & 1) ? bit : 0;
+        mState.mapChoice[n] = was.mapChoice[i];
+    }
+    if (was.voteKind == kVoteKick)
+    {
+        const int n = was.voteArg < to.size() ? to[was.voteArg] : -1;
+        mState.voteKind = n >= 0 ? was.voteKind : (uint8_t)kVoteNone;
+        mState.voteArg = (uint8_t)(n >= 0 ? n : 0);
+        mState.voteYes = n >= 0 ? mState.voteYes : 0;
+        mState.voteNo = n >= 0 ? mState.voteNo : 0;
+    }
+}
+
+int net::RoundFlow::RotationNext(const std::vector<RoundPlayer>& players) const
+{
+    for (int k = 1; mRules.rotation && k < (int)mMaps.size(); k++)
+    {
+        const int m = (mCurrentMap + k) % (int)mMaps.size();
+        if (Fits(m, players))
+        {
+            return m;
+        }
+    }
+    return mCurrentMap;
+}
+
+int net::RoundFlow::NextMap(const std::vector<RoundPlayer>& players) const
 {
     int votes[16] = {};
     int most = 0;
     for (int i = 0; i < kRoundSlots; i++)
     {
         const int c = mState.mapChoice[i] - 1;
-        if (c >= 0 && c < (int)mMaps.size() && c < 16)
+        if (c >= 0 && c < (int)mMaps.size() && c < 16 && Fits(c, players))
         {
             most = ++votes[c] > most ? votes[c] : most;
         }
@@ -313,7 +386,7 @@ int net::RoundFlow::NextMap() const
         static std::mt19937 sRandom{std::random_device{}()}; // not the game's random: that one is part of its state
         return tied[sRandom() % tied.size()];
     }
-    return mRules.rotation && !mMaps.empty() ? (mCurrentMap + 1) % (int)mMaps.size() : mCurrentMap;
+    return RotationNext(players);
 }
 
 int net::RoundFlow::FindMap(const std::string& arg) const
@@ -349,7 +422,7 @@ void net::RoundFlow::Command(uint32_t tick, int slot, const std::string& text, c
         line = line.substr(0, space);
     }
     const std::string& name = players[slot].name;
-    const uint8_t bit = (uint8_t)(1u << slot);
+    const SlotMask bit = (SlotMask)(1u << slot);
     if (line == "/ready")
     {
         if (mState.phase != kPhaseWarmup || !mRules.enabled)
@@ -375,8 +448,8 @@ void net::RoundFlow::Command(uint32_t tick, int slot, const std::string& text, c
             out.notices.push_back({slot, "No vote is open"});
             return;
         }
-        mState.voteYes = (uint8_t)(line == "/yes" ? mState.voteYes | bit : mState.voteYes & ~bit);
-        mState.voteNo = (uint8_t)(line == "/no" ? mState.voteNo | bit : mState.voteNo & ~bit);
+        mState.voteYes = (SlotMask)(line == "/yes" ? mState.voteYes | bit : mState.voteYes & ~bit);
+        mState.voteNo = (SlotMask)(line == "/no" ? mState.voteNo | bit : mState.voteNo & ~bit);
         DecideVote(tick, players, out);
         return;
     }
@@ -401,6 +474,11 @@ void net::RoundFlow::Command(uint32_t tick, int slot, const std::string& text, c
                 list += (i ? ", " : "") + std::to_string(i + 1) + " " + mMaps[i];
             }
             out.notices.push_back({slot, "Maps: " + list});
+            return;
+        }
+        if (!Fits(m, players))
+        {
+            out.notices.push_back({slot, Title(m) + " takes " + std::to_string(mTakes[m]) + " players: more are in"});
             return;
         }
         if (mState.phase == kPhaseResults && mRules.enabled)
@@ -451,7 +529,7 @@ void net::RoundFlow::OpenVote(uint32_t tick, int slot, VoteKind kind, int arg, c
     const int tps = mRules.ticksPerSecond > 0 ? mRules.ticksPerSecond : 30;
     mState.voteKind = kind;
     mState.voteArg = (uint8_t)arg;
-    mState.voteYes = (uint8_t)(1u << slot); // its starter's
+    mState.voteYes = (SlotMask)(1u << slot); // its starter's
     mState.voteNo = 0;
     mVoteEnd = tick + (uint32_t)(mRules.voteSec * tps);
     mState.voteLeft = (uint8_t)mRules.voteSec;
@@ -464,10 +542,10 @@ void net::RoundFlow::OpenVote(uint32_t tick, int slot, VoteKind kind, int arg, c
 // A majority of the people in the game: those who don't vote count as no
 void net::RoundFlow::DecideVote(uint32_t tick, const std::vector<RoundPlayer>& players, RoundActions& out)
 {
-    uint8_t voters = 0;
+    SlotMask voters = 0;
     for (size_t i = 0; i < players.size() && i < (size_t)kRoundSlots; i++)
     {
-        voters |= (uint8_t)(players[i].in && players[i].voter ? 1u << i : 0);
+        voters |= (SlotMask)(players[i].in && players[i].voter ? 1u << i : 0);
     }
     const int n = CountBits(voters), yes = CountBits(mState.voteYes & voters), no = CountBits(mState.voteNo & voters);
     mState.voteLeft = (uint8_t)(mVoteEnd > tick ? Seconds(mVoteEnd - tick) : 0);
@@ -485,11 +563,11 @@ void net::RoundFlow::DecideVote(uint32_t tick, const std::vector<RoundPlayer>& p
     printf("net: round flow: vote %d (%d) %s, %d of %d\n", (int)kind, arg, passed ? "passed" : "failed", yes, n);
     if (passed)
     {
-        Carry(kind, arg, tick, out);
+        Carry(kind, arg, tick, players, out);
     }
 }
 
-void net::RoundFlow::Carry(VoteKind kind, int arg, uint32_t tick, RoundActions& out)
+void net::RoundFlow::Carry(VoteKind kind, int arg, uint32_t tick, const std::vector<RoundPlayer>& players, RoundActions& out)
 {
     if (kind == kVoteKick)
     {
@@ -499,6 +577,11 @@ void net::RoundFlow::Carry(VoteKind kind, int arg, uint32_t tick, RoundActions& 
     if (kind == kVoteStart && mState.phase == kPhaseWarmup)
     {
         FreshGame(tick, mCurrentMap, out);
+        return;
+    }
+    if (kind == kVoteMap && !Fits(arg, players))
+    {
+        out.notices.push_back({-1, Title(arg) + " takes " + std::to_string(mTakes[arg]) + " players: more are in now"});
         return;
     }
     if (kind == kVoteMap)

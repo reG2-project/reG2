@@ -2,6 +2,7 @@
 #include "check.hpp"
 #include "../core/bitstream.hpp"
 #include "../core/crc32.hpp"
+#include "../core/map_players.hpp"
 #include "../core/protocol.hpp"
 #include "../core/snapshot.hpp"
 #include <stdio.h>
@@ -269,6 +270,18 @@ void TestMessages()
           got.map == w.map && got.print.gmp == w.print.gmp && got.print.sty == 7 && got.print.scr == 9 && got.token == w.token &&
           got.game == 513);
 
+    // The most player slots, the last one this client's; one more is refused
+    for (int players : {net::kMaxPlayers, net::kMaxPlayers + 1})
+    {
+        w.players = (uint8_t)players;
+        w.slot = (uint8_t)(net::kMaxPlayers - 1);
+        net::BitWriter mw;
+        net::WriteWelcome(mw, w);
+        net::BitReader mr(mw.Data().data(), mw.ByteCount());
+        CHECK(mr.Bits(8) == net::kMsgWelcome);
+        CHECK(net::ReadWelcome(mr, got) == (players <= net::kMaxPlayers));
+    }
+
     net::Hello hello;
     hello.build = "0.1.0-dev 1a2b3c4d5e";
     hello.name = "me";
@@ -304,13 +317,16 @@ void TestMessages()
     mc.map = "mp1-6p";
     mc.print.sty = 12345;
     mc.game = 513;
+    mc.players = (uint8_t)net::kMaxPlayers;
+    mc.slot = (uint8_t)(net::kMaxPlayers - 1);
     net::BitWriter mw;
     net::WriteMapChange(mw, mc);
     net::BitReader mr(mw.Data().data(), mw.ByteCount());
     CHECK(mr.Bits(8) == net::kMsgMapChange);
     net::MapChange mgot;
     CHECK(net::ReadMapChange(mr, mgot) && mgot.gmp == mc.gmp && mgot.sty == mc.sty && mgot.scr == mc.scr && mgot.game == 513 && mgot.map == mc.map &&
-          mgot.print.sty == 12345 && mgot.print.gmp == 0);
+          mgot.print.sty == 12345 && mgot.print.gmp == 0 && mgot.players == net::kMaxPlayers &&
+          mgot.slot == net::kMaxPlayers - 1);
 
     // The last two have a key press: what it typed follows each (0xE9: an AZERTY's é)
     net::InputCmd cmds[5] = {{100, 1, 0}, {101, 1, 0}, {102, 0x10, 0}, {103, 0x3FFFFF, 0xE9}, {104, 0x3FFFFF, 'q'}};
@@ -343,6 +359,22 @@ void TestMessages()
     CHECK(hb.forwarded.count[0] == 0 && hb.forwarded.count[1] == 3 && hb.forwarded.count[5] == 1);
     CHECK(hb.forwarded.controls[1][0] == 0x101 && hb.forwarded.controls[1][1] == 0x101 && hb.forwarded.controls[1][2] == 0xFFF);
     CHECK(hb.forwarded.controls[5][0] == 0x020);
+
+    // Every slot with inputs, the last one too
+    net::SnapshotHeader all = {7000, 7000, 6999}, allb;
+    for (int i = 0; i < net::kMaxForwardSlots; i++)
+    {
+        all.forwarded.count[i] = 1;
+        all.forwarded.controls[i][0] = (uint16_t)(0x100 + i);
+    }
+    net::BitWriter aw;
+    net::WriteSnapshotHeader(aw, all);
+    net::BitReader ar(aw.Data().data(), aw.ByteCount());
+    CHECK(ar.Bits(8) == net::kMsgSnapshot && net::ReadSnapshotHeader(ar, allb));
+    for (int i = 0; i < net::kMaxForwardSlots; i++)
+    {
+        CHECK(allb.forwarded.count[i] == 1 && allb.forwarded.controls[i][0] == 0x100 + i);
+    }
 }
 
 // zlib's CRC-32, in one go or in pieces
@@ -491,6 +523,21 @@ void TestEntryBits()
     }
 }
 
+// The players a map takes: the test map's script (testdata/tiny-10p.scr, scripts/mis2scr.py) has 10 PLAYER_PEDs
+void TestMapPlayers()
+{
+    FILE* f = fopen(NET_TESTDATA "/tiny-10p.scr", "rb");
+    CHECK(f);
+    std::vector<uint8_t> scr(100000);
+    const size_t n = fread(scr.data(), 1, scr.size(), f);
+    fclose(f);
+    CHECK(net::ScriptPlayerPeds(scr.data(), n) == 10);
+    CHECK(net::ScriptPlayerPeds(scr.data(), 1000) == -1);
+    CHECK(net::MapPlayers(10, 0) == 10 && net::MapPlayers(6, 0) == 6 && net::MapPlayers(6, 4) == 4 && net::MapPlayers(6, 8) == 6);
+    CHECK(net::MapPlayers(net::kMaxPlayers + 2, 0) == net::kMaxPlayers && net::MapPlayers(0, 6) == 0);
+    printf("map players ok\n");
+}
+
 int main()
 {
     TestBits();
@@ -507,6 +554,7 @@ int main()
     TestNames();
     TestFileNames();
     TestPrintable();
+    TestMapPlayers();
     printf("messages ok\n");
     printf("net core tests passed\n");
     return 0;

@@ -76,9 +76,9 @@ uint32_t net::engine::DataFileCrc(const std::string& name)
     return crc;
 }
 
-void net::engine::ChangeMap(const std::string& gmp, const std::string& sty, const std::string& scr, int pauseTicks)
+void net::engine::ChangeMap(const std::string& gmp, const std::string& sty, const std::string& scr, int players, int localPlayer, int pauseTicks)
 {
-    SetNextMap(gmp, sty, scr);
+    SetNextMap(gmp, sty, scr, players, localPlayer);
     gExitTicks = pauseTicks;
     KeepMapChange();
 }

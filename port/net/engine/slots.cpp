@@ -14,10 +14,22 @@
 #include "Source/Car.hpp"
 #include "Source/map_0x370.hpp"
 #include "Source/ped_graphic_type.hpp"
+#include <string.h>
 
 namespace
 {
-u8 gRemap[MAX_PLAYERS]; // a slot's look, from the ped the map script gave it
+// A slot's look + 1 (0: not known yet), from the ped the map script gave it, this game's (gRemapGame)
+u8 gRemap[MAX_PLAYERS];
+int gRemapGame = -1;
+
+void ForgetLooksOfLastGame()
+{
+    if (gRemapGame != net::engine::GameGeneration())
+    {
+        gRemapGame = net::engine::GameGeneration();
+        memset(gRemap, 0, sizeof(gRemap));
+    }
+}
 } // namespace
 
 bool net::engine::SlotInGame(int slot)
@@ -35,9 +47,10 @@ void net::engine::TakeOutOfGame(int slot)
     {
         return;
     }
+    ForgetLooksOfLastGame();
     if (p->mPlayerPed && slot < MAX_PLAYERS && !gRemap[slot])
     {
-        gRemap[slot] = (u8)p->mPlayerPed->mRemap;
+        gRemap[slot] = (u8)(p->mPlayerPed->mRemap + 1);
     }
     if (Ped* ped = p->mPlayerPed)
     {
@@ -113,7 +126,8 @@ void net::engine::PutInGame(int slot, bool freshScore)
     }
     const Fix16 x = Fix16(zone->mX + zone->mW / 2), y = Fix16(zone->mY + zone->mH / 2);
     const Fix16 z = gMap_0x370->FindGroundZForCoord(x, y);
-    const u8 remap = slot < MAX_PLAYERS && gRemap[slot] ? gRemap[slot] : 0;
+    ForgetLooksOfLastGame();
+    const u8 remap = slot < MAX_PLAYERS && gRemap[slot] ? (u8)(gRemap[slot] - 1) : 0;
     Ped* ped = gPedManager->SpawnPedAt(x, y, z, remap, Ang16((s16)0, (u8)0));
     if (!ped)
     {

@@ -35,7 +35,7 @@ class ClientReplay
 {
   public:
     ~ClientReplay();
-    bool Open(const char* path, Welcome* pWelcome);
+    bool Open(const char* path, Welcome* pWelcome, std::string* error); // false: why in <error>
     // The next frame's record; false at the end of the recording
     bool Frame(uint32_t* pFrame, uint32_t* pRttMs, uint32_t* pInput, std::vector<TransportEvent>& events);
 

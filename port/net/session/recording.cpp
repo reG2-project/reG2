@@ -119,8 +119,9 @@ net::ClientReplay::~ClientReplay()
     }
 }
 
-bool net::ClientReplay::Open(const char* path, Welcome* pWelcome)
+bool net::ClientReplay::Open(const char* path, Welcome* pWelcome, std::string* error)
 {
+    *error = std::string("not a recording: ") + path;
     mFile = fopen(path, "rb");
     char magic[8];
     uint32_t version = 0, size = 0;
@@ -132,6 +133,15 @@ bool net::ClientReplay::Open(const char* path, Welcome* pWelcome)
     std::vector<uint8_t> bytes(size);
     if (fread(bytes.data(), 1, size, mFile) != size)
     {
+        return false;
+    }
+    // Its messages are as the recording build's protocol wrote them: only the same protocol reads them
+    BitReader peek(bytes.data(), bytes.size());
+    const uint32_t protocol = peek.Bits(8) == kMsgWelcome ? peek.VarU() : 0;
+    if (!peek.Overflow() && protocol && protocol != kProtocolVersion)
+    {
+        *error = std::string(path) + " is a recording of protocol " + std::to_string(protocol) + ", this build plays protocol " +
+                 std::to_string(kProtocolVersion) + "'s";
         return false;
     }
     BitReader r(bytes.data(), bytes.size());

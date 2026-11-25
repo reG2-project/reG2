@@ -58,11 +58,11 @@ net::Schema BuildSchema()
     // entities get theirs less often, AgeField)
     car.fields.push_back(FieldDesc{"age", 6, false});
     ped.fields.push_back(FieldDesc{"age", 6, false});
-    net::EntityType world = {"world", {{"cycle", 32, false}, {"rand", 32, false}, {"reach", 10, false}, {"it", 3, false}}};
+    net::EntityType world = {"world", {{"cycle", 32, false}, {"rand", 32, false}, {"reach", 10, false}, {"it", (uint8_t)net::BitsFor(MAX_PLAYERS), false}}};
     AppendNumbered(world.fields, "it_time", MAX_PLAYERS, 16);
     world.fields.push_back(FieldDesc{"zone_turn", 16, true});
     world.fields.push_back(FieldDesc{"round", 16, false});
-    world.fields.push_back(FieldDesc{"winner", 3, false});
+    world.fields.push_back(FieldDesc{"winner", (uint8_t)net::BitsFor(MAX_PLAYERS), false});
     world.fields.push_back(FieldDesc{"seconds_left", 13, false});
     world.fields.push_back(FieldDesc{"game", 16, false});
     world.fields.push_back(FieldDesc{"seed", 32, false}); // kWorldSeed
@@ -70,12 +70,12 @@ net::Schema BuildSchema()
     // The round flow (core/round_state.hpp): kWorldPhase ..
     world.fields.push_back(FieldDesc{"phase", 2, false});
     world.fields.push_back(FieldDesc{"phase_left", 10, false});
-    world.fields.push_back(FieldDesc{"min_players", 4, false});
-    world.fields.push_back(FieldDesc{"ready", 8, false});
+    world.fields.push_back(FieldDesc{"min_players", (uint8_t)net::BitsFor(net::kRoundSlots), false});
+    world.fields.push_back(FieldDesc{"ready", net::kRoundSlots, false});
     world.fields.push_back(FieldDesc{"vote", 2, false});
     world.fields.push_back(FieldDesc{"vote_arg", 8, false});
-    world.fields.push_back(FieldDesc{"vote_yes", 8, false});
-    world.fields.push_back(FieldDesc{"vote_no", 8, false});
+    world.fields.push_back(FieldDesc{"vote_yes", net::kRoundSlots, false});
+    world.fields.push_back(FieldDesc{"vote_no", net::kRoundSlots, false});
     world.fields.push_back(FieldDesc{"vote_left", 7, false});
     AppendNumbered(world.fields, "map_choice", net::kRoundSlots, 4);
     world.fields.push_back(FieldDesc{"ambient", 32, true}); // kWorldAmbient

@@ -53,6 +53,8 @@ class TagGame
     s32 mTickTimer; // 0x1C
     bool mbHasQuit[MAX_PLAYERS]; // 0x20
 };
+#if !defined(GTA2_PORT) // Port: bigger with more players (MAX_PLAYERS, Game.hpp)
 GTA2_ASSERT_SIZEOF_ALWAYS(TagGame, 0x28);
+#endif
 
 EXTERN_GLOBAL(TagGame, gTagGame);

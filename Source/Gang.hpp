@@ -133,7 +133,9 @@ class Gang
     char_type mUnused142; // 0x142
     char_type mUnused143; // 0x143
 };
+#if !defined(GTA2_PORT) // Port: bigger with more players (MAX_PLAYERS, Game.hpp)
 GTA2_ASSERT_SIZEOF_ALWAYS(Gang, 0x144);
+#endif
 
 class GangPool
 {
@@ -156,6 +158,8 @@ class GangPool
 
     Gang mGangList[10]; // 0x0
 };
+#if !defined(GTA2_PORT) // Port: bigger with more players (MAX_PLAYERS, Game.hpp)
 GTA2_ASSERT_SIZEOF_ALWAYS(GangPool, 0xCA8);
+#endif
 
 EXTERN_GLOBAL(GangPool*, gGangPool_CA8);
