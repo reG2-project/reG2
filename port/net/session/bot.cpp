@@ -433,6 +433,25 @@ class CarCommit
     uint32_t mSince = 0;
 };
 
+// In a car: wedged once it has stayed within 2 blocks of a spot for 5 s (backing out and in again included). Wedged
+// 3 s more without getting out, it drives on (the doors may be blocked).
+class CarWedge
+{
+  public:
+    bool Wedged(const net::BotView& v)
+    {
+        if (v.car != mCar || v.frame < mFrom || hypotf(v.x - mX, v.y - mY) > 2 || v.frame - mFrom >= 240)
+        {
+            mCar = v.car, mFrom = v.frame, mX = v.x, mY = v.y;
+        }
+        return v.car && v.frame - mFrom >= 150;
+    }
+
+  private:
+    uint32_t mCar = 0, mFrom = 0;
+    float mX = 0, mY = 0;
+};
+
 // A press now and then, not held: once every 4 decisions of 3 ticks
 uint32_t Press(const net::BotView& v, uint32_t button)
 {
@@ -726,13 +745,13 @@ class RamBot : public DecidingBot
         }
         if (!inCar)
         {
-            mWedged = 0;
+            mWedged = false;
             return ApproachCar(v, mWalker);
         }
         float d = 0;
         const net::BotView::Seen* target = Nearest(v, net::BotView::Seen::kPlayer, &d);
-        // Stuck: hardly moved over the last second. Stuck 4 s in a row with nobody pinned in front: out, and that car
-        // left alone for a while.
+        // Stuck: hardly moved over the last second: back out. Wedged with nobody within 6 blocks (a fight there moves
+        // little): out, and that car left alone for a while.
         if (v.frame % 30 == 0)
         {
             const bool still = hypotf(v.x - mLastX, v.y - mLastY) < 0.5f;
@@ -743,16 +762,17 @@ class RamBot : public DecidingBot
                 mBackUntil = v.frame + 30;
                 mReversals++;
             }
-            mWedged = still && (!target || d > 3) ? mWedged + 1 : 0;
-            if (mWedged == 4)
-            {
-                mWalker.GiveUp(v, v.car);
-            }
         }
+        const bool wedged = mWedge.Wedged(v) && (!target || d > 6);
+        if (wedged && !mWedged)
+        {
+            mWalker.GiveUp(v, v.car);
+        }
+        mWedged = wedged;
         // A fighter well armed: out to shoot someone on foot near, or with rockets a car (a car runs people over, but
         // a gun hits them as they dodge)
         const bool outToShoot = mShoots && mCommit.Settled(v) && WellArmed(v) && target && (target->inCar ? (v.gunMask >> 2 & 1) && d < 8 : d < 6);
-        if (mWedged >= 4 || outToShoot)
+        if (wedged || outToShoot)
         {
             return v.frame % 20 < 2 ? net::kBtnEnterExit : 0;
         }
@@ -764,8 +784,9 @@ class RamBot : public DecidingBot
         return net::kBtnForward | Steer(err);
     }
 
-    bool mShoots, mInCar = false;
-    int mEntered = 0, mReversals = 0, mWedged = 0;
+    bool mShoots, mInCar = false, mWedged = false;
+    int mEntered = 0, mReversals = 0;
+    CarWedge mWedge;
     float mLastX = 0, mLastY = 0;
     uint32_t mBackUntil = 0;
     net::BotWalker mWalker;
@@ -914,16 +935,25 @@ class SoldierBot : public DecidingBot
 
     uint32_t Drive(const net::BotView& v, const net::BotView::Seen* target, float d)
     {
-        // Stuck: hardly moved over the last second: back out with the wheel the other way; stuck again and again: out
+        // Stuck: hardly moved over the last second: back out with the wheel the other way; wedged, nobody within 6: out
         if (v.frame >= mStuckCheck)
         {
             const bool still = hypotf(v.x - mStuckX, v.y - mStuckY) < 0.5f;
             mStuckX = v.x, mStuckY = v.y, mStuckCheck = v.frame + 30;
-            mStuckTimes = still ? mStuckTimes + 1 : 0;
             if (still && v.frame >= mBackUntil)
             {
                 mBackUntil = v.frame + 30;
             }
+        }
+        const bool wedged = mWedge.Wedged(v) && (!target || d > 6);
+        if (wedged && !mWedged)
+        {
+            mWalker.GiveUp(v, v.car);
+        }
+        mWedged = wedged;
+        if (wedged)
+        {
+            return Press(v, net::kBtnEnterExit);
         }
         if (!target)
         {
@@ -940,7 +970,7 @@ class SoldierBot : public DecidingBot
         }
         if (v.frame < mBackUntil)
         {
-            return mStuckTimes >= 3 ? Press(v, net::kBtnEnterExit) : net::kBtnBack | (direct > 0 ? net::kBtnRight : net::kBtnLeft);
+            return net::kBtnBack | (direct > 0 ? net::kBtnRight : net::kBtnLeft);
         }
         // Near it, armed (rockets for a car), and not coming at it fast and head on: out, to shoot
         if ((target->inCar ? v.gunMask >> 2 & 1 : v.guns) && d < 7 && (mSpeed < 0.12f || abs(direct) > 240) && mCommit.Settled(v))
@@ -956,12 +986,12 @@ class SoldierBot : public DecidingBot
     }
 
     net::BotRoute mRoute;
-    bool mInCar = false;
+    bool mInCar = false, mWedged = false;
     int mEntered = 0, mLeft = 0;
     float mTargetDist = -1, mSpeed = 0, mLastX = 0, mLastY = 0, mStuckX = 0, mStuckY = 0;
     uint32_t mLastFrame = 0, mStuckCheck = 0, mBackUntil = 0, mSlowFor = 0, mDriveFrame = 0;
     net::BotWalker mWalker;
-    int mStuckTimes = 0;
+    CarWedge mWedge;
     PickupMemory mPickups;
     CarDodge mDodge;
     Motions mMotions;
