@@ -513,6 +513,8 @@ void net::engine::CapturePlayer(int i, Snapshot& out)
         e.f[kPlayerPowerUp + k] = p->mPowerUpTimers[k];
     }
     e.f[kPlayerInvulnerable] = ped->mInvulnerability;
+    const Weapon* weapon = p->GetCurrPlayerWeapon();
+    e.f[kPlayerReload] = weapon ? weapon->mReloadTimer : 0;
     CapturePhases(ped, e, kPlayerPhase);
     out.entities.push_back(e);
 }
@@ -581,6 +583,11 @@ bool net::engine::ApplyPlayer(const EntityState& e)
     ApplyWeapons(p, e);
     ApplyPowerUps(p, ped, e);
     ped->mInvulnerability = (u16)e.f[kPlayerInvulnerable];
+    // A guessed fire doesn't use the weapon (ClientPedMayFire): the server's timer keeps another player's shots on its ticks
+    if (Weapon* weapon = p->GetCurrPlayerWeapon())
+    {
+        weapon->mReloadTimer = (u8)e.f[kPlayerReload];
+    }
     ApplyFire(ped, (e.f[kPlayerState] & kPlayerOnFire) != 0);
     // Its wanted points, the server's: the HUD's cop heads, and the cops' AI here, which gave up the chase at 0 stars
     ped->mWantedPoints = (s16)e.f[kPlayerWanted];

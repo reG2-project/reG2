@@ -85,6 +85,7 @@ enum PlayerField
     kPlayerDeathEvents, // how often it died this game (wraps at 256): what a client carries out (kPlayerDeaths: the round's)
     kPlayerBonus, // its scoring bonuses this game (wraps at 256) << 4 | the last one's voice line (ScoreBonus)
     kPlayerInvulnerable, // Ped::mInvulnerability: how it reacts to cars and blasts (a client's takes no damage either way)
+    kPlayerReload, // its weapon's reload timer (Weapon::mReloadTimer): the ticks a held fire shoots on
     kPlayerPhase, // its phase (PhaseField)
 };
 enum PlayerState

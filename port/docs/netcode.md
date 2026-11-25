@@ -348,7 +348,10 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   past the server's). A repeated fire is a guess: the shooter's pose shows (`Ped::mBf21C.bAttacking`, the gun raised),
   but its weapon is not used (`SetFireGuessed`, `gPortPedMayFire` in `Ped::ManageWeapon`): another player's shots come
   only from the ticks the server forwarded, never drawn for a burst it didn't fire (`GTA2_NET_HOLDFIRE=1` fires the
-  repeated fire too, to compare). `GTA2_NET_NOFORWARD=1` predicts
+  repeated fire too, to compare). As a guess doesn't count its weapon's reload down, the player entity carries the
+  held weapon's timer (`Weapon::mReloadTimer`), so another player's held fire shoots on the server's ticks (a machine gun's
+  lock-on can depend on that tick: who else fired in it). With 150 ms of lag, 13 of an arena hunter's 145 shots came
+  out on other ticks than the server's, none after. `GTA2_NET_NOFORWARD=1` predicts
   by the repeated input alone (to compare on a replay).
   Everything else moves on by the game's own simulation in those ticks. Of the resimulated ticks only the first 4 are
   saved again (the next snapshots restore those; a save of the 3 MB world was three quarters of a rollback's time): the
