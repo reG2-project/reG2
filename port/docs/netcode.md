@@ -789,7 +789,8 @@ foot C s`: the time alive with a gun, unarmed on foot within 1.5 blocks of someo
 car within 6 blocks of someone on foot. The fighters (`simple`, the hunter on foot, `soldier`) remember the weapon
 pickups they have seen by place (one missing while they stand within 8 blocks is taken, and left 30 s) and fetch the
 best for its distance (machine guns, shotgun and rockets first); they hold the weapon that suits the target (rockets at
-a car from 4 blocks, nothing that blows up nearer). Fists hit within a quarter block and only knock a player under 30
+a car from 4 blocks, nothing that blows up nearer), and hold fire while it is in range and faced (every gun on foot
+fires again while attack is held, `Weapon::CanFireWhileHeld`). Fists hit within a quarter block and only knock a player under 30
 health down, so an unarmed bot punches only an unarmed target above that it hurt in the last 4 s, else it fetches a
 weapon. A car coming within a block in the next 20 ticks makes a bot on foot step aside, or jump when it is about to
 hit. Cars aren't in the walking map: a car's box (its sprite's size, its heading) within 3 blocks on the way makes the
