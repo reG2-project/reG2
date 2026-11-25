@@ -4,6 +4,9 @@
 #include "Ped.hpp"
 #include "Pool.hpp"
 #include "char.hpp"
+#if defined(GTA2_PORT)
+#include <stdlib.h>
+#endif
 
 class Camera;
 
@@ -13,6 +16,19 @@ class CharPool
     __forceinline CharPool()
     {
     }
+
+#if defined(GTA2_PORT)
+    // Port: zeroed, as the original's fresh heap gave it: the game reads members it never sets (Ped::mBf224's top bits,
+    // Char::mJumpScaleCounter), so that a heap's old contents don't make two replays of one recording differ
+    static void* operator new(size_t size)
+    {
+        return ::calloc(1, size);
+    }
+    static void operator delete(void* p)
+    {
+        ::free(p);
+    }
+#endif
 
     EXPORT ~CharPool();
 
@@ -121,6 +137,18 @@ class PedPool
     __forceinline PedPool()
     {
     }
+
+#if defined(GTA2_PORT)
+    // Port: zeroed, as CharPool
+    static void* operator new(size_t size)
+    {
+        return ::calloc(1, size);
+    }
+    static void operator delete(void* p)
+    {
+        ::free(p);
+    }
+#endif
 
     EXPORT ~PedPool();
 

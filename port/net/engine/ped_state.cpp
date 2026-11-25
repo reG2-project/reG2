@@ -633,6 +633,14 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
     memcpy(&flags, &p->mBf21C, sizeof(flags));
     flags = (flags & ~kFlagsSent) | ((u32)e.f[kFlags] & kFlagsSent);
     memcpy(&p->mBf21C, &flags, sizeof(flags));
+    // Ped::PoolUpdate electrocutes a ped whose shock counter is at its threshold (the game's are 100), and lays a busted
+    // one down, both through its char: none in a car (this apply may still seat it), and a network game busts nobody
+    p->mElectrocutionThreshold = p->mElectrocutionThreshold ? p->mElectrocutionThreshold : 100;
+    if ((!p->mGameObject || p->mCar || e.f[kPedCar]) && p->mShockCounter >= p->mElectrocutionThreshold)
+    {
+        p->mShockCounter = 0;
+    }
+    p->mBf21C.bBusted = false;
     p->mHealth = (s16)(e.f[kHealth] > 0 ? e.f[kHealth] : 1); // a death comes from the server's state, whole
     if (!driving && Plain(e.f[kStates + kState1], e.f[kStates + kState2]) && Plain(p->mPedState1, p->mPedState2) &&
         PlainStored(e.f[kStates + kStored1], e.f[kStates + kStored2]) && p->mGameObject)

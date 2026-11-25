@@ -522,7 +522,8 @@ What a network game trusts, and what it doesn't:
   a trailer the game wouldn't hitch, an object without a definition, a station that isn't a train's, a ped state whose
   objective lacks its target, a carjacking animation on foot. In port builds the map's lookups stay on the map
   (`Map_0x370`'s `get_base`). `port/net/scripts/fuzz.sh` plays games whose client turns random fields of each
-  snapshot into random values (`GTA2_NET_FUZZ`), best under AddressSanitizer.
+  snapshot into random values (`GTA2_NET_FUZZ`), best under AddressSanitizer (`-p res-6p` for trains: the only
+  multiplayer map whose script makes some).
 - **Text** a peer sent goes to the terminal and the log as printable ASCII, anything else a `?` (`Printable`).
 - **The transport**: 64 KB packets at most (ENet's `maximumPacketSize`, 32 MB by default), and a connection that
   says no hello within 10 s is dropped.
@@ -745,7 +746,7 @@ off by default:
 | `GTA2_NET_TESTFIRE=<tick>:<player>,...` | server | the player set on fire |
 | `GTA2_NET_TESTPATIENTS=<tick>:<player>:<n>[:<blocks>],...` | server | the n ambient peds nearest the player (at least that many blocks away) set on fire: the ambulance comes for their corpses |
 | `GTA2_NET_TESTSTREAK=<tick>:<player>,...` | server | a kill streak's bonus, as the 20th kill in a row gives it |
-| `GTA2_NET_TESTCAR=<tick>:<player>:<model>,...` | server | a car beside the player (11: a bus; 63, 64: a truck cab with a container trailer); model + 1000 * n: damaged by n * 1000 (16: on fire, 26: burning) |
+| `GTA2_NET_TESTCAR=<tick>:<player>:<model>,...` | server | a car beside the player (11: a bus; 63, 64: a truck cab with a container trailer); model + 1000 * n: damaged by n * 1000 (n = 16: on fire, 25: burning); a model the game can't wreck (24 to 26, 85: the HOTDOG_D vans; the wrecks) isn't spawned |
 | `GTA2_NET_TESTTRAIN=<tick>:<player>:<train>,...` | server | the player at the wheel of a train; train + 10: that train into reverse; train + 20: the player on the platform of the station it stops at next |
 | `GTA2_NET_TESTARM=<weapon>:<ammo>[,...]`, `GTA2_NET_TESTWANTED=<points>` | server | every player kept armed (car weapons from 15: the car it drives), or at least that wanted (600: a star) |
 | `GTA2_NET_BOTMAP2=1` | client bot | it votes map 2 in the results (net_check's rounds step) |

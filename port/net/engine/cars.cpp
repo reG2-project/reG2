@@ -253,6 +253,16 @@ static void MakeWreck(Car* car)
     net::engine::gWrecksMade++;
 }
 
+bool net::engine::CarModelWrecks(int model)
+{
+    if (!gGtx_0x106C || model < 0 || model > 255 || !gGtx_0x106C->does_car_exist((u8)model))
+    {
+        return false;
+    }
+    const int wreck = gGtx_0x106C->get_car_info_5AA3B0((u8)model)->wreck + car_model_enum::WRECK0;
+    return wreck <= 255 && gGtx_0x106C->does_car_exist((u8)wreck);
+}
+
 bool net::engine::SetCarState(Car* car, const EntityState& e, bool fresh)
 {
     const bool there = (e.f[kCarWrecked] & kCarWreck) != 0, here = IsWrecked(car);
@@ -267,9 +277,7 @@ bool net::engine::SetCarState(Car* car, const EntityState& e, bool fresh)
         d.fireAbove += car->mDamageLevel > level;
         d.fireBelow += car->mDamageLevel < level;
     }
-    // A model whose wreck the style has (Car::TurnToWreck reads its car_info): the game's cars all do
-    const int wreck = gGtx_0x106C->get_car_info_5AA3B0(car->mCarInfoIdx)->wreck + car_model_enum::WRECK0;
-    if (there && !here && (wreck > 255 || !gGtx_0x106C->does_car_exist((u8)wreck)))
+    if (there && !here && !CarModelWrecks(car->mCarInfoIdx))
     {
         return false;
     }

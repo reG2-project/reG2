@@ -35,6 +35,8 @@ struct Rule
 // A Fix16 x or y on the map, a block off its edges: the map is looked up around what moves, unchecked (Map_0x370::GetBlock)
 const int32_t kMapMin = 1 << 14, kMapMax = 255 << 14;
 const int32_t kCarSpeedMax = 1 << 14; // a block a tick: four times the fastest car, more than twice a train
+// Half a block a tick: above a train's fastest (kTrainSpeedState0, 0.3 a tick), never below 0 (CarAI::RaiseSpeedTo)
+const int32_t kTrainSpeedMax = 1 << 13;
 const int32_t kSpeedMax = 16 << 14; // 16 blocks a tick: far above any speed the game gives a ped (4)
 // A car's z speed: a step's rise or fall over its time step, which a collision's search cuts to an eighth or less
 // (CarPhysics::UpdateZPhysics); 2 blocks a tick measured
@@ -125,7 +127,7 @@ const Rule kRules[] = {
     {kEntityPed, "mVelocityVector.x", kRange, -kSpeedMax, kSpeedMax},
     {kEntityPed, "mVelocityVector.y", kRange, -kSpeedMax, kSpeedMax},
     {kEntityPed, "mAnimationFrame", kRange, 0, 31}, // added to the animation's first sprite: within a ped's 158
-    {kEntityTrain, "speed", kRange, -kCarSpeedMax, kCarSpeedMax},
+    {kEntityTrain, "speed", kRange, 0, kTrainSpeedMax},
     {kEntityTrain, "state", kRange, 0, 5},
     {kEntityTrain, "stop_phase", kRange, 0, 11},
 };

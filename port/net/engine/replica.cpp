@@ -251,8 +251,8 @@ Car* MapCar(Pass& a, const EntityState& e)
             break;
         }
     }
-    // A model the style has (SpawnCarAt reads its car_info)
-    if (!car && RoomForCar() && gGtx_0x106C->does_car_exist((u8)e.f[kCarModel]))
+    // A model the style has (SpawnCarAt reads its car_info) and can wreck, as all the server's cars are
+    if (!car && RoomForCar() && CarModelWrecks(e.f[kCarModel]))
     {
         car = gCarManager_6C->SpawnCarAt(Raw(e.f[kCarX]), Raw(e.f[kCarY]), Raw(e.f[kCarZ]), Angle(e.f[kCarRot]), e.f[kCarModel], Fix16(1));
     }

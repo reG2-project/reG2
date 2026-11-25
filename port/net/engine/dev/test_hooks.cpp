@@ -12,6 +12,7 @@
 #include "Source/WeaponManager.hpp"
 #include "Source/map_0x370.hpp"
 #include <algorithm>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string>
 #include <vector>
@@ -48,6 +49,11 @@ void net::engine::DebugCar(int player, int model)
     const int damage = model / 1000 * 1000; // model + 1000 * n: the car damaged by n * 1000 (16000: on fire, 25000: burning)
     model %= 1000;
     Ped* ped = InGamePed(player);
+    if (!CarModelWrecks(model))
+    {
+        printf("net: test car model %d has no wreck: not spawned\n", model);
+        return;
+    }
     if (ped && !ped->mCar && gCarManager_6C)
     {
         // Beside the player, as the debug menu spawns one (ImGuiDebug.cpp): scale 1, counted as recycled

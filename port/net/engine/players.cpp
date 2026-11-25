@@ -129,7 +129,7 @@ std::string NarrowName(const Player* p)
 // 4 characters a field
 void PackName(const Player* p, net::EntityState& e)
 {
-    for (int k = 0; k < 16; k++)
+    for (int k = 0; k < 16 && p->mPlayerName[k]; k++) // what follows the end is stale memory
     {
         e.f[kPlayerName + k / 4] |= (int32_t)((uint32_t)(p->mPlayerName[k] & 0xFF) << (8 * (k % 4)));
     }

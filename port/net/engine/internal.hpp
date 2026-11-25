@@ -280,6 +280,9 @@ void SetCarPhysics(Car* car, const EntityState& e); // the physics the snapshot 
 // out (the game's own), damage, dents, lights, horn and colour are set. False: it is a wreck here and not there (it has
 // to be made again)
 bool IsWrecked(const Car* car);
+// A model the style has and can wreck (Car::TurnToWreck reads its wreck's car_info): the HOTDOG_D models and the wrecks
+// have none, and the game never spawns them (no rating, no script makes one)
+bool CarModelWrecks(int model);
 // fresh: made or adopted for this entity in this apply, so a wreck there is made one here without blowing up
 bool SetCarState(Car* car, const EntityState& e, bool fresh = false);
 void ExplodeAsServer(Car* car); // a car blown up as the server's was (gPortCarMayExplode lets it)
