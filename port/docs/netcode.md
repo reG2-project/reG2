@@ -69,8 +69,13 @@ Choosing maps that suit the server's players is the admin's job. The shipped map
 restart zones; their scripts handle players alike, so extras play as the others. A community map whose script
 handles players one by one (missions, scores kept per player on `p1`..`pN`) leaves the extras out of those.
 
-A join takes the first free slot; at a map change the taken slots are numbered again from 0 in their order
-(`CompactSlots`: 0, 1, 8 become 0, 1, 2), then those of players who dropped in the last 40 s (their reconnect); the
+A join takes the first free slot, but not one kept for a person who dropped in the last 40 s (the reconnect). A person
+(a hello without `bot`) who finds none takes a bot's: the last arena bot's, else that of the bot client that joined last,
+so the bots that played longest stay; with no bot in, a kept slot. The bot's ped goes and the person starts fresh in the
+slot. A bot client hears "a player took your slot" and is disconnected; an arena bot stands aside and comes back to its
+slot (arena bot N plays slot N) once nobody has it or may come back to it. A bot client never takes a slot from anyone.
+At a map change the taken slots are numbered again from 0 in their order
+(`CompactSlots`: 0, 1, 8 become 0, 1, 2; the arena's slots stay where they are), then those of players who dropped in the last 40 s (their reconnect); the
 other names are forgotten. Slot N is the map's N-th `PLAYER_PED` while there is one. Each client hears its new slot in
 its `kMsgMapChange` and takes it with the new game (its local player); the server moves each slot's token, name,
 commands, ready flag, votes and map choice with it, and holds every input through the pause.
