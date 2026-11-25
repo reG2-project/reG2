@@ -1813,6 +1813,14 @@ void Player::Wasted()
             memcpy(&mAuxGameCamera, &mGameCamera, sizeof(mAuxGameCamera));
             mAuxCamActive = true;
         }
+#if defined(GTA2_PORT)
+        // Port: the death's cry is the corpse's (the clone above), not the player's at its respawn place; in a car,
+        // the player has no char to cry before it respawns
+        if (gPortPlayersDeathCry)
+        {
+            mPlayerPed->mVoiceEvent = 0;
+        }
+#endif
         Player::RespawnPlayer();
     }
     else
