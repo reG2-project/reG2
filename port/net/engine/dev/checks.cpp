@@ -1248,3 +1248,61 @@ void net::engine::PedLog(const char* end)
         }
     }
 }
+
+namespace
+{
+std::string DeathLogPed(const char* name, Ped* ped)
+{
+    char buf[200];
+    Char* c = ped ? ped->mGameObject : NULL;
+    Sprite* s = c ? c->mSpritePtr : NULL;
+    if (!ped)
+    {
+        return "";
+    }
+    snprintf(buf, sizeof(buf), " %s[id %d ped %d/%d h %d", name, ped->mId, (int)ped->mPedState1, (int)ped->mPedState2, (int)ped->mHealth);
+    std::string out = buf;
+    if (c && s)
+    {
+        snprintf(buf, sizeof(buf), " char %d/%d anim %d frame %d spr %d layer %d at %.2f,%.2f", (int)c->mPedState1, (int)c->mPedState2,
+                 (int)c->mAnimationState, (int)c->mAnimationFrame, (int)s->mTypeSpriteIdx, (int)s->mDrawLayer, s->mXy.x.ToFloat(),
+                 s->mXy.y.ToFloat());
+        out += buf;
+    }
+    else
+    {
+        out += " no char";
+    }
+    return out + "]";
+}
+} // namespace
+
+void net::engine::DebugDeathLog()
+{
+    const uint32_t frame = gDebugFrame;
+    static const bool on = getenv("GTA2_NET_DEATHLOG") != NULL;
+    static int sAfter[MAX_PLAYERS];
+    if (!on || !gGame_0x40)
+    {
+        return;
+    }
+    for (int i = 0; i < PlayerCount() && i < MAX_PLAYERS; i++)
+    {
+        Player* p = GetPlayer(i);
+        Ped* ped = p ? p->mPlayerPed : NULL;
+        if (!p || !ped || i == LocalPlayer())
+        {
+            continue;
+        }
+        const bool odd = ped->mPedState1 == ped_state_1::immobilized_8 || ped->isDead() || p->mWastedOrBusted || p->mAuxPed ||
+            ped->mHealth < 100;
+        sAfter[i] = odd ? 10 : sAfter[i] - 1;
+        if (sAfter[i] <= 0)
+        {
+            continue;
+        }
+        printf("net: frame %u, tick %u, death p%d: wasted %d count %d cam %d%s%s\n", frame, gpRng ? (uint32_t)gpRng->get_cur_rng() : 0, i,
+               (int)p->mWastedOrBusted, (int)p->mDeathCountdown, (int)p->mCameraMode, DeathLogPed("ped", ped).c_str(),
+               DeathLogPed("aux", p->mAuxPed).c_str());
+    }
+}

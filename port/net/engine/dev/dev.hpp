@@ -103,6 +103,8 @@ void InstallSfxLog(bool server);
 void DebugSoundChannels(uint32_t frame); // GTA2_NET_SOUNDLOG: the sound's playing channels, printed when they change
 void DebugAnimLog(uint32_t frame); // GTA2_NET_ANIMLOG: the other players' inputs, states and walking animation, every third frame
 void DebugSelfLog(uint32_t frame); // GTA2_NET_SELFLOG: the local player around a death (position, states, the death fields)
+// GTA2_NET_DEATHLOG: each frame, the other players around a death (their ped and corpse clone, as drawn)
+void DebugDeathLog();
 std::string DebugPlayerCar(int player, const Snapshot& snap); // for the logs: its car states here and in the snapshot
 bool DebugCheckPlayerCars(const char* where); // every in-game player's car is a live car; prints the first time not
 // GTA2_NET_CHECKGRID: every ped driving a car is its driver and leaves it through it; each one wrong printed when it goes wrong
