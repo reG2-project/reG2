@@ -54,21 +54,23 @@ Settings live in `gta2_registry.ini` (the registry keys of the Windows game). Wh
 has no `data/<code>.gxt`, the start picks the first of the system's preferred languages that the game has, else
 English, else any language there. Alt+Enter switches
 between window and full screen, and is no Enter for the game or the menus. Other keys pressed with Left Alt
-(SPECIAL 2 by default) act as usual: the original dropped Space, Tab and Enter while it was held. Every gamepad drives the player (only those whose name contains
+(LOOK AROUND by default) act as usual: the original dropped Space, Tab and Enter while it was held. Every gamepad drives the player (only those whose name contains
 `GTA2_GAMEPAD` if set): a button counts on any of them, the sticks are those of the pad used last.
 Bind them in the game's control options (stick and d-pad are the two axes).
 In a vehicle, with FORWARD and BACKWARD on the pad's up and down (the default), RT accelerates, LT brakes
 or reverses, both as far as they are pressed, the left stick only steers, more gently when pushed part
-way, and the d-pad works as on foot; SPECIAL 2 (the camera pan, LT
+way, and the d-pad works as on foot; LOOK AROUND (the camera pan, LT
 by default) is then on L3, unless a control uses it.
 The menus, the pause menu too, move with the arrows or WASD by their position (ZQSD on AZERTY), whatever the
 controls, except while a player name is typed.
 They also take the mouse: pointing selects, a click enters or changes a value, the right
 button goes back, the wheel changes a value; the cursor shows while the mouse is in use over a menu.
 Each control has a key, a second key (ALTERNATE: a key, a mouse button or a wheel notch, by default
-WASD by their position (ZQSD on AZERTY) to move, F to enter or exit, the left button to attack and the
-wheel to change weapons; Delete clears it) and a gamepad input. F1 to F12 cannot be bound: they keep their
+WASD by their position (ZQSD on AZERTY) to move, F to enter or exit, E for the horn, the left button to attack
+and the wheel to change weapons; Delete clears it) and a gamepad input. F1 to F12 cannot be bound: they keep their
 own uses (F7 the brief, F9 the zone name, F10 the network chat).
+The original's SPECIAL 1 is HORN OR TAUNT (C by default), SPECIAL 2 is LOOK AROUND, and SPECIAL 3,
+which the game never reads, is not listed but keeps its bindings. Saved bindings keep their keys.
 CONTROLS on the controls page chooses how the player walks on foot: CLASSIC, the original's tank
 controls, or TWIN STICK, which moves and aims apart, both relative to the screen.
 The left stick, the d-pad or the movement keys walk; the right stick aims (its reticle
@@ -88,11 +90,11 @@ fly, drawn between 0.4 and 0.9 every half second: walking sideways still dodges 
 AIM CAMERA (on by default) leads the view a little ahead of the player on foot, as Hotline Miami does: 0.3 of
 the half screen height along the aim (the mouse's direction from him or the right stick's), however far the
 cursor or the reticle is, and along the last aim once the stick is released; held, left Shift, LT (instead of
-SPECIAL 2, while that keeps its default LT) or R3 (unless a control is bound to it) looks toward the cursor or
+LOOK AROUND, while that keeps its default LT) or R3 (unless a control is bound to it) looks toward the cursor or
 the reticle, as far as keeps the player on screen.
 In vehicles the controls stay classic, but the fire truck's, the tank's and the gun jeep's roof gun turns
 toward the mouse or the right stick's reticle at the original's turret speed; ATTACK fires it as before, RB
-too (instead of NEXT WEAPON, while that keeps its default RB), and SPECIAL with left or right still turns it
+too (instead of NEXT WEAPON, while that keeps its default RB), and HORN OR TAUNT with left or right still turns it
 while held. The stick and mouse are not recorded in replays.
 VIBRATION (on by default) shakes the pad used last when the player is hit on foot, at an explosion within a few
 blocks (more the nearer it is) and when the car he drives crashes (more the harder the hit), never in the menus or the pause.
@@ -183,6 +185,8 @@ On GRAPHICS, AMBIENT OCCLUSION (`gl_ambient_occlusion`, on in ENHANCED) softly s
 walls, worked out from the map's blocks, in every LIGHTING mode.
 FIRE EFFECTS (`gl_fire_effects`, on in ENHANCED) adds heat haze over the flames and a plume of smoke, drawn from the
 game's own smoke frames and lit by the fires, with a few embers, over burning cars, wrecks and fires.
+TEXTURE FILTERING (`gl_texture_filter`) is BILINEAR as the original, ANISOTROPIC (mipmaps, on in ENHANCED),
+PIXELATED: the game's textures drawn as sharp squares of texels, the menus left smooth, or SHARP BILINEAR: the same squares with their edges blended over one screen pixel, so they keep an even size as the camera moves.
 Their settings are grouped under small titles, and the less common ones say under the page what they
 do, or what their value does (PRESET, LIGHTING, FRAME LIMIT, CONTROLS, AIM CAMERA, STRAFE ANIMATION).
 In a game, Escape opens the same menu as a pause menu, with RESUME, RADIO (in a car with a radio: its station by
@@ -206,9 +210,10 @@ Saves are kept per city, in `player/`:
   the pause menu offers RETRY JOB or RETRY FRENZY (RESTART while it runs), with the job's name, the
   money then and how long ago. Passing it, a church save or a new game deletes the checkpoint.
 - FRENZY RESPAWN (`port_kf_respawn`): a failed kill frenzy is no longer marked started in the save, and a new skull
-  or vehicle and its trigger are back at once; standing on the skull starts it again. The old vehicle locks the
-  player out once he leaves it and despawns as traffic does; while it or the player is on the new one's spot, it stays
-  the frenzy's instead. A passed one stays gone. Off in network games and bonus stages.
+  and its trigger are back at once; standing on the skull starts it again. A vehicle frenzy's old vehicle locks the
+  player out once he leaves it and despawns as traffic does, and a new one is parked with its trigger the first time no
+  car is within 3 blocks of its spot and no player sees it. A passed one stays gone. Off in network games and bonus
+  stages.
 - INFINITE LIVES (`port_infinite_lives`, off in both styles): dying costs no life, so never GAME OVER, but still ends at
   the hospital; it sets the original's `do_infinite_lives` debug flag, at once in a game, and changes nothing in network
   games, which count no lives.

@@ -297,6 +297,40 @@ void Setup(Frontend* pFrontend)
     // The start menu's "Options" opened GTA2 Manager.
     pFrontend->mMenuPagesArray[MENUPAGE_START_MENU].mOptionsArray[1].mMenuPageTarget = kMenuPage;
 
+#if !defined(GTA2_NET_PLAY)
+    // Port: without network play built in (GTA2_NET_PLAY), MULTIPLAYER above QUIT, greyed and passed over, with SOON.
+    // Last in the list, so that QUIT keeps the third option's background picture.
+    MenuPage& start = pFrontend->mMenuPagesArray[MENUPAGE_START_MENU];
+    MenuItem& multiplayer = start.mOptionsArray[3];
+    multiplayer = start.mOptionsArray[2];
+    wcsncpy(multiplayer.mOptionNameStr, PortSettings::Translate(L"MULTIPLAYER"), 50);
+    multiplayer.mOptionNameStr[49] = 0;
+    multiplayer.mIsUnlocked = 0;
+    multiplayer.mMenuPageTarget = MENUPAGE_START_MENU;
+    start.mOptionsArray[2].mYPos = multiplayer.mYPos + 20;
+    start.mOptionStates[3] = start.mOptionStates[2];
+    start.mOptionStates[2].mUnused2 += 20;
+    start.mNumberOfOptions = 4;
+    // The frontend leaves a locked option out: its text drawn as an element, in the greyed options' palette.
+    MenuElement& name = start.mElementsArray[start.mNumberOfElements++];
+    name.mElementType = STRING_TEXT_1;
+    wcsncpy(name.mElementNameStr, multiplayer.mOptionNameStr, 50);
+    name.mXpos = multiplayer.mXPos;
+    name.mYpos = multiplayer.mYPos;
+    name.mIsItDisplayed = 1;
+    name.mFontType = 0xFFFF;
+    name.mFontPalette = 8;
+    MenuElement& soon = start.mElementsArray[start.mNumberOfElements++];
+    soon.mElementType = STRING_TEXT_1;
+    wcsncpy(soon.mElementNameStr, PortSettings::Translate(L"SOON"), 50);
+    soon.mElementNameStr[49] = 0;
+    soon.mXpos = multiplayer.mXPos + Frontend::GetMaxTextWidth(multiplayer.mOptionNameStr, pFrontend->mNormalFont) + 10;
+    soon.mYpos = multiplayer.mYPos + 3;
+    soon.mIsItDisplayed = 1;
+    soon.mFontType = gFrontendFont7;
+    soon.mFontPalette = 0xFFFF;
+#endif
+
     // RESUME SAVED STATUS named as the page it opens; the Japanese text stays, the port has no translation for it.
     const struct
     {

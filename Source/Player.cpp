@@ -2841,6 +2841,10 @@ void Player::UpdateGameFromSave(SavedPlayerStats* pSave)
     mCrimeStats.mEvasionRating = pSave->mEvasionRating;
 
     Player::RestorePowerUpsFromSave(pSave);
+#if defined(GTA2_PORT)
+    // Port: no second car on one the level's script already parked on the saved car's spot (a frenzy's tank).
+    PortSaves::BeforeRestore();
+#endif
     Player::RestoreCarsFromSave();
 #if defined(GTA2_PORT)
     // Port: an autosave or a retry checkpoint puts the player back in the car he drove.

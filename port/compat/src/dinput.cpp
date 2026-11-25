@@ -152,6 +152,12 @@ class Device : public IDirectInputDevice2A
     }
 
     BYTE mKeys[256] = {};
+    // Keys pressed since the last GetDeviceState, which shows them down once: a tap shorter than the reads'
+    // interval (a logic step, or a frontend frame) still counts, as it would not with the state alone.
+    BYTE mLatched[256] = {};
+    // Keys whose press GetDeviceData gave in the current pass of single-event reads (one per logic step, until it
+    // returns none): their release waits for the next pass, else the step sees neither.
+    bool mPressedInPass[256] = {};
 
     STDMETHOD_(HRESULT, QueryInterface)(REFIID riid, void** ppv) override
     {
@@ -206,6 +212,8 @@ class Device : public IDirectInputDevice2A
     {
         mAcquired = false;
         mBuffer.clear();
+        memset(mLatched, 0, sizeof(mLatched));
+        memset(mPressedInPass, 0, sizeof(mPressedInPass));
         return DI_OK;
     }
     STDMETHOD(GetDeviceState)(DWORD size, LPVOID pData) override
@@ -217,8 +225,13 @@ class Device : public IDirectInputDevice2A
         memset(pData, 0, size);
         if (size >= 256)
         {
-            memcpy(pData, mKeys, 256);
-            port_AddPadMenuKeys(static_cast<BYTE*>(pData));
+            BYTE* pKeys = static_cast<BYTE*>(pData);
+            for (int i = 0; i < 256; i++)
+            {
+                pKeys[i] = mKeys[i] | mLatched[i];
+            }
+            memset(mLatched, 0, sizeof(mLatched));
+            port_AddPadMenuKeys(pKeys);
         }
         return DI_OK;
     }
@@ -235,6 +248,15 @@ class Device : public IDirectInputDevice2A
         BYTE* pOut = reinterpret_cast<BYTE*>(pData);
         while (n < wanted && n < mBuffer.size())
         {
+            const DIDEVICEOBJECTDATA& d = mBuffer[n];
+            if (pOut && !(flags & DIGDD_PEEK) && d.dwOfs < 256)
+            {
+                if (!(d.dwData & 0x80) && mPressedInPass[d.dwOfs])
+                {
+                    break;
+                }
+                mPressedInPass[d.dwOfs] |= (d.dwData & 0x80) != 0;
+            }
             if (pOut)
             {
                 memset(pOut + n * cbObject, 0, cbObject);
@@ -246,6 +268,10 @@ class Device : public IDirectInputDevice2A
         {
             mBuffer.erase(mBuffer.begin(), mBuffer.begin() + n);
             mOverflow = false;
+            if (!n || !pOut)
+            {
+                memset(mPressedInPass, 0, sizeof(mPressedInPass));
+            }
         }
         *pInOut = n;
         return result;
@@ -482,6 +508,7 @@ void port_OnInputEvent(const SDL_Event& e)
         if ((pDev->mKeys[dik] != 0) != down)
         {
             pDev->mKeys[dik] = down ? 0x80 : 0;
+            pDev->mLatched[dik] |= down ? 0x80 : 0;
             if (buffered)
             {
                 pDev->Push(dik, down ? 0x80 : 0);

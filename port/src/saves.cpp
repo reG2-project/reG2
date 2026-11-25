@@ -265,7 +265,14 @@ void PutInCar(Ped* pPed, Car* pCar)
     pPed->mTargetCarDoor = 0;
     pPed->mPedState1 = ped_state_1::in_car_10;
     pPed->mPedState2 = ped_state_2::ped2_driving_10;
+    // A kill frenzy's car still waits for the player to get in, as when the save was written.
+    const s32 trigger = pCar->IsCarThreadPending();
+    pCar->ClearCarThreadPending();
     pCar->AssignDriver(pPed);
+    if (trigger)
+    {
+        pCar->SetCarThreadPending();
+    }
 }
 
 // The file's time in 100 ns units since 1970, -1 if there is no file.
@@ -715,6 +722,26 @@ u16 LoadedLaunch()
     return LoadedCheckpoint() == kBeforeJob ? gGameSave.mPlayerAndWorldStats.mPad8E : 0;
 }
 
+Car* sCarThere;
+
+void BeforeRestore()
+{
+    SavedCarInfo& cars = gGameSave.mCarAndScriptData.mSavedCars;
+    sCarThere = NULL;
+    for (Car* pCar = gCar_BC_Pool->GetFirstCar_420E50(); pCar && ExactSpawn() && gGameSave.mPad4E; pCar = pCar->mpNext)
+    {
+        Sprite* pSprite = pCar->mCarSprite;
+        if (pCar->mCarInfoIdx == cars.mCarModel[0] && Fix16::Abs(pSprite->GetXPos() - cars.mX[0].mValue) < Fix16(1) &&
+            Fix16::Abs(pSprite->GetYPos() - cars.mY[0].mValue) < Fix16(1) && Fix16::Abs(pSprite->GetZPos() - cars.mZ[0].mValue) < Fix16(1))
+        {
+            sCarThere = pCar;
+            pCar->SetDamage(cars.mDamage[0]);
+            pCar->mDamagedAreas.m_var = cars.mDamagedAreas[0];
+            cars.mX[0].mValue = Fix16(0);
+        }
+    }
+}
+
 void AfterRestore(Player* pPlayer)
 {
     Ped* pPed = pPlayer->mPlayerPed;
@@ -723,7 +750,7 @@ void AfterRestore(Player* pPlayer)
         return;
     }
     // The car restored last.
-    Car* pCar = NULL;
+    Car* pCar = sCarThere;
     for (s32 i = 0; i < GTA2_COUNTOF_S(pPlayer->mCarHistory); i++)
     {
         pCar = pPlayer->mCarHistory[i] ? pPlayer->mCarHistory[i] : pCar;

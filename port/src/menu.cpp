@@ -87,11 +87,13 @@ const wchar_t* const kTitles[kNumPages] = {L"OPTIONS", L"GAME", L"GRAPHICS", L"D
                                            L"MISSION TRANSCRIPT", L"LOAD GAME", L"LOAD GAME", L"QUIT GAME"};
 
 const s32 kNumControls = 12;
+// SPECIAL 3, the last control, does nothing in the game: it keeps its bindings but is not shown.
+const s32 kShownControls = 11;
 const s32 kDefaultControls[kNumControls] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN,
-                                            DIK_SPACE, DIK_Z, DIK_X, DIK_TAB, DIK_LMENU, DIK_RSHIFT};
-const wchar_t* const kControlNames[kNumControls] = {L"FORWARD", L"BACKWARD", L"LEFT", L"RIGHT", L"ATTACK",
-                                                    L"ENTER OR EXIT", L"JUMP OR BRAKE", L"PREVIOUS WEAPON",
-                                                    L"NEXT WEAPON", L"SPECIAL 1", L"SPECIAL 2", L"SPECIAL 3"};
+                                            DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT};
+const wchar_t* const kControlNames[kShownControls] = {L"FORWARD", L"BACKWARD", L"LEFT", L"RIGHT", L"ATTACK",
+                                                      L"ENTER OR EXIT", L"JUMP OR BRAKE", L"PREVIOUS WEAPON",
+                                                      L"NEXT WEAPON", L"HORN OR TAUNT", L"LOOK AROUND"};
 // Pad binding codes (compat/src/pad.cpp): buttons 0 to 11, then the stick and d-pad directions.
 const wchar_t* const kPadButtonNames[12] = {L"A", L"B", L"X", L"Y", L"LB", L"RB", L"BACK", L"START", L"L3", L"R3", L"LT", L"RT"};
 const s32 kPadB = 1;
@@ -255,7 +257,7 @@ s32 Items(Page page, Item* pItems)
             pItems[n++] = Item{kBack, 1, false};
             break;
         default:
-            for (s32 i = 0; i < kNumControls; i++)
+            for (s32 i = 0; i < kShownControls; i++)
             {
                 pItems[n++] = Item{kBinding, i, false};
             }
@@ -267,7 +269,7 @@ s32 Items(Page page, Item* pItems)
             pItems[n++] = Item{kSetting, PortSettings::kVibration, false};
 #endif
             // Under the TWIN STICK settings, or set apart from the bindings.
-            const bool gap = n == kNumControls;
+            const bool gap = n == kShownControls;
             pItems[n++] = Item{kDefaultKeys, 0, gap};
             pItems[n++] = Item{kBack, 0, false};
             break;

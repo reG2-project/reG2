@@ -132,7 +132,7 @@ bool net::engine::Restorable(const SavedWorld& in)
 
 void net::engine::RestoreGame(const SavedWorld& in)
 {
-    // The sound's channel bookkeeping (its sample queues and the 16 channels' samples) mirrors the mixer, which isn't
+    // The sound's channel bookkeeping (its sample queues and the channels' samples) mirrors the mixer, which isn't
     // rolled back (world.cpp): it stays as it is. Restored, a loop started since the snapshot's tick (a machine gun)
     // played on with nothing left to stop it. Its audio entities, which follow game objects, are restored.
     const size_t from = offsetof(sound_obj, msQueueSample), to = offsetof(sound_obj, mUnused1440);

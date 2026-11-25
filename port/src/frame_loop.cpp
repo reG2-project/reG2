@@ -283,6 +283,13 @@ void Stats(unsigned long long now)
 void ApplySettings()
 {
     sMaxFps = static_cast<u32>(PortSettings::MaxFps());
+#if defined(__EMSCRIPTEN__)
+    // The page's ?fps=N (web/site/app.js): the frame limit for this session, to compare frame rates.
+    if (const char* pFps = getenv("GTA2_MAX_FPS"))
+    {
+        sMaxFps = static_cast<u32>(atoi(pFps));
+    }
+#endif
     static bool sInit;
     if (!sInit)
     {

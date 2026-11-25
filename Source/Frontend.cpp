@@ -749,6 +749,13 @@ void Frontend::ChangeMenuPage(u16 menu_page_idx)
     mCurrentPageIdx = menu_page_idx;
     mMenuPagesArray[menu_page_idx].mCurrentOptionIdx = mMenuPagesArray[menu_page_idx].mDefaultOptionIdx;
     MenuPage* pCurPage = &mMenuPagesArray[mCurrentPageIdx];
+#if defined(GTA2_PORT)
+    // Port: the Play page opens on RESUME SAVED STATUS (option 1) when the profile has a save, else START PLAY IN AREA.
+    if (menu_page_idx == MENUPAGE_PLAY && pCurPage->mOptionsArray[1].mIsUnlocked)
+    {
+        pCurPage->mCurrentOptionIdx = 1;
+    }
+#endif
     if (!pCurPage->mOptionsArray[pCurPage->mCurrentOptionIdx].mIsUnlocked)
     {
         pCurPage->SelectNextOption();

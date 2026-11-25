@@ -2321,6 +2321,14 @@ void Sprite::ResolveCollisionWithCarPedOrObject()
         else if (pCurrent->GetType() == sprite_types_enum::ped_3)
         {
             Char* pChar = pCurrent->AsCharB4();
+#if defined(GTA2_PORT)
+            // Port: an autosave or checkpoint spawns the player where he was, maybe where the script parks a car as the
+            // level loads (a kill frenzy's tank): freeing his ped there left the game on a dangling player ped.
+            if (pChar->mpPed->PedTypeIs(ped_type::player_2))
+            {
+                continue;
+            }
+#endif
             pChar->mpPed->Deallocate();
         }
         else if (pCurrent->IsObject2CType())

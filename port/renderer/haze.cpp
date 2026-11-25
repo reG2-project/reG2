@@ -314,19 +314,12 @@ void GLRenderer::DrawHaze(const RHazeParams& params)
     const s32 reach = (s32)ceilf(params.amplitude * px) + 2;
     const s32 c0 = x0 - reach > 0 ? x0 - reach : 0, c1 = x1 + reach < mTargetW ? x1 + reach : mTargetW;
     const s32 r0 = y0 - reach > 0 ? y0 - reach : 0, r1 = y1 + reach < mTargetH ? y1 + reach : mTargetH;
-    gl.glBindFramebuffer(GL_READ_FRAMEBUFFER, mTargetsSamples ? mMsFbo : mFbo);
-    gl.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mHazeFbo);
-    gl.glReadBuffer(GL_COLOR_ATTACHMENT0);
-    gl.glDrawBuffers(1, colour);
-    gl.glBlitFramebuffer(c0, r0, c1, r1, c0, r0, c1, r1, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    const bool ms = mTargetsSamples != 0;
+    BlitColour(ms ? mMsColour[0] : mFboTex, ms, mHazeTex, c0, r0, c1, r1);
     if (mTargetsShadows)
     {
         // The soft shadows are applied at the end of the frame (ApplyShadows): their mask is distorted too.
-        const GLenum mask[2] = {GL_NONE, GL_COLOR_ATTACHMENT1};
-        gl.glReadBuffer(GL_COLOR_ATTACHMENT2);
-        gl.glDrawBuffers(2, mask);
-        gl.glBlitFramebuffer(c0, r0, c1, r1, c0, r0, c1, r1, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-        gl.glReadBuffer(GL_COLOR_ATTACHMENT0);
+        BlitColour(ms ? mMsColour[2] : mShadowTex, ms, mHazeMaskTex, c0, r0, c1, r1);
     }
 
     static const char* spDebug = getenv("GTA2_HAZE_DEBUG");
@@ -367,7 +360,6 @@ void GLRenderer::DrawHaze(const RHazeParams& params)
 void GLRenderer::FreeHaze()
 {
     gl.glDeleteProgram(mHazeProgram);
-    gl.glDeleteFramebuffers(1, &mHazeFbo);
     gl.glDeleteTextures(1, &mHazeTex);
     gl.glDeleteTextures(1, &mHazeMaskTex);
     mHazeMaskTex = 0;
@@ -389,7 +381,6 @@ void GLRenderer::FreeHaze()
     mHazeNoise = 0;
     mHazeNoiseSampler = 0;
     mHazeProgram = 0;
-    mHazeFbo = 0;
     mHazeTex = 0;
     mHazeW = mHazeH = 0;
     mHazeFormat = 0;
@@ -418,7 +409,6 @@ bool GLRenderer::HazeProgram()
         gl.glUniform1i(gl.glGetUniformLocation(mHazeProgram, "uMask"), 3);
         mUniHazeRise = gl.glGetUniformLocation(mHazeProgram, "uRise");
         mUniHazeDebug = gl.glGetUniformLocation(mHazeProgram, "uDebug");
-        gl.glGenFramebuffers(1, &mHazeFbo);
         gl.glGenTextures(1, &mHazeTex);
         gl.glGenTextures(1, &mHazeMaskTex);
         static u8 noise[kNoiseSize * kNoiseSize * 2];
@@ -450,11 +440,8 @@ bool GLRenderer::HazeProgram()
         gl.glBindTexture(GL_TEXTURE_2D, mHazeTex);
         gl.glTexImage2D(GL_TEXTURE_2D, 0, mColourFormat, mTargetW, mTargetH, 0, rgb565 ? GL_RGB : GL_RGBA,
                         rgb565 ? GL_UNSIGNED_SHORT_5_6_5 : GL_UNSIGNED_BYTE, NULL);
-        gl.glBindFramebuffer(GL_FRAMEBUFFER, mHazeFbo);
-        gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mHazeTex, 0);
         gl.glBindTexture(GL_TEXTURE_2D, mHazeMaskTex);
         gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, mTargetW, mTargetH, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
-        gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, mHazeMaskTex, 0);
         mHazeW = mTargetW;
         mHazeH = mTargetH;
         mHazeFormat = mColourFormat;

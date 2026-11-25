@@ -1,0 +1,97 @@
+/* reG2 design system: tokens, fonts and base components shared by the landing page (/) and the game page (/play/).
+   Published at the site root next to fonts/; see port/web/home/README.md. Dark only. */
+
+@font-face { font-family: "Michroma"; src: url(fonts/michroma.woff2) format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Archivo"; src: url(fonts/archivo.woff2) format("woff2"); font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; }
+
+:root {
+  --bg: #0a0a0b;
+  --bg-2: #141416;
+  --line: #2a2a2e;
+  --text: #ebe9e4;
+  --muted: #9c9a95;
+  --red: #e8343c;
+  --red-ink: #ffffff;
+  --amber: #e3a33a;
+  --ok: #6cc28a;
+  --focus: #ebe9e4;
+
+  /* Display and labels: Michroma, wide and square like the game's menus. Body: Archivo. */
+  --font-display: "Michroma", "Eurostile", "Arial", sans-serif;
+  --font-body: "Archivo", system-ui, sans-serif;
+  --font-mono: ui-monospace, "DejaVu Sans Mono", "Menlo", monospace;
+  --track: 0.14em;
+
+  --step--1: 0.875rem;
+  --step-0: 1.0625rem;
+  --step-1: 1.25rem;
+  --step-2: clamp(1.05rem, 2.4vw, 1.35rem);
+  --step-3: clamp(1.5rem, 4.4vw, 2.6rem);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.5rem;
+  --space-7: 5rem;
+
+  --measure: 36rem;
+  --page-max: 72rem;
+  --gutter: 1rem;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--step-0)/1.6 var(--font-body);
+}
+img { max-width: 100%; height: auto; }
+a { color: inherit; text-decoration-color: var(--muted); text-underline-offset: 0.22em; text-decoration-thickness: 1px; }
+a:hover { text-decoration-color: currentColor; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+[hidden] { display: none !important; }
+code { font: 0.9em/1.4 var(--font-mono); background: var(--bg-2); border: 1px solid var(--line); padding: 0 0.25em; overflow-wrap: anywhere; }
+
+h1, h2, h3 { font-weight: 400; margin: 0 0 var(--space-4); line-height: 1.25; }
+
+/* Wide tracked capitals, as the game sets its menu items; on headings, labels and menu paths. */
+.caps { font-family: var(--font-display); font-size: var(--step--1); text-transform: uppercase; letter-spacing: var(--track); line-height: 1.5; }
+/* Names whose case matters (macOS, gta2_re) inside .caps. */
+.nocase { text-transform: none; }
+
+.muted { color: var(--muted); }
+.small { font-size: var(--step--1); color: var(--muted); }
+.foot { border-top: 1px solid var(--line); font-size: var(--step--1); color: var(--muted); }
+.foot p { max-width: 48rem; }
+.foot a:hover { color: var(--text); }
+/* Inline SVG icons in the text's colour and size: marks (filled) from Simple Icons, line icons (.line) from Lucide. */
+.icon { width: 1.15em; height: 1.15em; flex: none; vertical-align: -0.2em; fill: currentColor; }
+.icon.line { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* A game-style menu: a vertical list of items, the selected one (.sel) in red and underlined.
+   The pointer moves the selection, as the cursor does in the game. */
+.menu { list-style: none; margin: 0; padding: 0; }
+.menu a {
+  display: inline-block;
+  font: 400 var(--step-1)/1.2 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  text-decoration: none;
+  padding: 0.55rem 0;
+  border-bottom: 2px solid transparent;
+}
+.menu .sel, .menu a:hover { color: var(--red); border-bottom-color: var(--red); }
+.menu:hover .sel:not(:hover) { color: inherit; border-bottom-color: transparent; }
+
+.skip { position: absolute; left: -999px; top: 0; background: var(--text); color: var(--bg); padding: var(--space-2) var(--space-4); z-index: 10; }
+.skip:focus { left: var(--space-4); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; scroll-behavior: auto !important; }
+}

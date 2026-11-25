@@ -1,4 +1,5 @@
 #include "settings.hpp"
+#include <stdlib.h>
 #include "frame_loop.hpp"
 #include "Camera.hpp"
 #include "Frontend.hpp"
@@ -54,15 +55,25 @@ const s32 kNumGameSettings = sizeof(kGameSettings) / sizeof(kGameSettings[0]);
 const Id kGraphicsSettings[] = {kPreset,
                                 kLightingGroup, kPerPixelLighting, kShadows, kAmbientOcclusion, kFireEffects, kHeadlights,
                                 kLightEffects, kBloom, kImageGroup, kTrueColour, kTextureFilter, kAntiAliasing};
+// On the web the page owns full screen, there are no display modes, the frames follow the browser's and
+// there is no OpenAL for 3D sound.
+#if defined(__EMSCRIPTEN__)
+const Id kDisplaySettings[] = {kScreenGroup, kFrameLimit, kShowFps, kViewGroup, kBrightness, kZoom, kHudScale, kSafeArea};
+#else
 const Id kDisplaySettings[] = {kScreenGroup, kFullScreen, kDisplayMode, kVsync, kFrameLimit, kShowFps,
                                kViewGroup, kBrightness, kZoom, kHudScale, kSafeArea};
+#endif
 #else
 const Id kGraphicsSettings[] = {kHeadlights, kLightEffects};
 const Id kDisplaySettings[] = {kScreenGroup, kFullScreen, kFrameLimit, kShowFps, kViewGroup, kBrightness, kZoom, kHudScale, kSafeArea};
 #endif
 const s32 kNumGraphicsSettings = sizeof(kGraphicsSettings) / sizeof(kGraphicsSettings[0]);
 const s32 kNumDisplaySettings = sizeof(kDisplaySettings) / sizeof(kDisplaySettings[0]);
+#if defined(__EMSCRIPTEN__)
+const Id kSoundSettings[] = {kSfxVolume, kMusicVolume};
+#else
 const Id kSoundSettings[] = {kSfxVolume, kMusicVolume, k3dSound};
+#endif
 const s32 kNumSoundSettings = sizeof(kSoundSettings) / sizeof(kSoundSettings[0]);
 
 namespace
@@ -84,7 +95,9 @@ const s32 kNumLanguages = sizeof(kLanguages) / sizeof(kLanguages[0]);
 const wchar_t* const kTextSpeeds[] = {L"VERY FAST", L"FAST", L"NORMAL", L"SLOW", L"VERY SLOW"};
 const s32 kMaxFpsValues[] = {30, 60, 120, 144, 240, 0};
 const s32 kNumMaxFpsValues = sizeof(kMaxFpsValues) / sizeof(kMaxFpsValues[0]);
-const wchar_t* const kTextureFilters[] = {L"BILINEAR", L"TRILINEAR", L"ANISOTROPIC"};
+const wchar_t* const kTextureFilters[] = {L"BILINEAR", L"ANISOTROPIC", L"PIXELATED", L"SHARP BILINEAR"};
+// The gl_texture_filter value of each; a stored 1 (trilinear) shows as anisotropic.
+const s32 kTextureFilterValues[] = {0, 2, 3, 4};
 const s32 kNumTextureFilters = sizeof(kTextureFilters) / sizeof(kTextureFilters[0]);
 const s32 kMsaaValues[] = {0, 2, 4, 8};
 const s32 kNumMsaaValues = sizeof(kMsaaValues) / sizeof(kMsaaValues[0]);
@@ -134,6 +147,8 @@ const Translation kTranslations[] = {
     {L"CLOCK", NULL, {L"HORLOGE", L"UHR", L"OROLOGIO", L"RELOJ"}},
     {L"EXPLODING SCORES", NULL, {L"SCORES EXPLOSIFS", L"PUNKTE-EXPLOSION", L"PUNTI ESPLOSIVI", L"PUNTOS EXPLOSIVOS"}},
     {L"BLOOD", NULL, {L"SANG", L"BLUT", L"SANGUE", L"SANGRE"}},
+    {L"MULTIPLAYER", NULL, {L"MULTIJOUEUR", L"MEHRSPIELER", L"MULTIGIOCATORE", L"MULTIJUGADOR"}},
+    {L"SOON", NULL, {L"BIENTOT", L"BALD", L"PRESTO", L"PRONTO"}},
     {L"CHECK FOR UPDATES", NULL, {L"MISES A JOUR", L"UPDATES SUCHEN", L"AGGIORNAMENTI", L"ACTUALIZACIONES"}},
     {L"AUTOSAVE", NULL, {L"SAUVEGARDE AUTO", L"AUTOSPEICHERN", L"SALVATAGGIO AUTO", L"GUARDADO AUTO"}},
     {L"AFTER EACH JOB OR FRENZY, AND WITH SAVE AND QUIT", NULL,
@@ -307,8 +322,9 @@ const Translation kTranslations[] = {
     {L"LIGHT EFFECTS", NULL, {L"EFFETS LUMINEUX", L"LICHTEFFEKTE", L"EFFETTI LUCE", L"EFECTOS DE LUZ"}},
     {L"TEXTURE FILTERING", NULL, {L"FILTRAGE TEXTURES", L"TEXTURFILTER", L"FILTRO TEXTURE", L"FILTRADO TEXTURAS"}},
     {L"BILINEAR", NULL, {L"BILINEAIRE", L"BILINEAR", L"BILINEARE", L"BILINEAL"}},
-    {L"TRILINEAR", NULL, {L"TRILINEAIRE", L"TRILINEAR", L"TRILINEARE", L"TRILINEAL"}},
     {L"ANISOTROPIC", NULL, {L"ANISOTROPE", L"ANISOTROP", L"ANISOTROPICO", L"ANISOTRÓPICO"}},
+    {L"PIXELATED", NULL, {L"PIXELISE", L"VERPIXELT", L"PIXELLATO", L"PIXELADO"}},
+    {L"SHARP BILINEAR", NULL, {L"BILINEAIRE NET", L"SCHARF BILINEAR", L"BILINEARE NITIDO", L"BILINEAL NÍTIDO"}},
     {L"ANTI-ALIASING", NULL, {L"ANTICRENELAGE", L"KANTENGLÄTTUNG", L"ANTI-ALIASING", L"ANTIALIASING"}},
     {L"SHADOWS", NULL, {L"OMBRES", L"SCHATTEN", L"OMBRE", L"SOMBRAS"}},
     {L"AMBIENT OCCLUSION", NULL, {L"OCCLUSION AMBIANTE", L"UMGEBUNGSVERDECKUNG", L"OCCLUSIONE AMBIENTALE", L"OCLUSIÓN AMBIENTAL"}},
@@ -366,9 +382,8 @@ const Translation kTranslations[] = {
     {L"JUMP OR BRAKE", NULL, {L"FREIN/SAUT", L"SPRUNG/BREMSE", L"FRENA/SALTA", L"FRENO/SALTAR"}},
     {L"PREVIOUS WEAPON", NULL, {L"ARME PRECEDENTE", L"VORIGE WAFFE", L"ARMA PRECEDENTE", L"ARMA ANTERIOR"}},
     {L"NEXT WEAPON", NULL, {L"ARME SUIVANTE", L"NÄCHSTE WAFFE", L"ARMA SUCCESSIVA", L"ARMA SIGUIENTE"}},
-    {L"SPECIAL 1", NULL, {L"SPECIAL 1", L"SPEZIAL 1", L"SPECIALE 1", L"ESPECIAL 1"}},
-    {L"SPECIAL 2", NULL, {L"SPECIAL 2", L"SPEZIAL 2", L"SPECIALE 2", L"ESPECIAL 2"}},
-    {L"SPECIAL 3", NULL, {L"SPECIAL 3", L"SPEZIAL 3", L"SPECIALE 3", L"ESPECIAL 3"}},
+    {L"HORN OR TAUNT", NULL, {L"KLAXON/NARGUER", L"HUPE/SPOTT", L"CLACSON/PROVOCA", L"CLÁXON/BURLA"}},
+    {L"LOOK AROUND", NULL, {L"REGARDER AUTOUR", L"UMSCHAUEN", L"GUARDARSI INTORNO", L"MIRAR ALREDEDOR"}},
 };
 const s32 kNumTranslations = sizeof(kTranslations) / sizeof(kTranslations[0]);
 
@@ -544,6 +559,15 @@ s32 ScreenDefault(Id id)
 
 s32 Screen(Id id)
 {
+#if defined(__EMSCRIPTEN__)
+    // The page's ?nofx (web/site/app.js): the ENHANCED rendering passes off for this session, to compare frame rates.
+    static const bool sNoFx = getenv("GTA2_NOFX") != NULL;
+    if (sNoFx && (id == kPerPixelLighting || id == kShadows || id == kAmbientOcclusion || id == kFireEffects ||
+                  id == kBloom || id == kAntiAliasing))
+    {
+        return 0;
+    }
+#endif
     return gRegistry.Get_Screen_Setting(ScreenName(id), ScreenDefault(id));
 }
 
@@ -629,6 +653,16 @@ s32 MsaaIndex(s32 stored)
     return i;
 }
 
+s32 TextureFilterIndex()
+{
+    s32 i = 0;
+    while (i < kNumTextureFilters - 1 && kTextureFilterValues[i] < Screen(kTextureFilter))
+    {
+        i++;
+    }
+    return i;
+}
+
 s32 MsaaIndex()
 {
     return MsaaIndex(Screen(kAntiAliasing));
@@ -663,7 +697,7 @@ s32 PresetSetting(Id id)
         case kAntiAliasing:
             return kMsaaValues[MsaaIndex()];
         case kTextureFilter:
-            return Clamp(Screen(id), 0, kNumTextureFilters - 1);
+            return kTextureFilterValues[TextureFilterIndex()];
         case kBloom:
             return Clamp(Screen(id), 0, kMaxBloom);
         default:
@@ -1104,7 +1138,7 @@ void ApplyRenderOptions()
 {
 #if defined(GTA2_PORT_SDL)
     port_SetRenderOptions(Screen(kTrueColour) != 0, Clamp(Screen(kBloom), 0, kMaxBloom), Screen(kPerPixelLighting) != 0,
-                          Clamp(Screen(kTextureFilter), 0, kNumTextureFilters - 1), kMsaaValues[MsaaIndex()], Screen(kShadows) != 0);
+                          kTextureFilterValues[TextureFilterIndex()], kMsaaValues[MsaaIndex()], Screen(kShadows) != 0);
 #endif
 }
 
@@ -1126,8 +1160,13 @@ void ApplyStyle(Style style)
     gRegistry.Set_Screen_Setting(ScreenName(kRetry), enhanced);
     gRegistry.Set_Screen_Setting(ScreenName(kKfRespawn), enhanced);
     gRegistry.Set_Screen_Setting(ScreenName(kInfiniteLives), 0);
-    // Unlimited with vsync: a frame each refresh of the screen.
+    // Unlimited with vsync: a frame each refresh of the screen. In a browser 60: drawing at 120 or 144 Hz loads its
+    // compositor for little, with the game's 30 steps a second.
+#if defined(__EMSCRIPTEN__)
+    gRegistry.Set_Screen_Setting(ScreenName(kFrameLimit), 60);
+#else
     gRegistry.Set_Screen_Setting(ScreenName(kFrameLimit), 0);
+#endif
     gRegistry.Set_Screen_Setting(ScreenName(kVsync), 1);
     port_ApplyVsync();
     PortFrameLoop::ApplySettings();
@@ -1208,7 +1247,13 @@ void Value(Id id, wchar_t* pOut)
             break;
 #if defined(GTA2_PORT_SDL)
         case kTextureFilter:
-            wcscpy(pOut, Translate(kTextureFilters[Clamp(Screen(id), 0, kNumTextureFilters - 1)]));
+            wcscpy(pOut, Translate(kTextureFilters[TextureFilterIndex()]));
+            if (TextureFilterIndex() == 0)
+            {
+                wcscat(pOut, L" (");
+                wcscat(pOut, Translate(L"ORIGINAL"));
+                wcscat(pOut, L")");
+            }
             break;
         case kShadows:
             wcscpy(pOut, Translate(Screen(id) ? L"SOFT" : L"ORIGINAL"));
@@ -1376,7 +1421,7 @@ void Change(Id id, s32 delta)
             port_ApplyVsync();
             break;
         case kTextureFilter:
-            gRegistry.Set_Screen_Setting(ScreenName(id), Wrap(Clamp(Screen(id), 0, kNumTextureFilters - 1) + delta, kNumTextureFilters));
+            gRegistry.Set_Screen_Setting(ScreenName(id), kTextureFilterValues[Wrap(TextureFilterIndex() + delta, kNumTextureFilters)]);
             ApplyRenderOptions();
             break;
         case kPreset:

@@ -3,6 +3,11 @@
 #include "present_log.hpp"
 #include <SDL3/SDL.h>
 
+#if defined(__EMSCRIPTEN__)
+// The browser shows the canvas once the game's loop yields (port/web/src/web_platform.cpp).
+extern "C" void port_WebMarkPresented();
+#endif
+
 namespace
 {
 class SDLGLContext : public IGLContext
@@ -31,8 +36,12 @@ class SDLGLContext : public IGLContext
     {
         PresentLog::BeforeSwap();
         // SDL's Wayland swap waits for the frame callback before the commands go out: send them first, so the GPU draws during the wait.
+#if defined(__EMSCRIPTEN__)
+        port_WebMarkPresented();
+#else
         mFlush();
         SDL_GL_SwapWindow(mWindow);
+#endif
         PresentLog::AfterSwap();
     }
     void MakeCurrent() override
@@ -53,6 +62,10 @@ IGLContext* CreateGLContext(SDL_Window* pWindow, const char** ppError)
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
+#if defined(__EMSCRIPTEN__)
+    // An opaque canvas: the browser need not blend it with the page behind.
+    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0);
+#endif
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
@@ -85,7 +98,11 @@ IGLContext* CreateGLContext(SDL_Window* pWindow, const char** ppError)
     };
     SDL_Log("OpenGL: %s, %s, %s, GLSL %s", glString(GL_VERSION), glString(GL_VENDOR), glString(GL_RENDERER),
             glString(GL_SHADING_LANGUAGE_VERSION));
+#if !defined(__EMSCRIPTEN__)
+    // In a browser the page's frames pace the game (web/src/web_platform.cpp); SDL's swap interval there sets a
+    // main loop timing the port does not use.
     SDL_GL_SetSwapInterval(1);
+#endif
     PresentLog::Attach(pWindow);
     return new SDLGLContext(pWindow, ctx);
 }

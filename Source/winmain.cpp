@@ -2316,6 +2316,10 @@ EXPORT LRESULT __stdcall WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM l
     return DefWindowProcA(hWnd, Msg, wParam, lParam);
 }
 
+#if defined(__EMSCRIPTEN__)
+extern "C" void port_WebYield();
+#endif
+
 MATCH_FUNC(0x5E53F0)
 s32 __stdcall GameWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, s32 nShowCmd)
 {
@@ -2471,6 +2475,10 @@ s32 __stdcall GameWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lp
 
         while (true)
         {
+#if defined(__EMSCRIPTEN__)
+            // Port: the browser draws the canvas and delivers input only while the game's loop yields to it.
+            port_WebYield();
+#endif
             MSG msg;
             if (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE))
             {

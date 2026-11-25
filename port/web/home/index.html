@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>reG2: the definitive edition of GTA2</title>
+<meta name="description" content="The original GTA2, decompiled and rebuilt to run natively on Windows, macOS, Linux, in the browser and on the Nintendo 3DS. Play it as in 1999, or turn on smooth frame rates, new lighting, day and night, twin stick controls and autosave. Unofficial; you need your own copy of the game.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a0a0b">
+<link rel="canonical" href="https://reg2-project.github.io/reG2/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="reG2">
+<meta property="og:title" content="reG2: the definitive edition of GTA2">
+<meta property="og:description" content="GTA2 on Windows, macOS, Linux, the browser and the 3DS, rebuilt from its decompiled source, with optional modern extras. Bring your own copy of the game; the free 2004 release works.">
+<meta property="og:url" content="https://reg2-project.github.io/reG2/">
+<meta property="og:image" content="https://reg2-project.github.io/reG2/img/pc_night_street.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="720">
+<meta property="og:image:alt" content="A GTA2 street at night in reG2">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="img/icon-256.png">
+<link rel="apple-touch-icon" href="img/icon-256.png">
+<link rel="preload" href="fonts/michroma.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="ds.css">
+<link rel="stylesheet" href="home.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <a class="logo" href="./"><img src="img/logo-dark.svg" alt="reG2" width="1024" height="1024"></a>
+  <nav aria-label="Main">
+    <ul class="caps">
+      <li><a href="#download">Download</a></li>
+      <li><a href="play/">Play<span class="wide-only"> in your browser</span></a></li>
+      <li><a href="https://github.com/reG2-project/reG2">Source</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main">
+  <section class="hero" aria-labelledby="title">
+    <img class="hero-img" src="img/pc_night_street.png" width="1280" height="720" alt="" fetchpriority="high">
+    <div class="hero-text">
+      <h1 id="title"><span>The definitive</span> <span>edition of GTA2</span></h1>
+      <p class="lede">The original 1999 game, now on Windows, macOS, Linux, the Nintendo 3DS and in your browser. Keep it untouched, or turn on the extras you want: smoother frames, new lighting, day and night, twin stick controls, autosave.</p>
+      <ul class="menu" aria-label="Get reG2">
+        <li><a class="sel" href="#download">Download</a></li>
+        <li><a href="play/">Play in your browser</a></li>
+      </ul>
+      <p class="small note">Bring your own copy of GTA2: the <a href="#no-game">free 2004 release</a> works. reG2 is a beta, so expect bugs and please <a href="https://github.com/reG2-project/reG2/issues">report them</a>. No multiplayer yet.</p>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="style-title">
+    <h2 id="style-title" class="caps">Classic or enhanced</h2>
+    <div class="body">
+      <p class="prose">On first start, CHOOSE YOUR STYLE asks how you want to play. Nothing is forced: every extra can be turned on or off later in OPTIONS (start menu, or Escape in game), one by one.</p>
+      <figure class="shot">
+        <img src="img/pc_welcome.png" width="1278" height="720" alt="The CHOOSE YOUR STYLE screen: CLASSIC, the game as it was in 1999, on the left; ENHANCED, with refined lights and shadows, day and night, twin stick controls, autosave and job retry, on the right." loading="lazy">
+      </figure>
+      <div class="pair">
+        <div>
+          <h3 class="caps">Classic</h3>
+          <p>The game as it was in 1999: same lighting, same controls, saves at churches only.</p>
+        </div>
+        <div>
+          <h3 class="caps">Enhanced</h3>
+          <p>Refined lights and shadows, the day and night cycle, twin stick controls, autosave, job retry and frenzy respawn.</p>
+        </div>
+      </div>
+      <h3 class="caps sub">Whatever you pick</h3>
+      <ul class="list prose">
+        <li>It runs at your screen's resolution, and a wide screen shows a bit more on the sides.</li>
+        <li>It draws a frame each time your screen refreshes, while the game itself keeps its original speed.</li>
+        <li>The settings are in the game: OPTIONS replaces GTA2 Manager, the original's separate settings program, in five pages (GAME, GRAPHICS, DISPLAY, SOUND, CONTROLS). Escape during a game pauses it and opens the same menu, with the original pause screen's numbers under STATISTICS.</li>
+        <li>Every menu works with the mouse, the keyboard or a gamepad.</li>
+        <li>A few crashes of the original are fixed, among them some the community found (<a href="https://gtamp.com/gta2/">Vike's GTA2 11.44</a> patch).</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="extras-title">
+    <h2 id="extras-title" class="caps">Extras</h2>
+    <div class="body">
+      <dl class="items">
+        <div>
+          <dt class="caps">Graphics</dt>
+          <dd><span class="path">Graphics &rsaquo; Preset</span> switches between CLASSIC and ENHANCED: true colour, per-pixel lighting, car headlights, light from gunfire, explosions and fires, fire effects (heat haze, smoke and embers), ambient occlusion, soft shadows, bloom, anti-aliasing.</dd>
+        </div>
+      </dl>
+      <div class="shot compare" style="--pos: 50%">
+        <img src="img/pc_compare_classic.webp" width="796" height="448" draggable="false" alt="CLASSIC: an explosion and a flamethrower on a street at dusk; the fire lights nothing around it." loading="lazy">
+        <span class="caps tag">Classic</span>
+        <div class="after">
+          <img src="img/pc_compare_enhanced.webp" width="796" height="448" draggable="false" alt="ENHANCED: the same frame; the fire lights the road and the cars, and smoke rises from it." loading="lazy">
+          <span class="caps tag">Enhanced</span>
+        </div>
+        <input type="range" min="0" max="100" value="50" autocomplete="off" aria-label="Classic or enhanced: move the divider to compare" oninput="this.parentNode.style.setProperty('--pos', this.value + '%')">
+        <script>
+          {
+            const c = document.currentScript.parentNode, r = c.querySelector('input');
+            const set = (e) => { const b = c.getBoundingClientRect(); r.value = Math.round((e.clientX - b.left) / b.width * 100); r.dispatchEvent(new Event('input')); };
+            let x0 = null;
+            c.onpointerdown = (e) => { x0 = e.clientX; if (e.pointerType === 'mouse') { set(e); c.setPointerCapture(e.pointerId); } };
+            c.onpointermove = (e) => { if (x0 !== null && (e.pointerType === 'mouse' || Math.abs(e.clientX - x0) > 4)) set(e); };
+            c.onpointerup = (e) => { if (x0 !== null && e.pointerType !== 'mouse') set(e); x0 = null; };
+            c.onpointercancel = () => { x0 = null; };
+          }
+        </script>
+      </div>
+      <dl class="items">
+        <div>
+          <dt class="caps">Day and night</dt>
+          <dd><span class="path">Game &rsaquo; Lighting &rsaquo; Day-night cycle</span> instead of the fixed dusk.</dd>
+        </div>
+        <div>
+          <dt class="caps">Frame rate</dt>
+          <dd>As fast as your screen, or a fixed limit up to 240 fps (<span class="path">Display &rsaquo; Frame limit</span>, where 30 ORIGINAL brings back the original's rate). The game logic still runs at 30 steps per second, and reG2 fills in the frames in between.</dd>
+        </div>
+      </dl>
+      <figure class="shot">
+        <img src="img/pc_day_night.gif" width="640" height="360" alt="A street seen from above going from day to night and back." loading="lazy">
+        <figcaption>A full day in 20 seconds.</figcaption>
+      </figure>
+      <dl class="items">
+        <div>
+          <dt class="caps">Controls</dt>
+          <dd>
+            <p><span class="path">Controls</span> lets you change every key, in three columns: the original keys, a second set and the gamepad.</p>
+            <p><strong>Keyboard and mouse:</strong> the second set is ready to use: WASD to move, F to get in and out of cars, left click to shoot, the wheel to change weapon.</p>
+            <p><strong>Gamepad:</strong> complete, beyond the original's basic joystick: any pad plugged in, analog driving, every menu, its own button pictures.</p>
+            <p><strong>Twin stick</strong> (<span class="path">Controls &rsaquo; Twin stick</span>), in the style of Hotline Miami: move with one stick or WASD, aim with the other or the mouse. Shots go where you aim and the camera leads a little ahead the way you aim; hold Shift (LT on a pad) to look out toward the cursor. The turrets of the fire truck, tank and gun jeep aim the same way.</p>
+          </dd>
+        </div>
+      </dl>
+      <figure class="shot">
+        <img src="img/pc_twin_stick.gif" width="640" height="360" alt="Twin stick aiming: the player walks one way and shoots another, toward the mouse cursor." loading="lazy">
+      </figure>
+      <dl class="items">
+        <div>
+          <dt class="caps">And also</dt>
+          <dd>3D sound, camera zoom, HUD scale, a frame rate counter. The new menus follow the game's language, as far as your copy of the game has it.</dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="saves-title">
+    <h2 id="saves-title" class="caps">Saves</h2>
+    <div class="body">
+      <dl class="items">
+        <div>
+          <dt class="caps">Churches</dt>
+          <dd>Saving at a church costs the same as in the original game. reG2 also keeps a save for each city, so you can go back to a city you have left.</dd>
+        </div>
+        <div>
+          <dt class="caps">Autosave</dt>
+          <dd>
+            <p><span class="path">Game &rsaquo; Autosave</span> saves after each job or kill frenzy and as you leave a city. A small SAVING sign shows while it writes. When you quit from the pause menu, you choose: SAVE AND QUIT, or QUIT without saving.</p>
+            <img class="ui" src="img/pc_saving.gif" width="510" height="113" alt="The SAVING sign." loading="lazy">
+          </dd>
+        </div>
+        <div>
+          <dt class="caps">Retry jobs</dt>
+          <dd>
+            <p><span class="path">Game &rsaquo; Retry jobs</span>: when a job or a kill frenzy fails, retry it from the pause menu, a few steps from where it started, with the money you had then.</p>
+            <img class="ui" src="img/pc_retry.png" width="740" height="162" alt="The pause menu offering RETRY: GET ZITZAKI!, with the gang, the money and the time, above RESUME." loading="lazy">
+          </dd>
+        </div>
+        <div>
+          <dt class="caps">Frenzy respawn</dt>
+          <dd><span class="path">Game &rsaquo; Frenzy respawn</span>: a failed kill frenzy comes back on the map at once, like a job's phone after a failure: its skull, or for a vehicle frenzy a new vehicle where the first one was parked. A passed frenzy never comes back.</dd>
+        </div>
+        <div>
+          <dt class="caps">Load game</dt>
+          <dd>RESUME SAVED STATUS shows your saves with a tab per city: church save, autosave and retry, each with its money, jobs passed and date.</dd>
+        </div>
+      </dl>
+      <p class="prose muted">Autosave, retry jobs and frenzy respawn are off unless you turn them on, or pick ENHANCED. With CLASSIC, only churches save, as in the original.</p>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="multi-title">
+    <h2 id="multi-title" class="caps">Multiplayer</h2>
+    <div class="body prose">
+      <p>Network play is coming.</p>
+    </div>
+  </section>
+
+  <section class="sec" id="download" aria-labelledby="download-title">
+    <h2 id="download-title" class="caps">Download</h2>
+    <div class="body">
+      <table class="dl">
+        <caption class="sr-only">Downloads by system</caption>
+        <tbody>
+          <tr>
+            <th scope="row"><span class="caps"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8.5v8.5H3zM12.5 3H21v8.5h-8.5zM3 12.5h8.5V21H3zM12.5 12.5H21V21h-8.5z"/></svg>Windows</span> <span class="small">10 or later</span></th>
+            <td>
+              <p><a class="file" href="https://github.com/reG2-project/reG2/releases/latest/download/reG2-windows-x64.zip">reG2-windows-x64.zip</a></p>
+              <p class="small">Unzip anywhere and run <code>reg2.exe</code>.</p>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row"><span class="caps"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.132 1.884 1.071.771-.06 1.592-.536 2.257-1.306.631-.765 1.683-1.084 2.378-1.503.348-.199.629-.469.649-.853.023-.4-.2-.811-.714-1.376v-.097l-.003-.003c-.17-.2-.25-.535-.338-.926-.085-.401-.182-.786-.492-1.046h-.003c-.059-.054-.123-.067-.188-.135a.357.357 0 00-.19-.064c.431-1.278.264-2.55-.173-3.694-.533-1.41-1.465-2.638-2.175-3.483-.796-1.005-1.576-1.957-1.56-3.368.026-2.152.236-6.133-3.544-6.139zm.529 3.405h.013c.213 0 .396.062.584.198.19.135.33.332.438.533.105.259.158.459.166.724 0-.02.006-.04.006-.06v.105a.086.086 0 01-.004-.021l-.004-.024a1.807 1.807 0 01-.15.706.953.953 0 01-.213.335.71.71 0 00-.088-.042c-.104-.045-.198-.064-.284-.133a1.312 1.312 0 00-.22-.066c.05-.06.146-.133.183-.198.053-.128.082-.264.088-.402v-.02a1.21 1.21 0 00-.061-.4c-.045-.134-.101-.2-.183-.333-.084-.066-.167-.132-.267-.132h-.016c-.093 0-.176.03-.262.132a.8.8 0 00-.205.334 1.18 1.18 0 00-.09.4v.019c.002.089.008.179.02.267-.193-.067-.438-.135-.607-.202a1.635 1.635 0 01-.018-.2v-.02a1.772 1.772 0 01.15-.768c.082-.22.232-.406.43-.533a.985.985 0 01.594-.2zm-2.962.059h.036c.142 0 .27.048.399.135.146.129.264.288.344.465.09.199.14.4.153.667v.004c.007.134.006.2-.002.266v.08c-.03.007-.056.018-.083.024-.152.055-.274.135-.393.2.012-.09.013-.18.003-.267v-.015c-.012-.133-.04-.2-.082-.333a.613.613 0 00-.166-.267.248.248 0 00-.183-.064h-.021c-.071.006-.13.04-.186.132a.552.552 0 00-.12.27.944.944 0 00-.023.33v.015c.012.135.037.2.08.334.046.134.098.2.166.268.01.009.02.018.034.024-.07.057-.117.07-.176.136a.304.304 0 01-.131.068 2.62 2.62 0 01-.275-.402 1.772 1.772 0 01-.155-.667 1.759 1.759 0 01.08-.668 1.43 1.43 0 01.283-.535c.128-.133.26-.2.418-.2zm1.37 1.706c.332 0 .733.065 1.216.399.293.2.523.269 1.052.468h.003c.255.136.405.266.478.399v-.131a.571.571 0 01.016.47c-.123.31-.516.643-1.063.842v.002c-.268.135-.501.333-.775.465-.276.135-.588.292-1.012.267a1.139 1.139 0 01-.448-.067 3.566 3.566 0 01-.322-.198c-.195-.135-.363-.332-.612-.465v-.005h-.005c-.4-.246-.616-.512-.686-.71-.07-.268-.005-.47.193-.6.224-.135.38-.271.483-.336.104-.074.143-.102.176-.131h.002v-.003c.169-.202.436-.47.839-.601.139-.036.294-.065.466-.065zm2.8 2.142c.358 1.417 1.196 3.475 1.735 4.473.286.534.855 1.659 1.102 3.024.156-.005.33.018.513.064.646-1.671-.546-3.467-1.089-3.966-.22-.2-.232-.335-.123-.335.59.534 1.365 1.572 1.646 2.757.13.535.16 1.104.021 1.67.067.028.135.06.205.067 1.032.534 1.413.938 1.23 1.537v-.043c-.06-.003-.12 0-.18 0h-.016c.151-.467-.182-.825-1.065-1.224-.915-.4-1.646-.336-1.77.465-.008.043-.013.066-.018.135-.068.023-.139.053-.209.064-.43.268-.662.669-.793 1.187-.13.533-.17 1.156-.205 1.869v.003c-.02.334-.17.838-.319 1.35-1.5 1.072-3.58 1.538-5.348.334a2.645 2.645 0 00-.402-.533 1.45 1.45 0 00-.275-.333c.182 0 .338-.03.465-.067a.615.615 0 00.314-.334c.108-.267 0-.697-.345-1.163-.345-.467-.931-.995-1.788-1.521-.63-.4-.986-.87-1.15-1.396-.165-.534-.143-1.085-.015-1.645.245-1.07.873-2.11 1.274-2.763.107-.065.037.135-.408.974-.396.751-1.14 2.497-.122 3.854a8.123 8.123 0 01.647-2.876c.564-1.278 1.743-3.504 1.836-5.268.048.036.217.135.289.202.218.133.38.333.59.465.21.201.477.335.876.335.039.003.075.006.11.006.412 0 .73-.134.997-.268.29-.134.52-.334.74-.4h.005c.467-.135.835-.402 1.044-.7zm2.185 8.958c.037.6.343 1.245.882 1.377.588.134 1.434-.333 1.791-.765l.211-.01c.315-.007.577.01.847.268l.003.003c.208.199.305.53.391.876.085.4.154.78.409 1.066.486.527.645.906.636 1.14l.003-.007v.018l-.003-.012c-.015.262-.185.396-.498.595-.63.401-1.746.712-2.457 1.57-.618.737-1.37 1.14-2.036 1.191-.664.053-1.237-.2-1.574-.898l-.005-.003c-.21-.4-.12-1.025.056-1.69.176-.668.428-1.344.463-1.897.037-.714.076-1.335.195-1.814.12-.465.308-.797.641-.984l.045-.022zm-10.814.049h.01c.053 0 .105.005.157.014.376.055.706.333 1.023.752l.91 1.664.003.003c.243.533.754 1.064 1.189 1.637.434.598.77 1.131.729 1.57v.006c-.057.744-.48 1.148-1.125 1.294-.645.135-1.52.002-2.395-.464-.968-.536-2.118-.469-2.857-.602-.369-.066-.61-.2-.723-.4-.11-.2-.113-.602.123-1.23v-.004l.002-.003c.117-.334.03-.752-.027-1.118-.055-.401-.083-.71.043-.94.16-.334.396-.4.69-.533.294-.135.64-.202.915-.47h.002v-.002c.256-.268.445-.601.668-.838.19-.201.38-.336.663-.336zm7.159-9.074c-.435.201-.945.535-1.488.535-.542 0-.97-.267-1.28-.466-.154-.134-.28-.268-.373-.335-.164-.134-.144-.333-.074-.333.109.016.129.134.199.2.096.066.215.2.36.333.292.2.68.467 1.167.467.485 0 1.053-.267 1.398-.466.195-.135.445-.334.648-.467.156-.136.149-.267.279-.267.128.016.034.134-.147.332a8.097 8.097 0 01-.69.468zm-1.082-1.583V5.64c-.006-.02.013-.042.029-.05.074-.043.18-.027.26.004.063 0 .16.067.15.135-.006.049-.085.066-.135.066-.055 0-.092-.043-.141-.068-.052-.018-.146-.008-.163-.065zm-.551 0c-.02.058-.113.049-.166.066-.047.025-.086.068-.14.068-.05 0-.13-.02-.136-.068-.01-.066.088-.133.15-.133.08-.031.184-.047.259-.005.019.009.036.03.03.05v.02h.003z"/></svg>Linux</span> <span class="small">x86-64</span></th>
+            <td>
+              <p><a class="file" href="https://github.com/reG2-project/reG2/releases/latest/download/reG2-x86_64.AppImage">reG2-x86_64.AppImage</a></p>
+              <p class="small">The simplest: make it executable and run it. Also as a <a href="https://github.com/reG2-project/reG2/releases/latest/download/reG2-x86_64.flatpak">Flatpak</a> (<code>flatpak install --user reG2-x86_64.flatpak</code>, needs Flathub set up) or a <a href="https://github.com/reG2-project/reG2/releases/latest/download/reG2-linux-x86_64.tar.gz">tar.gz</a> (run <code>./reg2</code>). Nothing else to install: reG2 brings its own libraries.</p>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row"><span class="caps nocase"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>macOS</span> <span class="small">11 or later, Apple Silicon and Intel</span></th>
+            <td>
+              <p><a class="file" href="https://github.com/reG2-project/reG2/releases/latest/download/reG2-macos.dmg">reG2-macos.dmg</a></p>
+              <p class="small">Untested: the builds come straight from GitHub's CI, so please tell us if it works. The app isn't signed by Apple, so the first time, right-click it and choose Open.</p>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row"><span class="caps"><svg class="icon line" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>Browser</span> <span class="small">A recent Chrome, Edge, Firefox or Safari</span></th>
+            <td>
+              <p><a class="file" href="play/">Play in your browser</a></p>
+              <p class="small">Give the page your copy of GTA2. Nothing is uploaded: the game files stay in your browser, on your device.</p>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row"><span class="caps"><svg class="icon line" viewBox="0 0 24 24" aria-hidden="true"><line x1="6" x2="10" y1="11" y2="11"/><line x1="8" x2="8" y1="9" y2="13"/><line x1="15" x2="15.01" y1="12" y2="12"/><line x1="18" x2="18.01" y1="10" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>Nintendo 3DS</span> <span class="small">Homebrew</span></th>
+            <td>
+              <p><a class="file" href="https://github.com/reG2-project/reG2-3DS">reG2 3DS</a></p>
+              <p class="small">Its own repository, with its own releases.</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="prose">On first start reG2 asks for the game files: it can copy an existing GTA2 install, or install from the free Rockstar Classics installer or the CD. All releases, with their notes, are on the <a href="https://github.com/reG2-project/reG2/releases">releases page</a>.</p>
+
+      <div class="aside" id="no-game">
+        <h3 class="caps">No copy of GTA2?</h3>
+        <p>Rockstar gave GTA2 away for free in 2004, and that release works with reG2. The Internet Archive keeps it: download GTA2INSTALLER.exe (about 350 MB) from <a href="https://archive.org/details/gta2_rockstar-classics">archive.org/details/gta2_rockstar-classics</a>, then point reG2 to it on first start.</p>
+      </div>
+
+      <div class="aside">
+        <h3 class="caps">Where files go</h3>
+        <p>reG2 looks for the game in <code>GTA2_DIR</code>, the current folder and its own folder, else in the per-user folder below, where the first start copies it. Settings (<code>gta2_registry.ini</code>) and saves (<code>player/</code>) sit next to the game data; <code>reG2.log</code> is written only after a crash or an error.</p>
+        <table class="files">
+          <caption class="sr-only">Per-user folder by system</caption>
+          <tbody>
+            <tr><th scope="row">Windows</th><td><code>%APPDATA%\reG2\</code></td></tr>
+            <tr><th scope="row">Linux (AppImage, tar.gz)</th><td><code>~/.local/share/reG2/</code></td></tr>
+            <tr><th scope="row">Linux (Flatpak)</th><td><code>~/.var/app/io.github.reG2_project.reG2/data/reG2/</code></td></tr>
+            <tr><th scope="row">macOS</th><td><code>~/Library/Application Support/reG2/</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  <section class="sec" aria-labelledby="about-title">
+    <h2 id="about-title" class="caps">Built on <span class="nocase">gta2_re</span></h2>
+    <div class="body prose">
+      <p>reG2 is a fork of <a href="https://github.com/CriminalRETeam/gta2_re">gta2_re</a> by the CriminalRETeam, and all the credit for the game itself goes to them: they rebuilt GTA2 (PC, version 10.5) function by function, in C++ that compiles back to the original machine code.</p>
+      <p>reG2 adds what you need to run it today (SDL3, OpenGL, sound, gamepads) and some extras on top.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>The game code is the work of the <a href="https://github.com/CriminalRETeam/gta2_re">gta2_re</a> decompilation by the CriminalRETeam; reG2 adds the ports. Source and build instructions on <a href="https://github.com/reG2-project/reG2">GitHub</a>. Built with <a href="https://libsdl.org">SDL3</a> and <a href="https://openal-soft.org">OpenAL Soft</a>. Type: <a href="fonts/OFL-Michroma.txt">Michroma</a> and <a href="fonts/OFL-Archivo.txt">Archivo</a>, under the SIL Open Font License. Icons: <a href="icons-licenses.txt">Simple Icons and Lucide</a>.</p>
+  <p class="legal">reG2 is an unofficial fan project, not affiliated with or endorsed by Rockstar Games or Take-Two Interactive. Grand Theft Auto and GTA2 are trademarks of Take-Two Interactive. reG2 contains no game data: you need your own copy of the game.</p>
+</footer>
+</body>
+</html>
