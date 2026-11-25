@@ -41,8 +41,8 @@ static const u8 kDeathCrySampleIndex = 16;
 
 // The death cries' channels: the frame each started and the frames it lasts, to tell a cry cut short from one that ended
 static u32 sPortCryFrame;
-static u32 sPortCryStart[64];
-static s32 sPortCryLength[64];
+static u32 sPortCryStart[SOUND_CHANNELS];
+static s32 sPortCryLength[SOUND_CHANNELS];
 
 static bool IsPortDeathCry(const sound_0x68& sample)
 {
