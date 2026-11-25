@@ -6,6 +6,7 @@
 #include "internal.hpp"
 #include "Source/Car.hpp"
 #include "Source/CollisionSoundQueue.hpp"
+#include "Source/Game.hpp"
 #include "Source/Object_5C.hpp"
 #include "Source/Ped.hpp"
 #include "Source/SoundObject.hpp"
@@ -284,12 +285,15 @@ void net::engine::SoundLogResimTick(bool applied)
         gPortSoundStats.resimOff++;
         return;
     }
-    gPortSoundStats.resimPaused += s.mIsPaused; // the restored save's: its entities then ask for nothing
+    // The pause as sound_obj::Service has it for this tick's world: a save holds the flag of the frame that took it, and a
+    // resimulation saves its ticks again, which would carry a paused one (the results) on to every later tick
+    s.mIsPaused = gGame_0x40 && (gGame_0x40->mGameState == GameState::Paused_2 || (gPortWorldStill && gPortWorldStill()));
+    gPortSoundStats.resimPaused += s.mIsPaused;
     // The channels and queues mirror the mixer (RestoreGame keeps them over a restore): as they were
     const size_t from = offsetof(sound_obj, msQueueSample), to = offsetof(sound_obj, mUnused1440);
     static unsigned char sChannels[offsetof(sound_obj, mUnused1440) - offsetof(sound_obj, msQueueSample)];
     memcpy(sChannels, (unsigned char*)&s + from, to - from);
-    if (!applied)
+    if (!applied && !s.mIsPaused)
     {
         s.GenerateIntegerRandomNumberTable();
         s.mVocals.mFifthFrameFlag = !(s.mMFrameCounter++ % 5);

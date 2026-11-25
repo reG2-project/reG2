@@ -619,7 +619,9 @@ beeps, which take the next of a shared count, as one), the place and the tick, t
 which every map starts anew (so do the logs, `SoundLogNewGame`): a restore learns which snapshot tick it is. A resimulated tick runs the same entities
 without the mixer (`SoundLogResimTick`: the queues and channels as they were, no radio, vocal stream or pager) and notes
 what they would have asked for; their progress moves on with the world as on a live frame (entity ages, `SoundPosEntry`,
-the frame counter, the events they take). Once a snapshot settles a tick (its tick and the next, which runs with the
+the frame counter, the events they take). Its pause is its own world's, as `sound_obj::Service` has it (the results, a map change's
+pause), not the restored save's: the resimulation saves its ticks again, and a paused flag from the results would
+silence every later resimulated tick. Once a snapshot settles a tick (its tick and the next, which runs with the
 server's state and inputs), that tick's requests no live frame had (same owner and sound, within 2 ticks and a block)
 are added to the next live frame's queue, each once, and noted as heard. A bigger blast's bang given where a smaller one
 plays ends that one (the car the server blew up where this client's own rocket blast was; the server's game had only the

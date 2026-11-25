@@ -198,6 +198,9 @@ rounds() {
   done
   for b in rammer soldier; do
     grep -q "a new game" "$OUT/rounds_$b.log" || { ok=0; echo "  rounds: r_$b didn't follow to the next map"; }
+    # After the results, the resimulated ticks ask for sounds again (the others' shots are heard through them)
+    awk '/notice: Round 2: go/ { n = 1 } n && /, sound: asked/ && / live, [1-9][0-9]* \(spr/ { ok = 1 } END { exit !ok }' "$OUT/rounds_$b.log" ||
+      { ok=0; echo "  rounds: r_$b's resimulated ticks asked for no sound in round 2"; }
   done
   grep -q "notice: Round 2: go" "$OUT/rounds_late.log" || { ok=0; echo "  rounds: the late client wasn't in round 2"; }
   # The game on the new map, not the old one again: Tiny Town (mp1) is within x 50..130, mp2's restart zones east of 140
@@ -206,7 +209,7 @@ rounds() {
   if [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $ok = 0 ]; then
     fail "rounds: $crashes crashed, $checks CHECK lines ($BUILD/net_check/rounds_*.log)"
   else
-    pass "rounds: warmup, ready, a round, results with a map vote, the voted map, a player joining in the results"
+    pass "rounds: warmup, ready, a round, results with a map vote, the voted map with its sounds, a player joining in the results"
   fi
 }
 
