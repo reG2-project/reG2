@@ -4170,7 +4170,15 @@ MATCH_FUNC(0x41A910)
 void sound_obj::AddDetailsToRequestedOrderList(u8 sample)
 {
     u8 i = 0;
+#if defined(GTA2_PORT)
+    // Port: a full queue's new sample takes the last place's slot, and is ranked against every place before it
+    const u8 end = gPortFullQueueRanked && mSampleRequestQueuesStatus[mnActiveSampleQueue] == mnActiveSamples
+        ? mnActiveSamples - 1
+        : sample;
+    while (i < end)
+#else
     while (i < sample)
+#endif
     {
         if (masSamples[mnActiveSampleQueue][mabSampleQueueIndexTable[mnActiveSampleQueue][i]]
                 .mnCalculatedVolume > masSamples[mnActiveSampleQueue][sample].mnCalculatedVolume)

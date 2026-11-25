@@ -143,6 +143,10 @@ extern bool gPortGroundedObjects;
 // A network game's: a player cries out at its death (Ped::Kill's voice event 4) as the other peds do, which the original
 // keeps for peds that aren't players (sound_obj::HandlePedVoiceEvent)
 extern bool gPortPlayersDeathCry;
+// A network game's: a sample asked for when the mixer's request queue is full is ranked among all the others
+// (sound_obj::AddDetailsToRequestedOrderList); the original's search stops at the slot it takes, and the sample at that
+// place in the order is lost
+extern bool gPortFullQueueRanked;
 // A network server's: the character a player's client typed with the key <dik> this tick, in its keyboard's layout
 // (0: none), for its chat line (Hud_ChatInput::HandleChatInputKey); the server's own table is a US keyboard's
 extern u16 (*gPortChatChar)(Player* pPlayer, s32 dik);

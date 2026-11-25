@@ -46,6 +46,7 @@ bool gPortServerKillAwards;
 bool gPortTagTimeCounts;
 bool gPortGroundedObjects;
 bool gPortPlayersDeathCry;
+bool gPortFullQueueRanked;
 u16 (*gPortChatChar)(Player*, s32);
 bool gPortProtectsPlayers;
 bool (*gPortScoreBonusHook)(Player* pPlayer, s32 voice);
