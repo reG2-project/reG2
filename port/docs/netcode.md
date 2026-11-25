@@ -810,8 +810,12 @@ switches under 5 s S fire presses P held H s` how often it gets in or out of a c
 on foot armed its attack presses and the time attack was held (`bot_bench.sh` passes `ARGS` to the server: `--kit smg`). Over 12 seeds
 on downtown, Tiny Town, Industrial and Residential (96 bots per brain): stuck 31.5, 18.9, 19.7 to 21.8, 6.3, 13.3 s per
 5 minutes (hunter, simple, soldier; stuck by a car on foot 11.5, 14.9, 7.1 to 1.8, 1.6, 0.9), frags 535 to 717, throws
-362 to 904 with 9% to 7% of them at someone nearer than 1.8 blocks and 51% to 16% with nobody within 5. A well armed hunter gets out of its car for someone on foot within 6 blocks, or with rockets for a car within 8,
-and stays on foot 10 s; the soldier gets out for a car only with rockets. Over 20 seeds on the three maps: frags 594 to
+362 to 904 with 9% to 7% of them at someone nearer than 1.8 blocks and 51% to 16% with nobody within 5. A well armed hunter gets out of its car for someone on foot within 6 blocks, or with rockets for a car within 8;
+the soldier gets out for a car only with rockets. Once in a car or out of one, the hunter, the soldier and the rammer
+keep to that for 10 s before choosing again (a wedged car aside), and the soldier takes a car only with nobody within
+10 blocks (it gets out for someone within 7): with `--kit smg` the soldier got in and out 27 to 44 times per 5 minutes
+under 5 s apart, and the rammer, which doesn't fight on foot, got out to shoot and straight back in. With the kit, over
+12 seeds on downtown and Tiny Town, frags went from 11.9 to 17.9 a match. Over 20 seeds on the three maps: frags 594 to
 754, fistfight time 61, 27, 12 to 18, 17, 14 s per 5 minutes (simple, hunter, soldier), the hunter armed 112 to 208 s and
 in a car near someone on foot 35 to 2 s; against rammers the simple bot's dodge took their frags from 265 to 162.
 A bot client still takes the keyboard's key events (Escape and the pause menu, the chat), so `GTA2_INPUT` can press

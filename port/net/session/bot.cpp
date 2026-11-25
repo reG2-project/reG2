@@ -409,6 +409,30 @@ class CarDodge
     int mDodges = 0;
 };
 
+// Once in a car or out of one, it keeps to that for 10 s before it chooses again (a wedged car aside)
+class CarCommit
+{
+  public:
+    void See(const net::BotView& v)
+    {
+        const bool alive = v.hasBody && v.health > 0, inCar = alive && v.car != 0;
+        if (alive && inCar != mInCar)
+        {
+            mChanged = true, mSince = v.frame;
+        }
+        mChanged &= alive;
+        mInCar = inCar;
+    }
+    bool Settled(const net::BotView& v) const
+    {
+        return !mChanged || v.frame - mSince >= 300;
+    }
+
+  private:
+    bool mInCar = false, mChanged = false;
+    uint32_t mSince = 0;
+};
+
 // A press now and then, not held: once every 4 decisions of 3 ticks
 uint32_t Press(const net::BotView& v, uint32_t button)
 {
@@ -664,6 +688,9 @@ class PulseBot : public DecidingBot
 class RamBot : public DecidingBot
 {
   public:
+    explicit RamBot(bool shoots = false) : mShoots(shoots)
+    {
+    }
     std::string Describe() const override
     {
         char line[128];
@@ -675,6 +702,7 @@ class RamBot : public DecidingBot
   private:
     uint32_t Decide(const net::BotView& v) override
     {
+        mCommit.See(v);
         if (!v.hasBody || v.health <= 0)
         {
             return 0;
@@ -710,9 +738,9 @@ class RamBot : public DecidingBot
                 mWalker.GiveUp(v, v.car);
             }
         }
-        // Well armed: out to shoot someone on foot near, or with rockets a car (a car runs people over, but a gun
-        // hits them as they dodge)
-        const bool outToShoot = WellArmed(v) && target && (target->inCar ? (v.gunMask >> 2 & 1) && d < 8 : d < 6);
+        // A fighter well armed: out to shoot someone on foot near, or with rockets a car (a car runs people over, but
+        // a gun hits them as they dodge)
+        const bool outToShoot = mShoots && mCommit.Settled(v) && WellArmed(v) && target && (target->inCar ? (v.gunMask >> 2 & 1) && d < 8 : d < 6);
         if (mWedged >= 4 || outToShoot)
         {
             return v.frame % 20 < 2 ? net::kBtnEnterExit : 0;
@@ -725,11 +753,12 @@ class RamBot : public DecidingBot
         return net::kBtnForward | Steer(err);
     }
 
-    bool mInCar = false;
+    bool mShoots, mInCar = false;
     int mEntered = 0, mReversals = 0, mWedged = 0;
     float mLastX = 0, mLastY = 0;
     uint32_t mBackUntil = 0;
     net::BotWalker mWalker;
+    CarCommit mCommit;
 };
 // The fighter on foot and the rammer in a car: takes a car when one is near, nobody is close and it has the weapon it
 // wants, drives at people, and fights on foot otherwise (a teacher for the trained bots: one brain, so what it shows is consistent)
@@ -747,21 +776,17 @@ class HunterBot : public DecidingBot
         float enemy = 0, car = 0;
         Nearest(v, net::BotView::Seen::kPlayer, &enemy);
         Nearest(v, net::BotView::Seen::kCar, &car);
-        if (!v.car && mWasInCar)
-        {
-            mNoCarUntil = v.frame + 300; // out to fight: on foot for a while
-        }
-        mWasInCar = v.car != 0;
-        mDriving = v.car != 0 || (car < 10 && enemy > 8 && v.frame >= mNoCarUntil && !mFoot.WantsWeapon(v));
+        mCommit.See(v);
+        mDriving = v.car != 0 || (car < 10 && enemy > 8 && mCommit.Settled(v) && !mFoot.WantsWeapon(v));
         // Both see every tick, so their timers and stuck checks stay right whichever decides
         const uint32_t foot = mFoot.Think(v), drive = mCar.Think(v);
         return mDriving ? drive : foot;
     }
 
     SimpleBot mFoot;
-    RamBot mCar;
-    bool mDriving = false, mWasInCar = false;
-    uint32_t mNoCarUntil = 0;
+    RamBot mCar{true};
+    bool mDriving = false;
+    CarCommit mCommit;
 };
 // The whole round: a weapon first, then a car, then along its route to the nearest player, and there whatever suits:
 // runs it over when coming at it fast and head on, else gets out and shoots. Pinned against someone in a car, it gets
@@ -781,6 +806,7 @@ class SoldierBot : public DecidingBot
   private:
     uint32_t Decide(const net::BotView& v) override
     {
+        mCommit.See(v);
         if (!v.hasBody || v.health <= 0)
         {
             mBackUntil = 0;
@@ -832,8 +858,9 @@ class SoldierBot : public DecidingBot
         {
             return Fight(v, *target, d);
         }
+        // A car with nobody within 10 blocks (it gets out for someone within 7)
         const net::BotView::Seen* car = Nearest(v, net::BotView::Seen::kCar, &far, false, &mWalker);
-        if (car && far < 15)
+        if (car && far < 15 && mCommit.Settled(v) && (mTargetDist < 0 || mTargetDist >= 10))
         {
             return far < 2.5f ? Press(v, net::kBtnEnterExit) : Walk(v, *car); // the game walks it to the door
         }
@@ -904,7 +931,7 @@ class SoldierBot : public DecidingBot
             return mStuckTimes >= 3 ? Press(v, net::kBtnEnterExit) : net::kBtnBack | (direct > 0 ? net::kBtnRight : net::kBtnLeft);
         }
         // Near it, armed (rockets for a car), and not coming at it fast and head on: out, to shoot
-        if ((target->inCar ? v.gunMask >> 2 & 1 : v.guns) && d < 7 && (mSpeed < 0.12f || abs(direct) > 240))
+        if ((target->inCar ? v.gunMask >> 2 & 1 : v.guns) && d < 7 && (mSpeed < 0.12f || abs(direct) > 240) && mCommit.Settled(v))
         {
             return Press(v, net::kBtnEnterExit);
         }
@@ -927,6 +954,7 @@ class SoldierBot : public DecidingBot
     CarDodge mDodge;
     Motions mMotions;
     Thrower mThrower;
+    CarCommit mCommit;
 };
 } // namespace
 
