@@ -2,35 +2,38 @@
 #include "bitstream.hpp"
 #include <string.h>
 
-void net::BitWriter::Bits(uint32_t value, int count)
+void net::BitWriter::Put(uint64_t value, int count)
 {
-    for (int i = 0; i < count; i++)
+    const size_t at = mBits >> 3;
+    value <<= mBits & 7;
+    mBits += (size_t)count;
+    const size_t size = (mBits + 7) >> 3;
+    if (size > mData.size())
     {
-        if ((mBits & 7) == 0)
+        if (size > mData.capacity())
         {
-            mData.push_back(0);
+            mData.reserve(size < 128 ? 256 : size * 2);
         }
-        if ((value >> i) & 1)
-        {
-            mData[mBits >> 3] |= (uint8_t)(1u << (mBits & 7));
-        }
-        mBits++;
+        mData.resize(size); // zeros: the bits above mBits stay clear
+    }
+    for (size_t k = at; k < size; k++, value >>= 8)
+    {
+        mData[k] |= (uint8_t)value;
     }
 }
 
 void net::BitWriter::VarU(uint32_t value)
 {
+    uint64_t bytes = 0;
+    int count = 0;
     do
     {
         const uint32_t part = value & 0x7F;
         value >>= 7;
-        Bits(part | (value ? 0x80 : 0), 8);
+        bytes |= (uint64_t)(part | (value ? 0x80 : 0)) << count;
+        count += 8;
     } while (value);
-}
-
-void net::BitWriter::VarS(int32_t value)
-{
-    VarU(((uint32_t)value << 1) ^ (uint32_t)(value >> 31));
+    Put(bytes, count); // up to 5 bytes
 }
 
 void net::BitWriter::Bytes(const void* data, size_t size)
@@ -49,13 +52,20 @@ uint32_t net::BitReader::Bits(int count)
         mOverflow = true;
         return 0;
     }
-    uint32_t value = 0;
-    for (int i = 0; i < count; i++)
+    if (count <= 0)
     {
-        value |= (uint32_t)((mData[mBits >> 3] >> (mBits & 7)) & 1) << i;
-        mBits++;
+        return 0;
     }
-    return value;
+    const size_t at = mBits >> 3;
+    const size_t end = (mBits + (size_t)count + 7) >> 3; // within mSize: checked above
+    uint64_t bytes = 0;
+    for (size_t k = at; k < end; k++)
+    {
+        bytes |= (uint64_t)mData[k] << (8 * (k - at));
+    }
+    const uint64_t value = bytes >> (mBits & 7);
+    mBits += (size_t)count;
+    return count < 32 ? (uint32_t)value & ((1u << count) - 1) : (uint32_t)value;
 }
 
 uint32_t net::BitReader::VarU()

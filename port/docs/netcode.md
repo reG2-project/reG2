@@ -245,8 +245,9 @@ that wasn't ending.
 Every network step runs the tick, then `NetPlay::SendToAll`, where the original sent its inputs. The port's `NetPlay`
 (`engine/netplay.cpp`) makes that the netcode's frame hook, once per tick: after tick T, before anything is drawn.
 There the server reads its clients and sets every player's input for T+1; the client sends its command, applies
-snapshots and rolls back. Between steps both poll the network about every millisecond (`gPortIdleHook`) for pings, so
-neither the tick nor the frame adds to the ping.
+snapshots and rolls back. Between steps both answer pings at once (`gPortIdleHook`): the client polls the network about
+every millisecond, the server waits on it until about 2 ms before its next step (`engine::NetworkWaitMs`) and polls the
+last stretch, so neither the tick nor the frame adds to the ping.
 
 A client runs reG2's frame loop (`port/src/frame_loop.cpp`, `gPortNetFrameLoop`), as single player does: ticks at the
 game's rate, frames at the FRAME LIMIT, each drawn between the last two ticks (`port/src/interpolation.cpp`), SHOW FPS.
@@ -255,7 +256,8 @@ from what the frames before showed (the state before the tick, after the last ho
 one's rollback and blend, and a correction is spread over the frames of a tick. Objects and particles go from the
 corrected game's place before the tick instead (recorded before the shown tick is resimulated, `engine::ResimStepStart`):
 after a rollback the same sprite slot and id may hold another object in the prediction. A server and a replay run the
-original's frame path in `winmain.cpp` (a step, then a frame): a server draws nothing, a replay runs as fast as it can.
+original's frame path in `winmain.cpp` (a step, then a frame): a headless server skips `Game::Draw` (`gPortNoDraw`: its
+steps don't depend on it, an arena's world is the same tick by tick without it), a replay runs as fast as it can.
 
 ### The server
 
@@ -612,7 +614,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Game.cpp` | `gPortDrawOverlay` | drawn last: the status, the round's panel, chat completion |
 | `Car.cpp`, `Char_Pool.cpp` | `PortTrafficLimit()`, `gPortSpawnPlayers` | the spawn limits times the players |
 | `port/src/options_menu.cpp` | `gPortFrontendSetup`, `gPortFrontendInput` | the network page, beside reG2's options |
-| `winmain.cpp` | `gPortNextNetworkGame`, `gPortLeaveNetworkGame`, `gPortNetFrameLoop` | a map change goes to the next game; a client that left goes to the network page; a client runs reG2's frame loop |
+| `winmain.cpp` | `gPortNextNetworkGame`, `gPortLeaveNetworkGame`, `gPortNetFrameLoop`, `gPortNoDraw` | a map change goes to the next game; a client that left goes to the network page; a client runs reG2's frame loop; a headless server draws nothing |
 | `map_0x370.cpp` | a file static in port builds | the restart zones' turn, a function's static in the original: registered from the start, so rolled back and sent |
 | `sprite.cpp` | `gPortSpriteMovedHook` | a sprite moved: the grid check (`GTA2_NET_CHECKGRID`) |
 | `port/src/rumble.cpp` | `gPortNoRumble` | no vibration on a server (its local player is a remote one) or in a client's resimulation |

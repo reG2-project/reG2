@@ -225,9 +225,22 @@ void WriteControl(const char* format, int control, DWORD value)
     }
 }
 
+// Read in every message loop poll (port_UpdatePad): from the registry again only once it changed.
 DWORD KeyFor(int control)
 {
-    return ReadControl("%d", control, kDefaultKeys[control]) & 0xFF;
+    static DWORD sKeys[kNumControls];
+    static unsigned sKeysGeneration;
+    static bool sKeysRead;
+    if (!sKeysRead || sKeysGeneration != port_RegistryGeneration())
+    {
+        for (int i = 0; i < kNumControls; i++)
+        {
+            sKeys[i] = ReadControl("%d", i, kDefaultKeys[i]) & 0xFF;
+        }
+        sKeysRead = true;
+        sKeysGeneration = port_RegistryGeneration();
+    }
+    return sKeys[control];
 }
 
 bool AltDown(int control)

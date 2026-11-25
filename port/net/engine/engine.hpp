@@ -64,6 +64,9 @@ void OfferMenu(const std::vector<MenuPlayer>& players, const char* scoreHeading,
 void SetRoundPad(bool results);
 bool PadMode(); // the gamepad gave the last input: the hints name its buttons
 void IdleWait(); // while the game waits for its next step: a millisecond's sleep when that is more than 1 ms away
+// The real milliseconds a server may wait on the network before its next step: until about 2 ms before it is due (0
+// when that is closer), IdleWait doing the rest as for any wait, so that the steps keep their timing
+int NetworkWaitMs();
 void HoldStep(); // the next step put off by a tick (an empty server's: no step while it waits)
 void SeedRandom(uint32_t seed); // the game's rand() state (a server's: clients take it from snapshots)
 // A network game's random draws: each entity's update and each server service its own (port/src/rand/owner.hpp)

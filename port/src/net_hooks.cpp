@@ -6,6 +6,7 @@ void (*gPortCrashHook)();
 void (*gPortSpriteMovedHook)(Sprite*);
 void (*gPortIdleHook)();
 bool gPortNetFrameLoop;
+bool gPortNoDraw;
 
 bool gPortNoAudio;
 void (*gPortSampleStartHook)(const void*);

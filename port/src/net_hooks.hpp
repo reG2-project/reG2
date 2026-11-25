@@ -22,6 +22,9 @@ extern void (*gPortIdleHook)();
 // A network client's: reG2's frame loop runs its game (winmain.cpp), the netcode's frame hook after each step and
 // frames drawn in between; a server and a replay run the original's, a step then a frame
 extern bool gPortNetFrameLoop;
+// A headless dedicated server's: the original's frame path (winmain.cpp) runs no Game::Draw after a step, as nobody
+// sees it and the steps don't depend on it (port/docs/netcode.md, "The game loop")
+extern bool gPortNoDraw;
 
 // No audio device for the game: sound_obj then doesn't run at all. A network server's: nobody hears it, and its
 // listener follows slot 0's camera, whose ped (once that player left) can be any ped's, in any car

@@ -53,6 +53,9 @@ bool port_Headless();
 // Message boxes only logged (GTA2_NO_MESSAGEBOX, and always on a dedicated server).
 bool port_NoMessageBox();
 
+// The registry (registry.cpp): a count that changes with every value written or deleted, for readers that cache values.
+unsigned port_RegistryGeneration();
+
 // Scripted key presses and exit (GTA2_INPUT, GTA2_EXIT_AT), checked as the message loop pumps.
 void port_InitTestInput();
 void port_InjectTestInput(unsigned frame);

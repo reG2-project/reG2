@@ -29,6 +29,7 @@ bool port_GameRunning();
 #if defined(GTA2_PORT_SDL)
 void port_SetRenderOptions(bool trueColour, int bloomTenths, bool perPixelLighting, int textureFilter, int msaa, bool softShadows);
 int port_MaxMsaaSamples();
+unsigned port_RegistryGeneration();
 void port_ApplyVsync();
 int port_FullscreenModeCount();
 int port_FullscreenModeIndex();
@@ -580,6 +581,20 @@ s32 Screen(Id id)
                   id == kBloom || id == kAntiAliasing))
     {
         return 0;
+    }
+#endif
+#if defined(GTA2_PORT_SDL)
+    // Read many times a frame: from the registry again only once it changed (a value read without one writes it).
+    static s32 sValue[kCount];
+    static unsigned sReadAt[kCount]; // the registry's generation + 1 when read, 0 not yet
+    if (id >= 0 && id < kCount)
+    {
+        if (sReadAt[id] != port_RegistryGeneration() + 1)
+        {
+            sValue[id] = gRegistry.Get_Screen_Setting(ScreenName(id), ScreenDefault(id));
+            sReadAt[id] = port_RegistryGeneration() + 1;
+        }
+        return sValue[id];
     }
 #endif
     return gRegistry.Get_Screen_Setting(ScreenName(id), ScreenDefault(id));

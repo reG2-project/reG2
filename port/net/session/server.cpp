@@ -479,6 +479,7 @@ bool net::Server::Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items,
             }
         }
         Snapshot candidate = fixed;
+        candidate.entities.reserve(fixed.entities.size() + items.size());
         size_t fresh = 0;
         for (const Item& it : items)
         {
@@ -494,7 +495,7 @@ bool net::Server::Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items,
         }
         engine::SetSnapshotReach(candidate, mConfig.interestRadius); // nothing it has goes missing
         SortById(candidate);
-        w = BitWriter();
+        w.Clear();
         SnapshotHeader h = {mTick, base ? base->tick : mTick, s.lastCmdTick, forwarded};
         WriteSnapshotHeader(w, h);
         WriteDelta(w, schema, base ? *base : kEmpty, candidate, Env().snapCheck);
@@ -503,7 +504,7 @@ bool net::Server::Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items,
             mStats.inArea += (uint32_t)items.size();
             mStats.fresh += (uint32_t)fresh;
             mStats.cut += fresh < items.size();
-            s.sent[mTick % kRing] = candidate;
+            s.sent[mTick % kRing] = std::move(candidate);
             for (const Item& it : items)
             {
                 if (it.pick == 2)
@@ -672,8 +673,18 @@ void net::Server::Idle()
         }
         waited = true;
     }
-    while (waited || mTransport->Poll(e))
+    // Then whatever came, and while none comes, a wait on the network until shortly before the next step is due: a ping
+    // is answered as it comes, and the loop wakes about once a step rather than every millisecond
+    for (;;)
     {
+        if (!waited && !mTransport->Poll(e))
+        {
+            const int ms = engine::NetworkWaitMs();
+            if (ms <= 0 || !mTransport->Wait(e, ms))
+            {
+                break;
+            }
+        }
         waited = false;
         if (e.type == TransportEvent::kReceive && e.channel == kChannelUnreliable && !e.data.empty() && e.data[0] == kMsgPing)
         {

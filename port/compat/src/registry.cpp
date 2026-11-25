@@ -36,6 +36,7 @@ std::map<std::string, Key>& Keys() // lower case path -> key
     return sKeys;
 }
 bool sLoaded;
+unsigned sGeneration; // port_RegistryGeneration
 
 std::string Lower(const std::string& s)
 {
@@ -137,6 +138,7 @@ Key& GetKey(const std::string& path)
 
 void SetValue(Key& k, const std::string& name, DWORD type, const void* data, size_t size)
 {
+    sGeneration++;
     Value v;
     v.mType = type;
     v.mData.assign(static_cast<const BYTE*>(data), static_cast<const BYTE*>(data) + size);
@@ -325,6 +327,11 @@ void SaveUnsaved()
 }
 } // namespace
 
+unsigned port_RegistryGeneration()
+{
+    return sGeneration;
+}
+
 void port_RegistryReadOnly()
 {
     sReadOnly = true;
@@ -433,6 +440,7 @@ LSTATUS WINAPI RegDeleteValueA(HKEY h, LPCSTR name)
     {
         return ERROR_FILE_NOT_FOUND;
     }
+    sGeneration++;
     Save();
     return ERROR_SUCCESS;
 }

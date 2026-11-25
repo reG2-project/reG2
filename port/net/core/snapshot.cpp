@@ -3,6 +3,7 @@
 // indices when shorter) and each changed value at its width or as its difference from the baseline (when shorter).
 #include "snapshot.hpp"
 #include <algorithm>
+#include <bit>
 #include <string.h>
 
 namespace
@@ -14,7 +15,9 @@ enum Op
     kRemove = 2,
 };
 
-void WriteValue(net::BitWriter& w, const net::FieldDesc& d, int32_t v)
+// W: net::BitWriter, or net::BitCounter for the size alone
+template <class W>
+void WriteValue(W& w, const net::FieldDesc& d, int32_t v)
 {
     w.Bits((uint32_t)v, d.bits);
 }
@@ -52,9 +55,31 @@ struct Mask
     {
         w[i / 32] |= 1u << (i % 32);
     }
+    size_t Count() const
+    {
+        size_t n = 0;
+        for (size_t k = 0; k < sizeof(w) / sizeof(w[0]); k++)
+        {
+            n += (size_t)std::popcount(w[k]);
+        }
+        return n;
+    }
+    // f(i) for each set bit, in order
+    template <class F>
+    void ForEach(F f) const
+    {
+        for (size_t k = 0; k < sizeof(w) / sizeof(w[0]); k++)
+        {
+            for (uint32_t m = w[k]; m; m &= m - 1)
+            {
+                f(k * 32 + (size_t)std::countr_zero(m));
+            }
+        }
+    }
 };
 
-void WriteMask(net::BitWriter& w, const Mask& mask, int n)
+template <class W>
+void WriteMask(W& w, const Mask& mask, int n)
 {
     for (int i = 0; i < n; i += 32)
     {
@@ -112,14 +137,11 @@ int VarSBits(int32_t v)
 // A new entity: the mask and the values. An update (base: the client's state): the changed fields as a mask or as a
 // list of their indices, whichever is shorter, and each value as itself or as its difference from the base (zigzag
 // varint, modulo 2^32), whichever is shorter - half the bits of mask and full values, measured on Tiny Town
-void WriteFields(net::BitWriter& w, const net::EntityType& t, const net::EntityState& s, const Mask& mask, const net::EntityState* base)
+template <class W>
+void WriteFields(W& w, const net::EntityType& t, const net::EntityState& s, const Mask& mask, const net::EntityState* base)
 {
     const size_t n = t.fields.size();
-    size_t changed = 0;
-    for (size_t i = 0; i < n; i++)
-    {
-        changed += mask.Has(i);
-    }
+    const size_t changed = mask.Count(); // a mask has no bits from n on
     if (base)
     {
         const int ib = IndexBits(n);
@@ -128,13 +150,7 @@ void WriteFields(net::BitWriter& w, const net::EntityType& t, const net::EntityS
         if (list)
         {
             w.Bits((uint32_t)changed, 7);
-            for (size_t i = 0; i < n; i++)
-            {
-                if (mask.Has(i))
-                {
-                    w.Bits((uint32_t)i, ib);
-                }
-            }
+            mask.ForEach([&](size_t i) { w.Bits((uint32_t)i, ib); });
         }
         else
         {
@@ -145,12 +161,7 @@ void WriteFields(net::BitWriter& w, const net::EntityType& t, const net::EntityS
     {
         WriteMask(w, mask, (int)n);
     }
-    for (size_t i = 0; i < n; i++)
-    {
-        if (!mask.Has(i))
-        {
-            continue;
-        }
+    mask.ForEach([&](size_t i) {
         const net::FieldDesc& d = t.fields[i];
         if (base)
         {
@@ -160,11 +171,11 @@ void WriteFields(net::BitWriter& w, const net::EntityType& t, const net::EntityS
             if (small)
             {
                 w.VarS(diff);
-                continue;
+                return;
             }
         }
         WriteValue(w, d, s.f[i]);
-    }
+    });
 }
 
 bool ReadFields(net::BitReader& r, const net::EntityType& t, net::EntityState& s, bool update)
@@ -189,21 +200,16 @@ bool ReadFields(net::BitReader& r, const net::EntityType& t, net::EntityState& s
     {
         mask = ReadMask(r, (int)n);
     }
-    for (size_t i = 0; i < n; i++)
-    {
-        if (!mask.Has(i))
-        {
-            continue;
-        }
+    mask.ForEach([&](size_t i) { // below n: a read mask has n bits, a read index is checked
         const net::FieldDesc& d = t.fields[i];
         if (update && r.Bits(1))
         {
             // s holds the base's value here (ReadDelta starts an update from it)
             s.f[i] = Wire(d, (int32_t)((uint32_t)Wire(d, s.f[i]) + (uint32_t)r.VarS()));
-            continue;
+            return;
         }
         s.f[i] = ReadValue(r, d);
-    }
+    });
     return !r.Overflow();
 }
 
@@ -212,7 +218,7 @@ Mask ChangedMask(const net::EntityType& t, const net::EntityState& a, const net:
     Mask mask = {};
     for (size_t i = 0; i < t.fields.size(); i++)
     {
-        if (Wire(t.fields[i], a.f[i]) != Wire(t.fields[i], b.f[i]))
+        if (a.f[i] != b.f[i] && Wire(t.fields[i], a.f[i]) != Wire(t.fields[i], b.f[i]))
         {
             mask.Set(i);
         }
@@ -343,7 +349,7 @@ size_t net::EntryBits(const Schema& schema, const EntityState* from, const Entit
 {
     static const EntityState kZero = {};
     const EntityType& t = schema.types[to.type];
-    BitWriter w;
+    BitCounter w;
     if (from && from->type == to.type)
     {
         const Mask mask = ChangedMask(t, *from, to);

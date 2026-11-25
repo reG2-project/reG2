@@ -1460,8 +1460,13 @@ EXPORT void __stdcall do_network_and_local_inputs()
             sCurrentNetInputs.mInputs[sNetworkPlayerIdx].mInputs = gInputRecorder.get_input_bits();
             Net_Send_Our_Inputs();
 #if defined(GTA2_PORT)
-            // Port: in reG2's frame loop the frames are drawn between the steps (PortRunGameFrame).
-            if (!gPortNetFrameLoop)
+            // Port: in reG2's frame loop the frames are drawn between the steps (PortRunGameFrame). A headless
+            // server draws nothing, its flip only counts the frame (port_FrameCount, the simulation bench).
+            if (gPortNoDraw)
+            {
+                pVid_FlipBuffers(gVidSys);
+            }
+            else if (!gPortNetFrameLoop)
 #endif
             DrawAndFlip();
             Net_Receive_Players_Inputs();

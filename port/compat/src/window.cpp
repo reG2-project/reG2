@@ -11,7 +11,7 @@
 #include <string>
 #include "port_platform.hpp"
 #include "../../setup/setup.hpp"
-#include "../../src/net_hooks.hpp" // gPortIdleHook
+#include "../../src/net_hooks.hpp" // gPortIdleHook, gPortServer
 
 namespace
 {
@@ -248,7 +248,10 @@ BOOL WINAPI PeekMessageA(MSG* pMsg, HWND, UINT, UINT, UINT flags)
             port_OnInputEvent(e);
             Translate(e);
         }
-        port_UpdatePad();
+        if (!gPortServer) // nobody plays on a dedicated server: its players' input comes from the network
+        {
+            port_UpdatePad();
+        }
     }
     if (Queue().empty())
     {

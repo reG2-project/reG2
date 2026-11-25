@@ -237,6 +237,7 @@ int NetMain_Init(std::vector<std::string>& args)
         if (!o.window)
         {
             SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "GTA2_HEADLESS", "1", true); // what port_Headless reads
+            gPortNoDraw = true;
         }
         if (!net::SetUpMaps(o.map, o.maps, sc))
         {
