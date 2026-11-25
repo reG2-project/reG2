@@ -163,7 +163,7 @@ void CutSmallerBangs(const SoundEvent& w)
     }
 }
 
-// The settled ticks' requests no live frame had, into this frame's queue (the vocal line into its slot)
+// The settled ticks' requests no live frame had, into this frame's queue (the vocal line played at once)
 void GiveOwed()
 {
     if (!sRestored)
@@ -199,9 +199,11 @@ void GiveOwed()
         net::engine::gSoundsGiven++;
         if (w.mOwner == &gSound_obj.mVocals)
         {
+            // Played now: the next frame's restore and resimulated ticks empty the slot before its vocals read it
             if (!gSound_obj.mVocals.mPendingVoice)
             {
                 gSound_obj.mVocals.mPendingVoice = (s32)w.mSound;
+                gSound_obj.ProcessType10_Vocals();
             }
             continue;
         }
