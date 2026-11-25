@@ -193,11 +193,13 @@ void EnsureTally(std::vector<std::vector<FieldTally>>& tally)
 
 namespace
 {
-// Not the client's to predict: a player's deaths (a client counts its own, only to carry out each once), its points,
-// money and multiplier (set from the snapshot after this comparison), the world's reach (the server's area)
+// Not the client's to predict: a player's deaths and last killer (a client counts its own, only to carry out each once),
+// its points, money and multiplier (set from the snapshot after this comparison), its scoring bonuses (the server's
+// count), the world's reach (the server's area)
 bool Predicted(uint32_t type, size_t f)
 {
-    return !((type == kEntityPlayer && (f == kPlayerDeaths || f == kPlayerPoints || f == kPlayerMoney || f == kPlayerMultiplier || f == kPlayerDeathEvents)) ||
+    return !((type == kEntityPlayer && (f == kPlayerDeaths || f == kPlayerPoints || f == kPlayerMoney || f == kPlayerMultiplier ||
+                                        f == kPlayerDeathEvents || f == kPlayerKiller || f == kPlayerBonus)) ||
              (type == kEntityWorld && f == kWorldReach));
 }
 } // namespace
@@ -263,8 +265,6 @@ void net::engine::ComparePrediction(const Snapshot& snap)
         std::vector<FieldTally>& tally = group ? gTally[NetSchema().types.size() + group - 1] : gTally[s.type];
         for (size_t f = 0; f < tally.size(); f++)
         {
-            // Not the client's to predict: a player's deaths (a client counts its own, only to carry out each once),
-            // its points, money and multiplier (set from the snapshot after this comparison), the world's reach (the server's area)
             if (!Predicted(s.type, f))
             {
                 continue;
