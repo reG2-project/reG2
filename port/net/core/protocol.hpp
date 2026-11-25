@@ -9,7 +9,7 @@
 
 namespace net
 {
-const uint32_t kProtocolVersion = 42;
+const uint32_t kProtocolVersion = 43;
 const uint16_t kDefaultPort = 27920;
 const size_t kMaxPayload = 1372; // the largest unreliable ENet packet at any link MTU (1428: ENet's mtu 1400)
 // The link's MTU, IP packets (--mtu, 576 to 1428): 1280 by default, the smallest of the VPNs people play LAN games over
