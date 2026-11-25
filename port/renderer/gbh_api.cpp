@@ -1303,8 +1303,8 @@ void port_DrawReticle(f32 x, f32 y, f32 size, f32 alpha)
 
 namespace
 {
-// The port's own pictures (port/src/welcome.cpp, port/src/prompts.cpp), by slot.
-const s32 kNumPictures = 4;
+// The port's own pictures (port/src/welcome.cpp, port/src/prompts.cpp, port/src/laser.cpp), by slot.
+const s32 kNumPictures = 5;
 RTexture* gPictures[kNumPictures];
 IRenderer* gPicturesOwner;
 } // namespace
@@ -1355,8 +1355,8 @@ void port_FreePictures()
 
 namespace
 {
-// The port's particle textures (port/src/fire_smoke.cpp), by slot.
-const s32 kNumParticleTextures = 2;
+// The port's particle textures (port/src/fire_smoke.cpp, port/src/laser.cpp), by slot.
+const s32 kNumParticleTextures = 3;
 RTexture* gParticleTextures[kNumParticleTextures];
 u32 gParticleVersions[kNumParticleTextures];
 IRenderer* gParticleTexturesOwner;

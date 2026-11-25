@@ -14,11 +14,13 @@
 #include "enums.hpp"
 #include "explosion_type.hpp"
 #include "frame_loop.hpp"
+#include "laser.hpp"
 #include "gbh_graphics.hpp"
 #include "gtx_0x106C.hpp"
 #include "settings.hpp"
 #include "sprite.hpp"
 #include "3rdParty/GTA2Hax/d3ddll/d3ddll.hpp"
+#include <math.h>
 #include <string.h>
 
 #if defined(GTA2_PORT_SDL)
@@ -40,6 +42,7 @@ const u32 kRed = 0xFFFF5038;
 const u32 kFire = 0xFFFF9030;
 const u32 kElectric = 0xFF5080FF;
 const u32 kExhaust = 0xFFFFD8A0;
+const u32 kLaser = 0xFFFF2010;
 u8 sPixels[256 * 256];
 f32 sMinX, sMinY, sMaxX, sMaxY;
 // SmokeLights: AddLight's lights go to the smoke only, their intensity times this; 0 for the world's.
@@ -356,6 +359,20 @@ void Submit(s32 min_x, s32 min_y, s32 max_x, s32 max_y)
             AddLight(pSprite->mXy.x.ToFloat(), pSprite->mXy.y.ToFloat(), pSprite->mZpos.ToFloat(), 1.2f,
                      static_cast<s32>(30 * FlameNow(p->mId * 8u) * p->mCounter / p->mInitialCounter), kElectric);
         }
+    }
+    // Laser beams (LASER RIFLE): a small light every block along the beam, a brighter one where it hits.
+    PortLaser::Beam beams[8];
+    for (s32 i = 0, count = PortLaser::GetBeams(beams, 8); i < count; i++)
+    {
+        const PortLaser::Beam& b = beams[i];
+        const f32 dx = b.mX1 - b.mX0;
+        const f32 dy = b.mY1 - b.mY0;
+        const s32 points = static_cast<s32>(sqrtf(dx * dx + dy * dy)) + 1;
+        for (s32 k = 0; k < points; k++)
+        {
+            AddLight(b.mX0 + dx * k / points, b.mY0 + dy * k / points, b.mZ, 1.6f, static_cast<s32>(200 * b.mFade), kLaser);
+        }
+        AddLight(b.mX1, b.mY1, b.mZ, 2.5f, static_cast<s32>(255 * b.mFade), kLaser);
     }
     // Rockets in flight; thrown molotovs carry a game light already (Weapon::throwable).
     for (Object* pObj = gObject_2C_Pool ? gObject_2C_Pool->GetFirstUsed() : NULL; pObj; pObj = pObj->mpNext)

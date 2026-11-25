@@ -64,7 +64,7 @@ if(WIN32 AND GTA2_PORT_DIRECTX)
     target_compile_definitions(binkw32 PRIVATE BUILD_BINK)
 
     add_executable(gta2 WIN32 ${lib_src} ${ROOT}/test.cpp ${ROOT}/StdAfx.cpp
-        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/heat_haze.cpp src/fire_smoke.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/ambient_occlusion.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp ${CMAKE_CURRENT_LIST_DIR}/resources.rc)
+        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/heat_haze.cpp src/fire_smoke.cpp src/laser.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/ambient_occlusion.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp ${CMAKE_CURRENT_LIST_DIR}/resources.rc)
     target_link_libraries(gta2 PRIVATE mss32 binkw32
         ddraw dinput dxguid dplayx winmm ole32 oleaut32 user32 gdi32 advapi32 version shell32 comdlg32)
     target_link_options(gta2 PRIVATE -static -static-libgcc -static-libstdc++ -lpthread)
@@ -163,7 +163,7 @@ else()
     set_source_files_properties(${compat}/src/bink.cpp PROPERTIES COMPILE_DEFINITIONS BUILD_BINK)
 
     add_executable(gta2 ${lib_src} ${ROOT}/test.cpp ${ROOT}/StdAfx.cpp
-        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/heat_haze.cpp src/fire_smoke.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/ambient_occlusion.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp ${compat_src})
+        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/heat_haze.cpp src/fire_smoke.cpp src/laser.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/ambient_occlusion.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp ${compat_src})
     target_compile_definitions(gta2 PRIVATE GTA2_PORT_SDL)
     # Off in the Flatpak, which has no network access and updates itself, and on the web.
     if(EMSCRIPTEN)

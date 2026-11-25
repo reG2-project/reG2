@@ -8,6 +8,8 @@
 #include "../port/src/day_night.hpp"
 #include "../port/src/frame_loop.hpp"
 #include "../port/src/twin_stick.hpp"
+// Port: LASER RIFLE's icon.
+#include "../port/src/laser.hpp"
 #endif
 #include "hud_message_priority.hpp"
 #include "hud_brief_priority.hpp"
@@ -3061,6 +3063,10 @@ void __stdcall DrawAmmo(s16 ammo_idx, u8 ammo_count)
         s32 width = get_user_sprite_width(ammo_idx + 85);
         s32 height = get_user_sprite_height(ammo_idx + 85);
 
+#if defined(GTA2_PORT)
+        // Port: LASER RIFLE, an icon of the port's own in place of the style's for that unused slot.
+        if (!PortLaser::DrawHudIcon(ammo_idx, 638, 44))
+#endif
         DrawFigureScaled(sprite_types_enum::user_6,
                          ammo_idx + 85,
                          638 - width / 2,

@@ -39,6 +39,8 @@
 #include "../port/src/options_menu.hpp"
 #include "../port/src/saves.hpp"
 #include "../port/src/welcome.hpp"
+// Port: LASER RIFLE's cheat.
+#include "../port/src/laser.hpp"
 #endif
 
 #pragma comment(lib, "dxguid.lib")
@@ -2771,6 +2773,14 @@ void Frontend::HandleCheatCode(const wchar_t* cheat_str_wide)
         gCheatMiniCars = !gCheatMiniCars;
         snd1.mObjectType = 9;
     }
+#if defined(GTA2_PORT)
+    // Port: REDLASER, the port's laser rifle (port/src/laser.cpp).
+    else if (cheat_str_hash == 0x49FEC)
+    {
+        PortLaser::gCheat = !PortLaser::gCheat;
+        snd1.mObjectType = 9;
+    }
+#endif
 }
 
 MATCH_FUNC(0x4B4280)
