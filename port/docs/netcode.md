@@ -330,9 +330,29 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   Player peds take no damage on a client, and everything counts as seen there, so nothing is removed off screen. A
   player's health that drops in a snapshot shows the server's hit: the game's blood burst at its ped and the grunt of a
   punch (`ShowServerHit`, `engine/players.cpp`), which the client's own hits on an invulnerable ped don't give.
+- **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
+  server's world. It carries every player, the car each sits in and every train wherever they are, and everything
+  within the reach (the interest area, 24 blocks around the client's player as the server has it), each entity the
+  client has acknowledged at least as its last state and its age when the budget is short: so nothing the client has
+  inside the reach is ever left out, and what a snapshot lacks is gone on the server or out of the client's area,
+  where nothing more will come for it. Hence:
+  - a server's car or ped lives on the client exactly as long as it is in the newest snapshot. Left out, it goes, unless
+    the client's game still holds on to it (a player in it or getting in, a ped at its door, a corpse in it): then it
+    stays mapped and goes on a later snapshot, once let go. Back in the area, it comes as new, made again or adopted;
+  - the client's own cars and peds that no server entity is mapped to (the map script's at the start, what its
+    prediction made) go inside the reach, where the server has none. Beyond it the client keeps them as a guess, to
+    adopt when the server's comes into reach (the map script's parked cars), and they are the first to go when a pool
+    runs short: below 32 free cars, peds or chars, the farthest go (logged as evicted), so a server's entity never
+    waits for room. One that does, is logged ("waited for room") and made on a later snapshot;
+  - the players' own peds, their corpses (`Player::mAuxPed`), the cars they sit in or are getting into, and the trains'
+    carriages are never removed here.
+
+  So the client holds the server's area, the players' cars and the trains, and the map script's leftovers: the pools
+  stay well within what the server's own game uses. Keeping the server's cars beyond the reach once filled a long
+  game's car pool (290 of 306), and the server's cars near the player were never made: invisible, the player's car hit
+  them on the server only and was pulled back each time.
 - **Replicas** (`engine/replica.cpp`): the client adopts what the map script made on both sides, makes the rest, moves
-  them every snapshot and removes what the server drops, within the area the snapshot reached (a snapshot cut for size
-  leaves what lies beyond as it is). A train's carriages are never made or removed: the client's own trains (both ends
+  them every snapshot and removes them by the rules above. A train's carriages are never made or removed: the client's own trains (both ends
   make the same ones at the map's start) take the server's state and car ids from the train entities, before the cars;
   a carriage is placed by its train only, never moved to a player in it. What the client's prediction did that the game can't undo (a wreck, a corpse of
   its own) is removed, and the next snapshot makes the entity again as the server has it. A car carries its driver: none, the traffic driver (all

@@ -12,9 +12,11 @@
 #include "Source/Player.hpp"
 #include "Source/char.hpp"
 #include "Source/sprite.hpp"
+#include <algorithm>
 #include <stdio.h>
 #include <set>
 #include <unordered_map>
+#include <vector>
 
 struct net::engine::ReplicaState
 {
@@ -36,9 +38,13 @@ std::unordered_map<uint32_t, Ped*> gPeds;
 // since is another car or ped, and its mapping goes (Prune)
 std::unordered_map<uint32_t, int32_t> gCarIds, gPedIds;
 const int32_t kAdoptRadius = 4096; // a quarter block: the same car or ped as the server's
+// Free slots below which this game's own cars and peds beyond the reach go (EvictOwn), so that the server's have room
+const int kReserve = 32;
 
 // For the log (PrintReplicaLog)
 int gRefusedPeds[3]; // why: no ped, no char, no sprite
+int gRefusedCars;
+int gEvicted;
 int gOccupiedKept;
 int gPedsRemade;
 
@@ -56,7 +62,9 @@ template <class T> int FreeSlots(T* head)
 // ped when no char is left): a margin for the game's own allocations
 bool RoomForCar()
 {
-    return FreeSlots(gCar_BC_Pool->mPool.mpStart) > 16 && FreeSlots(gSpritePool->mPool.mpHead) > 32;
+    const bool room = FreeSlots(gCar_BC_Pool->mPool.mpStart) > 16 && FreeSlots(gSpritePool->mPool.mpHead) > 32;
+    gRefusedCars += !room;
+    return room;
 }
 
 bool RoomForPed()
@@ -200,18 +208,19 @@ bool TargetedHere(Car* car)
     return false;
 }
 
-void RemoveCar(const Pass& a, Car* car)
+bool RemoveCar(const Pass& a, Car* car)
 {
     if (car->IsTrainModel())
     {
-        return; // a train's carriage: its train points to it, and the server's train is mapped to it (ApplyTrains)
+        return false; // a train's carriage: its train points to it, and the server's train is mapped to it (ApplyTrains)
     }
     if ((car->mDriver && !IsSpareDriver(car->mDriver)) || a.referenced.count(car) || TargetedHere(car))
     {
         gOccupiedKept++;
-        return;
+        return false;
     }
     car->DespawnSoon();
+    return true;
 }
 
 // A ped goes, once (Deallocate undoes counters and groups, and marks it inactive)
@@ -244,10 +253,11 @@ Car* MapCar(Pass& a, const EntityState& e)
     }
     for (Car* c : a.liveCars)
     {
-        if (!a.mapped.count(c) && c->mCarSprite && c->mCarInfoIdx == e.f[kCarModel] &&
+        if (!a.mapped.count(c) && c->mCarSprite && !c->IsDespawning() && c->mCarInfoIdx == e.f[kCarModel] &&
             Near(c->mCarSprite, e.f[kCarX], e.f[kCarY], kAdoptRadius))
         {
             car = c;
+            car->CancelDespawn(); // one removed a snapshot ago, sent again: the same car, not a second one on it
             break;
         }
     }
@@ -480,24 +490,25 @@ void ApplyGroups(const Snapshot& snap)
     ApplyPedGroups(groupPeds);
 }
 
-// What the server no longer sends goes, within what this snapshot reached (beyond it, a full snapshot was cut for size:
-// the car or ped is still there); so do this game's own cars and peds nobody mapped
+// A server's car or ped lives here as long as it is in the newest snapshot: one left out is gone on the server or out of
+// this client's area, and either way nothing more will come for it (port/docs/netcode.md, "The client's world"). It
+// goes, unless this game still holds on to it (RemoveCar): mapped still, it goes on a later snapshot. This game's own
+// cars and peds nobody mapped go inside the reach (the server has none there)
 void RemoveUnsent(const Pass& a, const Snapshot& snap)
 {
     const ReachArea area(snap, 1.0f);
     for (auto it = gCars.begin(); it != gCars.end();)
     {
-        if (a.seen.count(it->first) || area.Beyond(it->second->mCarSprite))
+        if (a.seen.count(it->first) || !RemoveCar(a, it->second))
         {
             ++it;
             continue;
         }
-        RemoveCar(a, it->second);
         it = gCars.erase(it);
     }
     for (auto it = gPeds.begin(); it != gPeds.end();)
     {
-        if (a.seen.count(it->first) || area.Beyond(PedSprite(it->second)))
+        if (a.seen.count(it->first))
         {
             ++it;
             continue;
@@ -522,8 +533,8 @@ void RemoveUnsent(const Pass& a, const Snapshot& snap)
         }
         it = gPeds.erase(it);
     }
-    // This game's own cars and peds the server doesn't have here, inside the area only: beyond it the snapshot says
-    // nothing, and one there (a map script's parked car) is adopted when the server's comes in reach (MapCar)
+    // Beyond it the snapshot says nothing, and one there (a map script's parked car) is adopted when the server's comes
+    // in reach (MapCar), or goes when room is short (EvictOwn)
     for (Car* c : a.liveCars)
     {
         if (!a.owned.count(c) && !a.mapped.count(c) && !c->IsDespawning() && !area.Beyond(c->mCarSprite))
@@ -540,6 +551,56 @@ void RemoveUnsent(const Pass& a, const Snapshot& snap)
         {
             p->Deallocate();
         }
+    }
+}
+
+// This game's own cars and peds beyond the reach are a guess at what the server has there, kept for adopting: when a
+// pool runs short they go first, farthest first, so that a server's entity never waits for room. Their slots come back
+// after the game's despawn (a car) or at once (a ped)
+void EvictOwn(const Pass& a, const Snapshot& snap)
+{
+    int cars = FreeSlots(gCar_BC_Pool->mPool.mpStart), sprites = FreeSlots(gSpritePool->mPool.mpHead);
+    int peds = std::min(FreeSlots(gPedPool->mPool.mpStart), FreeSlots(gChar_B4_Pool->mPool.mpHead));
+    const int kSprites = kReserve + 16; // above the 32 RoomForCar and RoomForPed leave
+    if (cars >= kReserve && peds >= kReserve && sprites >= kSprites)
+    {
+        return;
+    }
+    const ReachArea area(snap, 1.0f);
+    std::vector<std::pair<float, Car*>> ownCars;
+    for (Car* c : a.liveCars)
+    {
+        if (!a.owned.count(c) && !a.mapped.count(c) && !c->IsDespawning() && !c->IsTrainModel() && area.Beyond(c->mCarSprite))
+        {
+            ownCars.push_back(std::make_pair(area.DistanceTo(c->mCarSprite), c));
+        }
+    }
+    std::vector<std::pair<float, Ped*>> ownPeds;
+    for (Ped* p : a.livePeds)
+    {
+        Sprite* s = CharSprite(p);
+        if (!a.owned.count(p) && !a.mapped.count(p) && !p->mCar && !IsSpareDriver(p) && p->IsActive() && s && area.Beyond(s))
+        {
+            ownPeds.push_back(std::make_pair(area.DistanceTo(s), p));
+        }
+    }
+    std::sort(ownCars.begin(), ownCars.end(), [](const std::pair<float, Car*>& x, const std::pair<float, Car*>& y) { return x.first > y.first; });
+    std::sort(ownPeds.begin(), ownPeds.end(), [](const std::pair<float, Ped*>& x, const std::pair<float, Ped*>& y) { return x.first > y.first; });
+    for (size_t k = 0; k < ownCars.size() && (cars < kReserve || sprites < kSprites); k++)
+    {
+        if (RemoveCar(a, ownCars[k].second))
+        {
+            cars++;
+            sprites++;
+            gEvicted++;
+        }
+    }
+    for (size_t k = 0; k < ownPeds.size() && (peds < kReserve || sprites < kSprites); k++)
+    {
+        ownPeds[k].second->Deallocate();
+        peds++;
+        sprites++;
+        gEvicted++;
     }
 }
 } // namespace
@@ -571,6 +632,7 @@ void net::engine::ApplyCarsAndPeds(const Snapshot& snap)
         }
     }
     RemoveUnsent(a, snap);
+    EvictOwn(a, snap);
 }
 
 void net::engine::PrintReplicaLog()
@@ -603,6 +665,13 @@ void net::engine::PrintReplicaLog()
     {
         printf("net: %d removals of occupied cars skipped\n", gOccupiedKept);
         gOccupiedKept = 0;
+    }
+    if (gRefusedCars + gEvicted)
+    {
+        printf("net: %d of the server's cars waited for room (free: %d cars, %d sprites); %d cars and peds of this game's own "
+               "evicted beyond the reach\n",
+               gRefusedCars, FreeSlots(gCar_BC_Pool->mPool.mpStart), FreeSlots(gSpritePool->mPool.mpHead), gEvicted);
+        gRefusedCars = gEvicted = 0;
     }
     if (gRefusedPeds[0] + gRefusedPeds[1] + gRefusedPeds[2])
     {
