@@ -500,6 +500,10 @@ class SimpleBot : public DecidingBot
         }
         float best = 0;
         const net::BotView::Seen* target = Nearest(v, net::BotView::Seen::kPlayer, &best, false, &mWalker);
+        if (!target)
+        {
+            target = Nearest(v, net::BotView::Seen::kPlayer, &best); // nobody on its ways (a roof it can't see down from): at them anyway
+        }
         const bool fists = v.guns == 0;
         if (mThrower.Holding() && target && Throwable(v.weapon))
         {
@@ -871,7 +875,8 @@ class SoldierBot : public DecidingBot
         {
             return far < 2.5f ? Press(v, net::kBtnEnterExit) : Walk(v, *car); // the game walks it to the door
         }
-        return walkable ? Walk(v, *walkable) : 0;
+        // Nobody on its ways (a roof it can't see down from): at the nearest anyway, the walker gets it off
+        return walkable ? Walk(v, *walkable) : target ? Walk(v, *target) : 0;
     }
 
     uint32_t Walk(const net::BotView& v, const net::BotView::Seen& goal)
