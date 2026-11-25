@@ -853,9 +853,11 @@ DXDEC void AILCALL AIL_delay(S32 intervals)
 // (silent while no driver), since reopening it takes a noticeable time.
 static SDL_AudioStream* sDevice;
 
+// SDL calls its callback with its device and stream locks held, and the callback takes Lock(): SDL calls that lock a
+// running device or its stream come outside Lock(), or the two threads can wait on each other for ever
 DXDEC S32 AILCALL AIL_waveOutOpen(HDIGDRIVER FAR* drvr, LPHWAVEOUT FAR*, S32, LPWAVEFORMAT)
 {
-    LOCK;
+    std::unique_lock<std::recursive_mutex> lock(Lock());
     if (getenv("GTA2_NO_SOUND") || gPortNoAudio) // the game goes on without sound (a network server's: nobody hears it)
     {
         return -1;
@@ -877,21 +879,23 @@ DXDEC S32 AILCALL AIL_waveOutOpen(HDIGDRIVER FAR* drvr, LPHWAVEOUT FAR*, S32, LP
     }
     sDriver = new Driver();
     sDriver->mDevice = sDevice;
-    SDL_ResumeAudioStreamDevice(sDevice);
     *drvr = reinterpret_cast<HDIGDRIVER>(sDriver);
+    lock.unlock();
+    SDL_ResumeAudioStreamDevice(sDevice);
     return 0;
 }
 
 void port_MixerStats(PortMixerStats* pOut)
 {
+    const bool paused = sDevice && SDL_AudioDevicePaused(SDL_GetAudioStreamDevice(sDevice));
     LOCK;
+    sMixerStats.paused = paused;
     sMixerStats.streams = 0;
     for (const Stream* s : sDriver ? sDriver->mStreams : std::vector<Stream*>())
     {
         sMixerStats.streams += s->mStatus == SMP_PLAYING;
     }
     sMixerStats.open = sDevice && sDriver;
-    sMixerStats.paused = sDevice && SDL_AudioDevicePaused(SDL_GetAudioStreamDevice(sDevice));
     sMixerStats.driver = SDL_GetCurrentAudioDriver();
     *pOut = sMixerStats;
     sMixerStats = PortMixerStats();
