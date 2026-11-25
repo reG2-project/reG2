@@ -58,7 +58,7 @@ class Server
         bool used = false;
         uint32_t peer = 0;
         std::string name;
-        bool bot = false; // a bot client's (its hello): it plays but doesn't vote
+        bool bot = false; // a bot client's (its hello): it plays but doesn't vote; kept with the name of one that left
         uint32_t token = 0; // the welcome's: a reconnect shows it to have this slot back as it was
         uint32_t leftTick = 0; // the tick its connection went (a map change keeps the slot of one that may come back)
         uint32_t lastCmdTick = 0; // the newest command tick received (late ones too)
@@ -107,7 +107,8 @@ class Server
     void SendPings();
     void OnHello(uint32_t peer, BitReader& r);
     std::string Refusal(const Hello& hello, bool read) const; // why a hello's client can't play here ("": it can)
-    int FreeSlot(const std::string& name) const; // the slot a joining <name> gets (mSlots.size(): none)
+    bool KeptForReturn(const Slot& s) const;
+    int FreeSlot(const std::string& name, bool bot, bool kept) const; // the slot a joining <name> gets (mSlots.size(): none)
     int ReturningSlot(const Hello& hello) const; // the slot a reconnect's token is for, in use or not (-1: none)
     void OnCommands(int slot, BitReader& r);
     void StartGameOnce();

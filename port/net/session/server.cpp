@@ -266,14 +266,23 @@ std::string net::Server::Refusal(const Hello& hello, bool read) const
     return "";
 }
 
-// The slot this name had (a client back after its connection dropped: the same player), else the first free one
-// that nobody left, else the first free one
-int net::Server::FreeSlot(const std::string& name) const
+// A slot whose person dropped lately: kept for a reconnect
+bool net::Server::KeptForReturn(const Slot& s) const
 {
-    int any = (int)mSlots.size(), unclaimed = any;
+    const uint32_t tps = 1000 / (mConfig.game.tickMs > 0 ? mConfig.game.tickMs : 33);
+    return !s.used && !s.bot && !s.name.empty() && mTick - s.leftTick < kComeBackSec * tps;
+}
+
+// The slot this name had (a client back after its connection dropped: the same player), else the first free one
+// that nobody left, else the first free one. A slot kept for a person's reconnect only with <kept>, never for a bot
+int net::Server::FreeSlot(const std::string& name, bool bot, bool kept) const
+{
+    const int none = (int)mSlots.size();
+    int any = none, unclaimed = none, held = none;
     for (int i = (int)mSlots.size() - 1; i >= 0; i--)
     {
-        if (mSlots[i].used)
+        const bool forReturn = KeptForReturn(mSlots[i]);
+        if (mSlots[i].used || (bot && forReturn))
         {
             continue;
         }
@@ -281,10 +290,11 @@ int net::Server::FreeSlot(const std::string& name) const
         {
             return i;
         }
-        any = i;
+        held = forReturn ? i : held;
+        any = forReturn ? any : i;
         unclaimed = mSlots[i].name.empty() ? i : unclaimed;
     }
-    return unclaimed < (int)mSlots.size() ? unclaimed : any;
+    return unclaimed < none ? unclaimed : any < none ? any : kept ? held : none;
 }
 
 // A client back after its connection dropped, whose old connection may not have timed out here yet
@@ -325,7 +335,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
         }
         const int back = ReturningSlot(hello);
         std::string name = back >= 0 ? mSlots[back].name : PlayerName(hello.name, std::vector<std::string>());
-        int slot = back >= 0 ? back : FreeSlot(name);
+        int slot = back >= 0 ? back : FreeSlot(name, hello.bot, true);
         if (back < 0 && slot < (int)mSlots.size() && mSlots[slot].name != name)
         {
             name = PlayerName(name, taken); // a new player: a name nobody in the game has
@@ -919,9 +929,11 @@ void net::Server::OnEvent(const TransportEvent& e)
             printf("net: player %d (%s) left\n", slot, mSlots[slot].name.c_str());
             const std::string name = mSlots[slot].name;
             const uint32_t token = mSlots[slot].token;
+            const bool bot = mSlots[slot].bot;
             mSlots[slot] = Slot();
             mSlots[slot].name = name; // kept for its return
             mSlots[slot].token = token;
+            mSlots[slot].bot = bot;
             mSlots[slot].leftTick = mTick;
             if (!engine::MapChangePending()) // else the next game's start leaves the slot out
             {
