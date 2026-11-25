@@ -5358,6 +5358,18 @@ void Car::UpdateLights()
 MATCH_FUNC(0x442170)
 bool Car::IsCarInConditionsToDespawn() const
 {
+#if defined(GTA2_PORT)
+    // Port: the kill cam looks away from a player's corpse, but a car it lies in stays as in the original, whose view
+    // never leaves it: Player::GetPlayerCar returns it (the car radio reads it)
+    for (u8 i = 0; i < gGame_0x40->mNumPlayers; i++)
+    {
+        Player* pPlayer = gGame_0x40->mPlayers[i];
+        if (pPlayer->mInUse && pPlayer->GetPlayerCar() == this)
+        {
+            return false;
+        }
+    }
+#endif
     Ped* pDriver = mDriver;
     if ((!pDriver || !pDriver->mPlayer) && !IsVisibleToAnyPlayer())
     {

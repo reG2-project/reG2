@@ -527,7 +527,10 @@ the killer's respawn, a killer gone) cuts to one more than 6 blocks off, as the 
 slowly. Every wasted player's countdown has the 90 ticks, a killer or not, so the respawn's tick never depends on
 which killer each end found; only what the view follows does. The killer is in the rollback set, and from the death on
 the interest covers it too, so its surroundings are there at the cut. A death by anything else (the police, a fall, its
-own rocket) stays on the corpse; a busted player respawns as in the original.
+own rocket) stays on the corpse; a busted player respawns as in the original. Looking away, the view no longer keeps the
+corpse's car: a wreck or a sunk car goes once no view has it (`Car::IsCarInConditionsToDespawn`), and the corpse would
+lie in a freed car, which the car radio reads (`Player::GetPlayerCar`). So the car the player's `GetPlayerCar` returns
+is never despawned, as the original's view never leaves it.
 
 A ped's AI state is applied only while it is on foot on both sides (a driver in the same car gets its objectives but
 not its states). Its phase goes first, whatever it does (on its way to a car too); its states and its char's movement
