@@ -178,6 +178,14 @@ void net::engine::ApplyPhases(Ped* ped, const EntityState& e, int base, bool dea
         }
         CancelPhase(ped);
     }
+    // Getting in or out at a car door here while the server's ped is thrown, down, sinking or electrocuted: called off
+    // here as CancelJack does, then the server's phase started below
+    if (there && there != kPhaseDoor && here == kPhaseNone && AtCarDoor(ped))
+    {
+        ped->SetObjective(objectives_enum::no_obj_0, 9999);
+        ped->SetObjective2(objectives_enum::no_obj_0);
+        CancelPhase(ped);
+    }
     if (there == kPhaseDoor && here != kPhaseDoor)
     {
         // On foot here (a pull predicted ahead of the server's): at the server's door, its frame the server's (below)

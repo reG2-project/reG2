@@ -393,7 +393,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   timeout, the lying, sinking and electrocution timers, the door's frame, its timer and the door), the door's car, and
   a throw's object (its place, motion and outcome). A client predicts every ped's phases as the game makes them, and at each snapshot's
   tick the server's wins: the same phase gets its timer, one the server has is started the game's way (`Char::DrownPed`,
-  a throw's object, the door as the jacker's char puts a driver there), one the server lacks is cancelled to walking
+  a throw's object, the door as the jacker's char puts a driver there; a ped getting in or out at a car door here is
+  called off first), one the server lacks is cancelled to walking
   (a throw: its object removed). Nothing waits: there is no grace for a throw just landed.
 - **Deaths are the server's** (`ClientPedMayDie`, `gPortPedMayDie` in `Ped::Kill`): a server's ped on foot (a player, or one
   mapped to a snapshot's; the client's own die as the game has them) dies only by
