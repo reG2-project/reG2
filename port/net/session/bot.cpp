@@ -809,7 +809,9 @@ class HunterBot : public DecidingBot
         Nearest(v, net::BotView::Seen::kPlayer, &enemy);
         Nearest(v, net::BotView::Seen::kCar, &car);
         mCommit.See(v);
-        mDriving = v.car != 0 || (car < 10 && enemy > 8 && mCommit.Settled(v) && !mFoot.WantsWeapon(v));
+        // On foot with someone within 8 blocks lately: 5 s more on foot before a car (it walked off and came back)
+        mNearAt = !v.car && enemy <= 8 ? v.frame : mNearAt;
+        mDriving = v.car != 0 || (car < 10 && enemy > 8 && v.frame - mNearAt > 150 && mCommit.Settled(v) && !mFoot.WantsWeapon(v));
         // Both see every tick, so their timers and stuck checks stay right whichever decides
         const uint32_t foot = mFoot.Think(v), drive = mCar.Think(v);
         return mDriving ? drive : foot;
@@ -818,6 +820,7 @@ class HunterBot : public DecidingBot
     SimpleBot mFoot;
     RamBot mCar{true};
     bool mDriving = false;
+    uint32_t mNearAt = 0;
     CarCommit mCommit;
 };
 // The whole round: a weapon first, then a car, then along its route to the nearest player, and there whatever suits:
@@ -888,11 +891,12 @@ class SoldierBot : public DecidingBot
         }
         if (target && d < 10 && v.guns && InLine(v, *target))
         {
+            mFoughtAt = v.frame;
             return Fight(v, *target, d);
         }
-        // A car with nobody within 10 blocks (it gets out for someone within 7)
+        // A car with nobody within 10 blocks (it gets out for someone within 7), and 5 s after a fight on foot
         const net::BotView::Seen* car = Nearest(v, net::BotView::Seen::kCar, &far, false, &mWalker);
-        if (car && far < 15 && mCommit.Settled(v) && (mTargetDist < 0 || mTargetDist >= 10))
+        if (car && far < 15 && mCommit.Settled(v) && (mTargetDist < 0 || mTargetDist >= 10) && v.frame - mFoughtAt > 150)
         {
             return far < 2.5f ? mWalker.Enter(v, car->id, Press(v, net::kBtnEnterExit)) : Walk(v, *car); // the game walks it to the door
         }
@@ -989,7 +993,7 @@ class SoldierBot : public DecidingBot
     bool mInCar = false, mWedged = false;
     int mEntered = 0, mLeft = 0;
     float mTargetDist = -1, mSpeed = 0, mLastX = 0, mLastY = 0, mStuckX = 0, mStuckY = 0;
-    uint32_t mLastFrame = 0, mStuckCheck = 0, mBackUntil = 0, mSlowFor = 0, mDriveFrame = 0;
+    uint32_t mLastFrame = 0, mStuckCheck = 0, mBackUntil = 0, mSlowFor = 0, mDriveFrame = 0, mFoughtAt = 0;
     net::BotWalker mWalker;
     CarWedge mWedge;
     PickupMemory mPickups;
