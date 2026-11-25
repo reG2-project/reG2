@@ -140,6 +140,9 @@ extern bool gPortTagTimeCounts;
 // A network game's: a new object (Object_3C::PoolAllocate) isn't airborne by its pool slot's previous one, which the
 // server and a client don't share
 extern bool gPortGroundedObjects;
+// A network game's: a player cries out at its death (Ped::Kill's voice event 4) as the other peds do, which the original
+// keeps for peds that aren't players (sound_obj::HandlePedVoiceEvent)
+extern bool gPortPlayersDeathCry;
 // A network server's: the character a player's client typed with the key <dik> this tick, in its keyboard's layout
 // (0: none), for its chat line (Hud_ChatInput::HandleChatInputKey); the server's own table is a US keyboard's
 extern u16 (*gPortChatChar)(Player* pPlayer, s32 dik);

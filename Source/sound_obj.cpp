@@ -5959,6 +5959,13 @@ void sound_obj::HandlePedVoiceEvent(Sound_Params* pParams)
     {
         samp = 59;
     }
+#if defined(GTA2_PORT)
+    // Port: a network game's players cry out at their death, the other peds' cry (gPortPlayersDeathCry)
+    else if (voice == 4 && gPortPlayersDeathCry)
+    {
+        samp = manRandomTable[static_cast<u32>(msQueueSample.mEntityIndex) % 5] % 5 + 228;
+    }
+#endif
 
     if (voice == 26)
     {
