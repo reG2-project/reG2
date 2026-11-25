@@ -10,7 +10,7 @@
 #include <vector>
 #include "../../net/net_main.hpp"
 #include "../../src/net_hooks.hpp" // gPortCrashHook, gPortServer
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
     #include <execinfo.h>
     #include <pthread.h>
     #include <signal.h>
@@ -83,7 +83,7 @@ __attribute__((constructor(101))) static void EnterGameFolderAtStart(int argc, c
 }
 #endif
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 static volatile sig_atomic_t sCrashSignal;
 
 // The report isn't all signal-safe (a lock the crash left held, malloc after a heap corruption): if it hangs, the
@@ -130,7 +130,7 @@ static void OnCrash(int sig, siginfo_t* info, void*)
 
 void port_InstallCrashReport()
 {
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
     void* frame;
     backtrace(&frame, 1); // loads what backtrace needs now, not in the handler
     struct sigaction sa = {};

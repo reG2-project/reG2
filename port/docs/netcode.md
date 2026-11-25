@@ -154,8 +154,14 @@ WantedBy=multi-user.target
 error on the page; welcomed, the frontend boots the network game as it boots a level. `--name` and the link
 conditioner's options apply to a join from the page too.
 
-**Leaving.** Escape in a network game is the client's: "Leave the game? Y / N" over the frame (not while a chat line is
-typed). Y or Enter (a pad's A) leaves; any other key is no. Leaving leaves the server and goes back to the network page
+**The pause menu.** Escape (a pad's Start) in a network game is the client's: it opens single player's pause menu
+(`port/src/pause_menu.cpp`, not while a chat line is typed) over the game going on. Nothing is paused: the client keeps
+receiving and simulating, and sends no controls while the menu shows, so its player stands still. Its keys reach neither
+the game nor the server. It has RESUME, READY or NOT READY in a warmup (`/ready`), VOTE YES and VOTE NO under an open
+vote's question (`/yes`, `/no`), PLAYERS (each player's name, score and deaths by score, and the client's own ping: the
+others' isn't sent), GRAPHICS, DISPLAY, SOUND and CONTROLS (TWIN STICK with its settings and ZOOM greyed: they are off in
+a network game), and LEAVE GAME, whose question LEAVE (Enter, Y, a pad's A) or CANCEL (N, Escape) answers. A round's
+fresh game closes it. Leaving leaves the server and goes back to the network page
 as a single player again. So does a client that lost the server for good, was kicked, or hasn't the next map's files,
 with why on the page; without the map's files a join fails the same way.
 
@@ -527,7 +533,7 @@ Bots are players whose input comes from a brain (`session/bot.hpp`), on the same
 `BotView` built from what its client knows (its own body as predicted, the snapshot's players, cars and peds, and the
 map as plain data: `engine::NavMap`, the walking height and the ways between cells) and returns the input bits a
 person would press. It uses no game logic: no route finder, no ped AI. Navigation is A* (`session/bot_nav.cpp`).
-A bot client still takes the keyboard's key events (Escape and the leave prompt, the chat), so `GTA2_INPUT` can press
+A bot client still takes the keyboard's key events (Escape and the pause menu, the chat), so `GTA2_INPUT` can press
 them in a test.
 
 | Brain | |
@@ -611,7 +617,6 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `winmain.cpp` | `gPortNextNetworkGame`, `gPortLeaveNetworkGame`, `gPortNetFrameLoop`, `gPortNoDraw` | a map change goes to the next game; a client that left goes to the network page; a client runs reG2's frame loop; a headless server draws nothing |
 | `map_0x370.cpp` | a file static in port builds | the restart zones' turn, a function's static in the original: registered from the start, so rolled back and sent |
 | `sprite.cpp` | `gPortSpriteMovedHook` | a sprite moved: the grid check (`GTA2_NET_CHECKGRID`) |
-| `port/src/game_hooks.cpp` | `gPortLeavePromptShown` | the leave prompt is up: a gamepad's A and B answer it |
 | `port/src/rumble.cpp` | `gPortNoRumble` | no vibration on a server (its local player is a remote one) or in a client's resimulation |
 | `sound_obj.cpp` | `gPortSoundRequestsHook` | a client's sound log: what a frame asks for, and what resimulated ticks owe added to it |
 | `port/compat/src` | `gPortIdleHook`, `gPortNoAudio`, `gPortCrashHook` | polling while a frame waits (`window.cpp`), no sound on a server (`miles.cpp`), the crash report (`main.cpp`) |
@@ -639,7 +644,8 @@ the registry by their 10.5.exe address (`PortStatic`, accessors in `engine/inter
 
 reG2's own extras that would change the game outside the input bits a server gets are off in a network game: twin stick,
 mouse aim, the turret's aim, the pad's analog driving and the aim camera (`port/src/twin_stick.cpp`), each
-player's day and night (`day_night.cpp`) and the pause menu (`pause_menu.cpp`). AUTOSAVE, RETRY JOBS and FRENZY RESPAWN
+player's day and night (`day_night.cpp`) and the pause menu's pause (the menu opens over the game going on, as the
+client's: "Playing"). AUTOSAVE, RETRY JOBS and FRENZY RESPAWN
 (`autosave.cpp`, `retry.cpp`) are for single player only, and INFINITE LIVES goes with the debug flags a network game
 clears (`InitializeGame`). Vibration is the local player's, from the ticks a client predicts (`gPortNoRumble`). A
 client runs reG2's frame loop and interpolation ("The game loop"). The GRAPHICS settings only draw: they read the game

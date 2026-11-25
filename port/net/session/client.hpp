@@ -149,6 +149,7 @@ class Client
     void LeaveToMenu(const char* why); // off the server, and the game back to the frontend's network page
     void SendLeave(const std::string& why); // tells the server why we go (before Leave)
     void ShowStatus(); // the ping, and an outage, over the frame
+    void ActOnMenu(); // what the pause menu chose: leave, ready, a vote
     std::string NoAnswer() const; // a join's error when the server never answered
     // The round flow (session/round_flow.cpp), a client's part: its commands to the server, its keys, the panel
     void SendCommand(const std::string& text);
@@ -226,7 +227,7 @@ class Client
     int mGeneration = 0; // engine::GameGeneration's, of the game running
     int mServerGame = -1; // the server's game we take snapshots of (the welcome's, the next after a map change)
     uint32_t mMarkFrame = 0;
-    bool mLeavePrompt = false, mLeft = false; // Escape's prompt (ChooseInput), and its yes: left the server
+    bool mLeft = false; // left the server (the pause menu's LEAVE GAME, a kick, a lost server)
     std::vector<std::string> mMaps; // what a map vote chooses from (the welcome's)
     std::vector<std::string> mMapTitles; // their names as players know them (MapTitle)
     struct ScoreRow
@@ -240,7 +241,7 @@ class Client
     uint32_t mRoundKeyFrame = 0, mBotSentFrame = 0;
     uint32_t mMapCursor = 0; // the results' map under the cursor (0-based): Enter, or a gamepad's A, chooses it
     std::string mLeftWhy;
-    uint32_t mPromptKeyFrame = 0;
+    uint32_t mMenuKeyFrame = 0, mMenuKey = 0; // the pause menu's last key and its frame (held: once)
     std::vector<bool> mWasWasted; // the test log: deaths this game carried out per player
     std::vector<int> mLocalDeaths;
     Stats mStats;

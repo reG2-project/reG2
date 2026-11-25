@@ -278,7 +278,7 @@ void net::engine::DrawOverlay()
         panelY = gPanel[i][0] ? DrawCentredWrapped(gPanel[i].data(), w, panelY, kLine) : panelY + kLine;
         i++;
     }
-    if (gAnnouncement[0] && NowMs() < gAnnouncementUntilMs)
+    if (gAnnouncement[0] && NowMs() < gAnnouncementUntilMs && !MenuOpen()) // the pause menu would hide it
     {
         const s32 ay = gPanel.empty() ? h / 4 : (panelY + 8 > h / 4 ? panelY + 8 : h / 4);
         DrawCentredWrapped(gAnnouncement, w, ay, kLine);

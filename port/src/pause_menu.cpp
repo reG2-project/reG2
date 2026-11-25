@@ -25,6 +25,7 @@
 #include "settings.hpp"
 #include "sound_obj.hpp"
 #include "winmain.hpp"
+#include <ctype.h>
 #include <stdio.h>
 #include <vector>
 #include "winmain.hpp"
@@ -42,6 +43,9 @@ namespace PortPauseMenu
 namespace
 {
 bool sOpen;
+// Opened in a network game: no pause, and what is chosen goes to the client (TakeNetworkChoice).
+bool sNetwork;
+s32 sNetworkChoice;
 
 // The frontend's style, for the menu's fonts and sprites, loaded with the city (Preload).
 gtx_0x106C* sStyle;
@@ -250,7 +254,7 @@ void Close()
 {
     sOpen = false;
     PortMenu::Close();
-    if (gGame_0x40->IsPaused())
+    if (!sNetwork && gGame_0x40->IsPaused())
     {
         gGame_0x40->Unpause();
     }
@@ -270,6 +274,17 @@ void Apply(PortMenu::Result result)
         const bool next = result == PortMenu::kNextStation;
         result = gSoundSwitchRadioCoolDown > 0 ? PortMenu::kNothing : (next ? PortMenu::kRaised : PortMenu::kLowered);
         gRoot_sound.CycleRadioStation(next);
+    }
+    if (sNetwork && (result == PortMenu::kQuitGame || result >= PortMenu::kReadyChosen))
+    {
+        // net::engine::MenuChoice's order
+        sNetworkChoice = result == PortMenu::kQuitGame ? 1 : 2 + (result - PortMenu::kReadyChosen);
+        PlaySound(PortMenu::kEntered);
+        if (Closes(result))
+        {
+            Close();
+        }
+        return;
     }
     PlaySound(result);
     if (Closes(result))
@@ -334,11 +349,13 @@ void Preload()
 void Release()
 {
     sOpen = false;
+    sNetworkChoice = 0;
     PortMenu::Close();
     FreeStyle();
 }
 
 static f32 Transcript(f32 top, f32 room, f32 scale = 0, f32 left = 0, f32 menuTop = 0);
+static bool Navigate(s32 action);
 
 #if defined(__EMSCRIPTEN__)
 // In a browser, which takes Escape to leave pointer lock or full screen, Pause and P (unless a control uses it) act as
@@ -369,7 +386,7 @@ bool HandleKey(s32 action, Player* pPlayer)
 {
     if (bStartNetworkGame)
     {
-        return false; // the server goes on without a pause: Escape is the network game's leave prompt
+        return false; // a network game's is the client's, without a pause (HandleNetworkKey)
     }
 #if defined(__EMSCRIPTEN__)
     if (!PortMenu::IsCapturing())
@@ -384,6 +401,7 @@ bool HandleKey(s32 action, Player* pPlayer)
             return false;
         }
         sOpen = true;
+        sNetwork = false;
         if (!sStyle)
         {
             LoadStyle();
@@ -421,6 +439,46 @@ bool HandleKey(s32 action, Player* pPlayer)
         }
         return true;
     }
+    return Navigate(action);
+}
+
+bool HandleNetworkKey(s32 action, u16 typed)
+{
+    if (!sOpen)
+    {
+        if (action != DIK_ESCAPE)
+        {
+            return false;
+        }
+        sOpen = true;
+        sNetwork = true;
+        if (!sStyle)
+        {
+            LoadStyle();
+        }
+        OpenSounds();
+        PortMenu::Open();
+        return true;
+    }
+    const wchar_t answer = typed < 0x80 ? static_cast<wchar_t>(tolower(typed)) : 0;
+    if (PortMenu::OnLeaveQuestion() && !PortMenu::IsCapturing() && (answer == L'y' || answer == L'n'))
+    {
+        Apply(answer == L'y' ? PortMenu::kQuitGame : PortMenu::HandleInput(PortMenu::kCancel));
+        return true;
+    }
+    return Navigate(action);
+}
+
+s32 TakeNetworkChoice()
+{
+    const s32 choice = sNetworkChoice;
+    sNetworkChoice = 0;
+    return choice;
+}
+
+// An open menu's key.
+static bool Navigate(s32 action)
+{
     if (PortMenu::IsCapturing())
     {
         return true;
@@ -594,7 +652,7 @@ void Draw()
     const f32 left = (gViewCamera->mScreenPxWidth - 640.0f * scale) / 2;
     const f32 top = (gViewCamera->mScreenPxHeight - 480.0f * scale) / 2;
     const f32 menuTop = top + 10 * scale;
-    PortMenu::OfferRadio(StationName());
+    PortMenu::OfferRadio(sNetwork ? NULL : StationName());
     f32 briefRight;
     f32 briefTop;
     BriefPlace(&briefRight, &briefTop);
@@ -608,7 +666,10 @@ void Draw()
     }
     Apply(result);
     PortMenu::Draw(scale, left, menuTop, true);
-    DrawPosition(scale, briefRight, briefTop);
+    if (!sNetwork)
+    {
+        DrawPosition(scale, briefRight, briefTop); // a network game has the ping there
+    }
     UseGameStyle();
     f32 rowTop;
     f32 rowStep;
