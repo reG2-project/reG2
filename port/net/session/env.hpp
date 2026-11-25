@@ -41,7 +41,7 @@ struct SessionEnv
     const char* say; // <frame>:<command>[;...]: a client's test commands to the server ("/kick r_b")
     uint32_t fuzz, fuzzRate; // GTA2_NET_FUZZ=<seed>[:<per mille>]: a client turns that many of each snapshot's fields to random values (20)
     bool botVoteMap2; // GTA2_NET_BOTMAP2: a bot client votes map 2 in the results (a test sees the map change)
-    uint32_t botIdleFrom, botIdleTo; // GTA2_NET_BOTIDLE=<tick>:<tick>: a client bot presses nothing in those ticks (a test drives its player)
+    uint32_t botIdleFrom, botIdleTo; // GTA2_NET_BOTIDLE=<tick>:<tick>: a client's bot or a server's arena bots press nothing in those ticks (a test drives them)
     bool scoreboard; // GTA2_NET_SCOREBOARD=1: a client shows the scoreboard as if its key were held (captures)
 };
 const SessionEnv& Env();

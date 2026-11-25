@@ -955,7 +955,8 @@ void net::Server::SetNextInputs(const Snapshot& world)
         }
         if (s.peer == kArenaPeer)
         {
-            s.buttons = mStarted ? mArena.Buttons((int)i) : 0;
+            const bool idle = next >= Env().botIdleFrom && next < Env().botIdleTo;
+            s.buttons = mStarted && !idle ? mArena.Buttons((int)i) : 0;
         }
         else if (s.used)
         {
