@@ -6126,8 +6126,9 @@ void Char::UpdateImmobilized()
                             mpPed->RestorePreviousPedState();
                             mpPed->Kill();
 #if defined(GTA2_PORT)
-                            // Port: a network game's dead player cries out (gPortPlayersDeathCry) instead of the thud
-                            if (!gPortPlayersDeathCry || !mpPed->is_player() || mpPed->mVoiceEvent != 4)
+                            // Port: a network game's player cries out at its death instead (gPortPlayersDeathCry), its
+                            // death the server's on a client, where Ped::Kill above is held
+                            if (!gPortPlayersDeathCry || !mpPed->is_player())
 #endif
                             mpPed->SetVoiceEventIfNotOnFire(27);
                             break;

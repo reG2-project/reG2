@@ -407,8 +407,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   shown dead at once instead (`ShowDeath`: its state, cry, corpse's sprite layer and blood), the rest of `Ped::Kill`
   (its corpse's AI, a dropped weapon, the score, the killer's wanted level) left to the server's death, which `KillNow`
   then carries out without starting its dying again; one the server still has alive `kShownDeathTicks` after it was
-  shown gets up as the server's, and until then it lies where it fell. A throw's fatal landing is the game's (its
-  thud, `Char::UpdateImmobilized`), its death held as any; before each tick a throw's timeout and the sinking and
+  shown gets up as the server's, and until then it lies where it fell. A throw's fatal landing is the game's (an ambient
+  ped's thud, `Char::UpdateImmobilized`; a player's is silent, its cry the server's death's), its death held as any; before each tick a throw's timeout and the sinking and
   electrocution timers are held short of the death (`GuardPhases`); the
   server's death ends them as the game does (a charred corpse, a sunk one, neither dropping its weapon; a player's
   electrocution voice and death type). Deaths in a car are its car's, whose explosion is the server's. A corpse here
@@ -862,7 +862,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
 | `Player.cpp` | `gPortKillCamTicks`, `gPortDeathViewPed` | the kill cam: a player wasted by another has a longer death countdown (`Player::Wasted`), whose end its view spends on the killer (`Player::Service`, camera mode 2) |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
-| `sound_obj.cpp`, `Player.cpp`, `char.cpp` | `gPortPlayersDeathCry` | a player cries out at its death as the other peds do (`HandlePedVoiceEvent`, voice event 4), from its corpse, or from its car when it died in one (`ProcessCar`); a fatal landing keeps the cry instead of the thud; the cry is first in the mixer's queue (priority 0); the ped respawned elsewhere (`Player::Wasted`) drops the event |
+| `sound_obj.cpp`, `Player.cpp`, `char.cpp` | `gPortPlayersDeathCry` | a player cries out at its death as the other peds do (`HandlePedVoiceEvent`, voice event 4), from its corpse, or from its car when it died in one (`ProcessCar`); a fatal landing has the cry instead of the thud, on a client too, where its `Ped::Kill` is held; the cry is first in the mixer's queue (priority 0); the ped respawned elsewhere (`Player::Wasted`) drops the event |
 | `sound_obj.cpp` | `gPortFullQueueRanked` | a sample asked for when the mixer's request queue is full is ranked among all the others (`AddDetailsToRequestedOrderList`); the original's search stops at the slot it takes and loses the sample at that place |
 | `Object_3C.hpp` | `gPortGroundedObjects` | a new object isn't airborne by its pool slot's previous one, which the server and a client don't share |
 | `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
@@ -917,7 +917,7 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
   client watching with the blend off: every tick it shows a player thrown, the server had it thrown there with the
   same outcome, once a snapshot it applied had the
   tick that throw started at, the server's or its own (before that, it shows its own prediction of that player). The server listens at the client's player
-  (`GTA2_NET_SFXLOG=2`): the client plays each fatal landing's thud the server played.
+  (`GTA2_NET_SFXLOG=2`): neither end plays a player's fatal landing thud.
   The burning bot is also electrocuted and drowned (`GTA2_NET_TESTPHASE`): the client still shows it in that state at
   the tick the server's dies. It is also put in a car and pulled out of it: the client shows it at the door only on ticks the
   server has it there, never seated or walking; then the client's player jacks a player out of a car twice

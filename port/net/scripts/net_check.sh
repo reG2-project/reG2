@@ -10,7 +10,7 @@
 #           play the resimulated ticks' sounds on a later map, no crash, no CHECK line
 #   soak    a server and three bot clients, the clock 10 times as fast: 10 minutes of play in 60 s, no crash
 #   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown as the
-#           server has it at that tick, with its outcome, and hears a flying death's landing as the server does
+#           server has it at that tick, with its outcome, and hears a player's flying death land as the server does (no thud)
 #   shots   armed bots and a server's own rockets, grenades and molotovs, a bot client watching: it keeps the shots it
 #           predicted, makes the ones it lacks and removes one the server never had at the next snapshot; the game's
 #           random stream is the server's at every snapshot (cosmetics draw from their own)
@@ -306,17 +306,17 @@ throws() {
     }' "$OUT/throws_server.log" "$OUT/throws_client.log")
   local unseen thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead
   read -r unseen thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead <<< "$result"
-  # A fatal landing's thud (sample 41, Char::UpdateImmobilized) the server played at the client's player: the client too
+  # A player's fatal landing cries out (gPortPlayersDeathCry) instead of the thud (sample 41, Char::UpdateImmobilized), on both ends
   local thuds clientThuds
   thuds=$(grep -c "^sfx: .* samp 41 ped/p[01] " "$OUT/throws_server.log")
   clientThuds=$(grep -c "^sfx: .* samp 41 ped/p[01] " "$OUT/throws_client.log")
   echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's (and $unseen before a snapshot had the throw's start); a player burning $burnt ticks; $phased deaths electrocuted or sinking, $early of them not shown so by the client"
-  echo "  fatal landings heard at the client's player: $thuds on the server, $clientThuds on the client"
+  echo "  players' fatal landing thuds heard at the client's player: $thuds on the server, $clientThuds on the client (none wanted)"
   echo "  pulled out of a car: $pulled server ticks, $pullShown client ticks, $pullWrong of them while the server's sat or walked; the client's own phases: $ownTicks ticks, $ownRun at most in a row; its player's jack: pulled out $jackServer server ticks, $jackClient client ticks ($lead ticks ahead); the jack called off: $cancelShown ticks shown pulled before, $cancelLate after"
   if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ "${phased:-0}" = 0 ] || [ "${early:-1}" != 0 ] ||
     [ "${pulled:-0}" = 0 ] || [ "${pullShown:-0}" = 0 ] || [ "${pullWrong:-1}" != 0 ] || [ "${ownTicks:-0}" = 0 ] || [ "${ownRun:-99}" -gt 20 ] ||
     [ "${jackServer:-0}" = 0 ] || [ "${jackClient:-0}" = 0 ] || [ "${lead:--1}" -lt 0 ] || [ "${cancelShown:-0}" = 0 ] || [ "${cancelLate:-1}" != 0 ] ||
-    [ "$clientThuds" -lt "$thuds" ]; then
+    [ "$thuds" != 0 ] || [ "$clientThuds" != 0 ]; then
     fail "throws: the client's throws or burning aren't the server's ($BUILD/net_check/throws_*.log)"
   else
     pass "throws: every throw the client showed was the server's at that tick, flying deaths included; electrocution and sinking deaths were the server's; a pull out of a car the server's; the client's own phases cancelled; its player's jacks of another player's car predicted, the one called off cancelled"
