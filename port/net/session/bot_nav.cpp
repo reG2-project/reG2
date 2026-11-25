@@ -415,7 +415,9 @@ void net::BotWalker::AvoidCars(const BotView& v, uint32_t id, float goalX, float
         float cx = 0, cy = 0;
         around.Corner(k, 0.35f, &cx, &cy);
         const float cost = hypotf(cx - v.x, cy - v.y) + hypotf(*pX - cx, *pY - cy) - (k == mAvoidCorner && block->id == mAvoidCar ? 1.0f : 0);
-        if (cost < bestCost && body.Enters(v.x, v.y, cx, cy) < 0 && (!v.map || NavClear(*v.map, v.x, v.y, cx, cy)))
+        // A corner it stands at is passed: heading for it, it only turned on the spot
+        if (cost < bestCost && hypotf(cx - v.x, cy - v.y) > 0.3f && body.Enters(v.x, v.y, cx, cy) < 0 &&
+            (!v.map || NavClear(*v.map, v.x, v.y, cx, cy)))
         {
             best = k, bestCost = cost;
         }
