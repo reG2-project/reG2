@@ -324,6 +324,15 @@ void net::Arena::Score(const Snapshot& world)
             bot.pickups += took;
             bot.reward += took ? kPickupReward : 0;
             bot.cars += me.car && !bot.last.car;
+            if ((me.car != 0) != (bot.last.car != 0) && me.health > 0 && bot.last.health > 0)
+            {
+                bot.quickSwitches += bot.carSwitchTick && mTicks - bot.carSwitchTick < 150;
+                bot.carSwitchTick = mTicks;
+            }
+            const bool firing = (bot.buttons & kBtnAttack) && me.health > 0 && !me.car && me.guns > 0;
+            bot.firePresses += firing && !(bot.lastButtons & kBtnAttack);
+            bot.fireTicks += firing;
+            bot.lastButtons = bot.buttons;
             if (me.throwables < bot.last.throwables && me.health > 0 && bot.last.health > 0 && !me.car)
             {
                 bot.throws++;
@@ -405,6 +414,8 @@ void net::Arena::Finish(const Snapshot& world)
                    bot.carPunchTicks / 30.0, bot.fistAtCarTicks / 30.0, bot.carStuckFootTicks / 30.0, bot.nav.avoided / 30.0);
             printf("net: arena %d %s throws %d nearer than 1.8 %d farther than 5 %d\n", p, bot.kind.c_str(), bot.throws, bot.closeThrows,
                    bot.farThrows);
+            printf("net: arena %d %s car switches under 5 s %d fire presses %d held %.1f s\n", p, bot.kind.c_str(), bot.quickSwitches,
+                   bot.firePresses, bot.fireTicks / 30.0);
         }
     }
     printf("net: arena search cells per tick: mean %.0f max %llu\n", mTicks ? (double)mExpanded / mTicks : 0.0, (unsigned long long)mMaxExpanded);

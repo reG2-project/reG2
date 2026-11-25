@@ -804,7 +804,9 @@ the hand at 96): standing, turned to where the target will be when it lands, fro
 4.6, backing off holding on when it comes nearer; rockets from 4. A bot looking for a car with none in sight walks
 towards the nearest player. Arena bots see what a client bot would: players and trains everywhere, cars, peds and
 pickups within 24 blocks. The meter's lines `cars punched P s fists near one in a car F s stuck by a car S s round cars
-R s` and `throws N nearer than 1.8 C farther than 5 F` (the nearest player when it threw) measure these. Over 12 seeds
+R s` and `throws N nearer than 1.8 C farther than 5 F` (the nearest player when it threw) measure these, and `car
+switches under 5 s S fire presses P held H s` how often it gets in or out of a car under 5 s after the last time, and
+on foot armed its attack presses and the time attack was held (`bot_bench.sh` passes `ARGS` to the server: `--kit smg`). Over 12 seeds
 on downtown, Tiny Town, Industrial and Residential (96 bots per brain): stuck 31.5, 18.9, 19.7 to 21.8, 6.3, 13.3 s per
 5 minutes (hunter, simple, soldier; stuck by a car on foot 11.5, 14.9, 7.1 to 1.8, 1.6, 0.9), frags 535 to 717, throws
 362 to 904 with 9% to 7% of them at someone nearer than 1.8 blocks and 51% to 16% with nobody within 5. A well armed hunter gets out of its car for someone on foot within 6 blocks, or with rockets for a car within 8,

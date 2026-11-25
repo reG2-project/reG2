@@ -62,6 +62,9 @@ class Arena
         // Unarmed on foot: punching within 1.2 blocks of a car, near a player in a car; stuck with a car within 1.5
         uint32_t carPunchTicks = 0, fistAtCarTicks = 0, carStuckFootTicks = 0;
         int throws = 0, closeThrows = 0, farThrows = 0; // molotovs and grenades thrown, by the nearest other player
+        // Getting into or out of a car under 5 s after the last time; fire on foot armed: presses, and ticks held
+        int quickSwitches = 0, firePresses = 0;
+        uint32_t carSwitchTick = 0, fireTicks = 0, lastButtons = 0;
     };
     void Meter(Bot& bot, const Bot::Body& me, float carDist);
     void Score(const Snapshot& world);

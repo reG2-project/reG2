@@ -1,8 +1,9 @@
 #!/bin/bash
 # port/net (port/docs/netcode.md, "Bots"): the bots' stuck meter over headless arena matches, two at a time, niced.
 # usage: BIN=build_linux/reg2 DATA=<game data> port/net/scripts/bot_bench.sh [out dir]
-#   MAPS, SEEDS, TICKS, BRAINS override the defaults below. Prints per map and brain the stuck seconds per bot and
-#   5 minutes (of which in a car), the longest stretch, failed searches and give-ups, then the search cells per tick.
+#   MAPS, SEEDS, TICKS, BRAINS override the defaults below, ARGS adds server options (--kit smg). Prints per map and
+#   brain the stuck seconds per bot and 5 minutes (of which in a car), the longest stretch, failed searches and
+#   give-ups, then the search cells per tick.
 set -u
 BIN=$(realpath "${BIN:-build_linux/reg2}")
 DATA=${DATA:?the game data folder}
@@ -19,7 +20,7 @@ for m in $MAPS; do
     port=$((port + 1))
     GTA2_HEADLESS=1 GTA2_SPEED=1000 GTA2_NET_RECORD=off GTA2_GAMEPAD=none SDL_AUDIODRIVER=dummy \
       nice -n 19 ionice -c3 "$BIN" --data "$DATA" --server --port $port --map "$m" --players 6 --seed "$s" \
-      --arena "$BRAINS" --ticks "$TICKS" > "$OUT/${m}_$s.log" 2>&1 &
+      --arena "$BRAINS" --ticks "$TICKS" ${ARGS:-} > "$OUT/${m}_$s.log" 2>&1 &
   done
 done
 wait
