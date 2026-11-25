@@ -1300,7 +1300,14 @@ void Ped::ResetForPlayerRespawn()
 
     PutOutFire();
     const u8 remap = this->mRemap;
+#if defined(GTA2_PORT)
+    const u8 pedRefIdx = this->mPedRefIdx;
+#endif
     Reset();
+#if defined(GTA2_PORT)
+    // Port: the same ped keeps its PedRefTable slot; else each respawn leaks one, and with all 254 taken bullets hit nobody
+    this->mPedRefIdx = pedRefIdx;
+#endif
 
     this->mRemap = remap;
     this->mGameObject = pChar;
