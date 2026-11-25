@@ -201,6 +201,7 @@ void net::engine::ResimTick(const uint32_t* buttons, int count)
     KeepPlayerArrows();
     const bool noRumble = gPortNoRumble;
     gPortNoRumble = true; // felt when the tick was predicted, as its sounds were heard
+    SoundLogResimStep(true);
     g->UpdateAllPlayersControls();
     if (g->mGameState == GameState::Running_1)
     {
@@ -208,6 +209,7 @@ void net::engine::ResimTick(const uint32_t* buttons, int count)
     }
     gTagGame.ExecuteGamemodeTick(); // a network game's frame runs it after the tick (do_network_and_local_inputs)
     gPortNoRumble = noRumble;
+    SoundLogResimStep(false);
     GuardPeds(); // after it too: the live tick follows the last one without a frame in between
     SoundLogResimTick(false);
     // What the sound log's pass left (what no audio entity follows, the police radio's crimes) is taken too: a save holds

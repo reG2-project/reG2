@@ -2,7 +2,8 @@
 // without the mixer (SoundLogResimTick): what each would have asked for is noted, and its progress (entity ages, the per-car
 // SoundPosEntry, the frame counter) moves on with the world. The live ticks note what they asked for. Once a snapshot
 // settles a tick, its one-shot requests that no live tick had (same owner and sound, within 2 ticks and a block) are
-// added to the next live frame's, each once.
+// added to the next live frame's, each once. A car's impact on another player, or by another player's car, is a guess at
+// their inputs: a live tick doesn't hear it, the settled tick does.
 #include "internal.hpp"
 #include "Source/Car.hpp"
 #include "Source/CollisionSoundQueue.hpp"
@@ -30,7 +31,8 @@ struct SoundEvent
                // place: a snapshot's blast is made again with another id), or minus the sound object's type (by the pointer)
     s32 mId;
     u32 mSound; // which of its owner's sounds (sound_0x68::mSampleIndex: a footstep, a door, whatever variant it
-                // draws; an object's sample), the voice line for the vocals, 0 for the collision queue's impacts (one by place)
+                // draws; an object's sample), the voice line for the vocals, the collision queue's impacts by place: 40 a
+                // car's on a ped, 0 the others
     s32 mX, mY; // in blocks: the collision queue's events share one owner
     uint32_t mTick;
     sound_0x68 mSample;
@@ -40,6 +42,7 @@ std::vector<SoundEvent> sWould; // asked for by resimulated ticks, the newest re
 uint32_t sSnapTick; // the last restore's, as the game's cycle
 uint32_t sSettled; // the newest tick whose requests were given
 bool sRestored;
+bool sResimStep; // in a resimulated tick's game step
 const uint32_t kKeep = 64; // ticks of the logs
 
 const s32 kCarOwner = 1, kCharOwner = 2, kObjectOwner = 3;
@@ -107,7 +110,10 @@ void TakeRequests(std::vector<SoundEvent>& out, uint32_t tick)
         }
         s32 kind;
         const s32 id = OwnerId(e.mpObj, &kind);
-        u32 sound = e.mpObj->mObjectType == SoundObjectTypeEnum::CollisionSoundQueue_6 ? 0 : r.mSampleIndex;
+        // The collision queue's impacts are one by place, but a car's on a ped (SelectCarPedCollisionSound, by its
+        // strength), which a live tick may not have heard (ImpactHeard) beside the ped's own landing
+        const bool impact = e.mpObj->mObjectType == SoundObjectTypeEnum::CollisionSoundQueue_6;
+        u32 sound = !impact ? r.mSampleIndex : r.mSampIdx == 40 || r.mSampIdx == 41 ? 40 : 0;
         // An AI driver's insult or beep (HandleAICarHornBeep) takes the next of a shared count, 100 to 199; an object's
         // by its sample, as a small blast and a car's bang there are two
         sound = kind == kCarOwner && sound >= 100 ? 100 : kind == kObjectOwner ? r.mSampIdx : sound;
@@ -235,6 +241,21 @@ void Prune(uint32_t now)
                  sWould.end());
 }
 
+// gPortImpactHeard: a car's impact on a ped that another player takes part in, as the ped or the car's driver, waits for
+// the tick's settling (GiveOwed); the others are as predictable as the local player's inputs and the game's own AI
+bool ImpactHeard(Sprite* a, Sprite* b)
+{
+    Car* car = a->AsCar() ? a->AsCar() : b->AsCar();
+    Char* c = a->AsCharB4() ? a->AsCharB4() : b->AsCharB4();
+    if (sResimStep || !car || !c || !c->mpPed || !gGame_0x40)
+    {
+        return true;
+    }
+    const Player* self = gGame_0x40->mLocalPlayer;
+    auto other = [self](const Ped* p) { return p && p->mPlayer && p->mPlayer != self; };
+    return !other(c->mpPed) && !other(car->mDriver);
+}
+
 // gPortSoundRequestsHook: a live frame's requests noted, then what is owed added
 void LiveRequests(bool requested)
 {
@@ -264,6 +285,7 @@ int net::engine::gSoundStats[4];
 void net::engine::SoundLogRestored(uint32_t tick)
 {
     gPortSoundRequestsHook = LiveRequests;
+    gPortImpactHeard = ImpactHeard;
     sSnapTick = tick;
     sRestored = true;
     if (sSettled > tick + kKeep || sSettled + kKeep < tick) // a jump
@@ -273,6 +295,11 @@ void net::engine::SoundLogRestored(uint32_t tick)
     // This restore's resimulation asks again for the ticks after it
     sWould.erase(std::remove_if(sWould.begin(), sWould.end(), [tick](const SoundEvent& e) { return e.mTick > tick; }),
                  sWould.end());
+}
+
+void net::engine::SoundLogResimStep(bool on)
+{
+    sResimStep = on;
 }
 
 void net::engine::SoundLogResimTick(bool applied)
@@ -340,5 +367,6 @@ void net::engine::SoundLogNewGame()
 void net::engine::SoundLogStop()
 {
     gPortSoundRequestsHook = NULL;
+    gPortImpactHeard = NULL;
     SoundLogNewGame();
 }

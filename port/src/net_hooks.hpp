@@ -131,6 +131,9 @@ extern bool (*gPortPedMayDie)(Ped* pPed);
 // Asked as a char would collide with a sprite (Char::ShouldCollideWithSprite): false, and it doesn't. NULL but on a network
 // client, whose players held from a death of its own are as the dead to cars, peds and shots
 extern bool (*gPortCharSolid)(const Char* pChar);
+// Asked as a sprite's impact on another is queued for its sound (CollisionSoundQueue::AddCollision): false, and it isn't.
+// NULL but on a network client, which hears a predicted run-over of another player once the server has it
+extern bool (*gPortImpactHeard)(Sprite* pSprite, Sprite* pHit);
 // Asked as a ped would use its weapon (Ped::ManageWeapon): false, and it does not. NULL but on a network client
 extern bool (*gPortPedMayFire)(Ped* pPed);
 // Asked as a jacker's char pulls a driver out (Char::UpdateCharB4): false, and the jacker waits at the door. NULL but in

@@ -30,6 +30,7 @@ bool (*gPortBlastHurts)(Explosion* pExplosion);
 bool (*gPortBlastDebris)(Explosion* pExplosion);
 bool (*gPortPedMayDie)(Ped* pPed);
 bool (*gPortCharSolid)(const Char* pChar);
+bool (*gPortImpactHeard)(Sprite* pSprite, Sprite* pHit);
 bool (*gPortPedMayFire)(Ped* pPed);
 bool (*gPortMayPullOut)(Ped* pVictim);
 bool (*gPortPedMayGo)(Ped* pPed);

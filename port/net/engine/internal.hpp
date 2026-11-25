@@ -376,6 +376,7 @@ void SoundLogRestored(uint32_t tick);
 extern int gSoundsGiven; // the resimulated ticks' sounds played, for the stats
 extern int gSoundStats[4]; // and the settled ticks' requests: in all, heard live, without their entity; resimulated ticks without sound
 void SoundLogResimTick(bool applied);
+void SoundLogResimStep(bool on); // around a resimulated tick's game step
 void SoundLogStop();
 void SoundLogNewGame(); // the logs' ticks are a map's game cycle: none carried to the next
 void ProtectPlayers(); // the cars of player peds kept, the server's peds' fatal phase steps held (GuardPhases)

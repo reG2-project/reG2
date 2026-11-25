@@ -614,7 +614,7 @@ The sound log (`engine/sound_log.cpp`): every live frame notes the one-shot samp
 (`gPortSoundRequestsHook`, in `sound_obj::ServiceSoundEffects`, around `InterrogateAudioEntities`), keyed by the
 entity's owner (a car or a ped by its id, as a resimulation can make it again elsewhere in its pool; an object, a blast,
 by place, as a snapshot's blast is made again with another id; anything else by its pointer), which of its sounds it is
-(`sound_0x68::mSampleIndex`; an object's sample; the collision queue's impacts by place; an AI driver's shouts and
+(`sound_0x68::mSampleIndex`; an object's sample; the collision queue's impacts by place, a car's on a ped apart; an AI driver's shouts and
 beeps, which take the next of a shared count, as one), the place and the tick, the game's cycle (`Rng::get_cur_rng`),
 which every map starts anew (so do the logs, `SoundLogNewGame`): a restore learns which snapshot tick it is. A resimulated tick runs the same entities
 without the mixer (`SoundLogResimTick`: the queues and channels as they were, no radio, vocal stream or pager) and notes
@@ -623,7 +623,11 @@ the frame counter, the events they take). Its pause is its own world's, as `soun
 pause), not the restored save's: the resimulation saves its ticks again, and a paused flag from the results would
 silence every later resimulated tick. Once a snapshot settles a tick (its tick and the next, which runs with the
 server's state and inputs), that tick's requests no live frame had (same owner and sound, within 2 ticks and a block)
-are added to the next live frame's queue, each once, and noted as heard. A bigger blast's bang given where a smaller one
+are added to the next live frame's queue, each once, and noted as heard. A car's impact on a ped that another player
+takes part in, as the ped or as the car's driver, is a guess at that player's inputs: a live tick doesn't queue its sound
+(`gPortImpactHeard`, `CollisionSoundQueue::AddCollision`), its settled tick gives it, lead and round trip later, when the
+server had it. The victim's knock-down shows at once as predicted; the thud is never heard for a hit the server lacked,
+nor again each tick as the car rolls over a player whose death is held. A bigger blast's bang given where a smaller one
 plays ends that one (the car the server blew up where this client's own rocket blast was; the server's game had only the
 car's). What a snapshot's Apply leaves (a death the server carried out) is asked for by a pass before the first
 resimulated tick, as the snapshot's next tick's. Loops are asked for every frame by the live frames from the corrected
