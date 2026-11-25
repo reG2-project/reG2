@@ -339,6 +339,13 @@ void __stdcall LogFuncAddr(u32 codeAddr, s32 mode);
     #define PORT_CONST
 #endif
 
+// Port: sound channels. With the original's 16, busy scenes drop their quietest sounds; the port's mix is limited.
+#if defined(GTA2_PORT)
+    #define SOUND_CHANNELS 32
+#else
+    #define SOUND_CHANNELS 16
+#endif
+
 // Port: what _findfirst returns, a pointer on 64-bit Windows, where a long truncates it and _findnext crashes.
 #if defined(GTA2_PORT_64BIT)
 #include <stdint.h>

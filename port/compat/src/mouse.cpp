@@ -90,6 +90,13 @@ bool port_TakeMouse(float* pX, float* pY, int* pLeft, int* pRight, int* pWheel)
     return moved;
 }
 
+// In window coordinates, where the game draws its cursor or TWIN STICK's reticle.
+void port_MouseWindowPos(float* pX, float* pY)
+{
+    *pX = sX;
+    *pY = sY;
+}
+
 bool port_MouseLeftDown()
 {
     return sLeftDown;
@@ -115,7 +122,13 @@ void port_MouseEndFrame()
     if (grab != sGrabbed && pWindow)
     {
         sGrabbed = grab;
+#if defined(__EMSCRIPTEN__)
+        // A browser keeps the mouse in the page only with pointer lock: relative mode, whose motion SDL adds up
+        // into a position kept in the window.
+        SDL_SetWindowRelativeMouseMode(pWindow, grab);
+#else
         SDL_SetWindowMouseGrab(pWindow, grab);
+#endif
     }
     const bool show = port_MouseMode() && port_MenuUsesMouse();
     if (show != sCursorShown)

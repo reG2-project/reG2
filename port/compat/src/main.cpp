@@ -69,6 +69,12 @@ __attribute__((constructor(101))) static void EnterGameFolderAtStart()
 {
     EnterGameFolder(__argc, __argv);
 }
+#elif defined(__EMSCRIPTEN__)
+// Constructors take no arguments in WebAssembly; the page gives the game none.
+__attribute__((constructor(101))) static void EnterGameFolderAtStart()
+{
+    EnterGameFolder(0, NULL);
+}
 #else
 // glibc and macOS pass the program's arguments to constructors.
 __attribute__((constructor(101))) static void EnterGameFolderAtStart(int argc, char** argv, char**)
@@ -194,6 +200,10 @@ int main(int argc, char** argv)
     port_InitTestInput();
 
     const int result = WinMain(reinterpret_cast<HINSTANCE>(1), NULL, &cmdLine[0], SW_SHOWNORMAL);
+#if defined(__EMSCRIPTEN__)
+    // The page takes over (stores the files, shows itself); the runtime stays, as exit() from a resumed stack traps.
+    port_WebQuit(result);
+#endif
     port_LogExit(result);
     SDL_Quit();
     return result;

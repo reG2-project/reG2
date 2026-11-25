@@ -20,6 +20,7 @@
 #include "winmain.hpp"
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #if defined(GTA2_PORT_SDL)
 #include <SDL3/SDL_log.h>
@@ -62,9 +63,11 @@ struct Sample
 const s32 kNumSamples = 12;
 const u32 kSampleSteps = 30;
 const f32 kMinTriggerDistance = 2;
-// FRENZY RESPAWN: a new frenzy car only that far from the player and the old car, as creating it moves the cars it
-// overlaps to a road and removes the peds, the player too (Sprite::ResolveCollisionWithCarPedOrObject).
+// FRENZY RESPAWN: a failed frenzy's car, parked again once no car is that close to its spot and the spot is out of view,
+// as creating it moves the cars it overlaps to a road and removes the peds (Sprite::ResolveCollisionWithCarPedOrObject).
 const f32 kClearCarSpot = 3;
+// The START_BASIC_KF of each failed car frenzy waiting for that, by its mBasicKf slot.
+u16 sCarToPark[GTA2_COUNTOF(gScriptManager->mBasicKf)];
 // Further in a second: a teleport, the spots before it are of no use.
 const f32 kMaxSampleDistance = 20;
 // Cars catch fire from there (Car::AccumulateDamage).
@@ -204,6 +207,41 @@ void Relaunch()
     launch.mCmdNext = -1;
     gScriptManager->SpawnThread(launch.mCmdThis, 0)->launch_mission(&launch, pName->get_name());
 }
+
+void ParkFrenzyCars()
+{
+    for (u32 i = 0; i < GTA2_COUNTOF(sCarToPark); i++)
+    {
+        if (!sCarToPark[i])
+        {
+            continue;
+        }
+        const SCR_START_BASIC_KF_TEMPLATE* pFrenzy =
+            static_cast<const SCR_START_BASIC_KF_TEMPLATE*>(gScriptManager->GetBasePointer(sCarToPark[i]));
+        SCR_POINTER* pIcon = static_cast<SCR_POINTER*>(gScriptManager->GetBasePointer(pFrenzy->mObjname));
+        const Fix16_Vec& spot = reinterpret_cast<SCR_CAR_DATA_DEC*>(pIcon)->mPos;
+        Fix16_Rect view;
+        view.ComputeCollisionPrism(spot.x, spot.y, Fix16(2 * kClearCarSpot), spot.z);
+        bool clear = !gGame_0x40->IsRectVisibleToAnyPlayer(&view);
+        for (Car* pCar = gCar_BC_Pool->GetFirstCar_420E50(); pCar && clear; pCar = pCar->mpNext)
+        {
+            if (pCar->mCarSprite)
+            {
+                const f32 dx = pCar->mCarSprite->GetXPos().ToFloat() - spot.x.ToFloat();
+                const f32 dy = pCar->mCarSprite->GetYPos().ToFloat() - spot.y.ToFloat();
+                clear = dx * dx + dy * dy > kClearCarSpot * kClearCarSpot;
+            }
+        }
+        if (clear)
+        {
+            ScriptThread thread;
+            thread.SCRCMD_PARKED_CAR_DECSET(pIcon);
+            thread.EnableThread(pFrenzy->mTriggername);
+            sCarToPark[i] = 0;
+            Log("frenzy car back");
+        }
+    }
+}
 } // namespace
 
 bool SpotAway(PortSaves::Spot* pSpot)
@@ -232,6 +270,7 @@ void Start()
     sNumSamples = 0;
     sRelaunch = PortSaves::LoadedLaunch();
     sRelaunchIn = kRelaunchSteps;
+    memset(sCarToPark, 0, sizeof(sCarToPark));
     PortSaves::RefreshCheckpoint();
     if (gScriptManager && !PortSaves::Replaying() &&
         (!gScriptManager->IsLoadedFromSave() ||
@@ -326,9 +365,16 @@ void AfterStep()
     }
     sLastMission = mission;
     sLastFrenzy = frenzy;
-    if ((PortSettings::Retry() || PortSettings::Autosave()) && InGame() && ++sSteps % kSampleSteps == 0)
+    if (InGame() && ++sSteps % kSampleSteps == 0)
     {
-        TakeSample();
+        if (PortSettings::Retry() || PortSettings::Autosave())
+        {
+            TakeSample();
+        }
+        if (PortSettings::KfRespawn())
+        {
+            ParkFrenzyCars();
+        }
     }
     if (sRelaunch && --sRelaunchIn <= 0)
     {
@@ -345,46 +391,37 @@ bool FrenzyFailed(u16 doCmd)
     {
         return false;
     }
+    // A new skull as the level's start creates it (ScriptThread::ExecOpCode). The old car, while it is still the frenzy's,
+    // locks the player out and despawns as traffic does; ParkFrenzyCars parks a new one.
+    SCR_POINTER* pIcon = static_cast<SCR_POINTER*>(gScriptManager->GetBasePointer(pFrenzy->mObjname));
     for (u32 i = 0; i < GTA2_COUNTOF(gScriptManager->mBasicKf); i++)
     {
         if (gScriptManager->mBasicKf[i] == start)
         {
             gGameSave.mCarAndScriptData.mStartedBasicKfMask &= ~(1 << i);
+            sCarToPark[i] = pIcon->mType == SCRCMD_PARKED_CAR_DECSET_3D ? start : 0;
         }
     }
-    // A new skull or car as the level's start creates them (ScriptThread::ExecOpCode); the old car locks the player
-    // out and despawns as traffic does, or stays the frenzy's while it or the player is on the new one's spot.
-    SCR_POINTER* pIcon = static_cast<SCR_POINTER*>(gScriptManager->GetBasePointer(pFrenzy->mObjname));
     ScriptThread thread;
     if (pIcon->mType != SCRCMD_PARKED_CAR_DECSET_3D)
     {
         thread.SCRCMD_OBJ_DECSET_2D_3D(reinterpret_cast<SCR_OBJ_DATA*>(pIcon), pIcon);
+        thread.EnableThread(pFrenzy->mTriggername);
     }
     else
     {
+        // A burnt out car is freed (Car::PoolDeallocate) and its slot may hold another car since.
         Car* pOld = pIcon->mCar;
-        PortSaves::Spot player;
-        PortSaves::GetSpot(&player);
-        PortSaves::Spot old = player;
-        PortSaves::Spot spot = player;
-        spot.mX = reinterpret_cast<SCR_CAR_DATA_DEC*>(pIcon)->mPos.x;
-        spot.mY = reinterpret_cast<SCR_CAR_DATA_DEC*>(pIcon)->mPos.y;
-        if (pOld && pOld->mCarSprite)
+        if (!pOld || !pOld->mCarSprite || pOld->mCarInfoIdx != reinterpret_cast<SCR_CAR_DATA_DEC*>(pIcon)->mCarId)
         {
-            old.mX = pOld->mCarSprite->GetXPos();
-            old.mY = pOld->mCarSprite->GetYPos();
+            pIcon->mCar = NULL;
         }
-        if (Distance(player, spot) > kClearCarSpot && Distance(old, spot) > kClearCarSpot)
+        else if (pOld->mDoorLock != Car_Door_Lock::locked_permanently_4)
         {
-            if (pOld && pOld->mDoorLock != Car_Door_Lock::locked_permanently_4)
-            {
-                pOld->mDoorLock = Car_Door_Lock::lockout_player_5;
-            }
-            thread.DeallocOrDeleteItem(pFrenzy->mObjname);
-            thread.SCRCMD_PARKED_CAR_DECSET(pIcon);
+            pOld->mDoorLock = Car_Door_Lock::lockout_player_5;
         }
+        thread.DeallocOrDeleteItem(pFrenzy->mObjname);
     }
-    thread.EnableThread(pFrenzy->mTriggername);
     Log("frenzy back");
     return true;
 }

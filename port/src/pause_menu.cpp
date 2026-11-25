@@ -9,6 +9,7 @@
 #include "GameSession.hpp"
 #include "Globals.hpp"
 #include "Hud.hpp"
+#include "InputRecorder_67F8B0.hpp"
 #include "Ped.hpp"
 #include "Player.hpp"
 #include "TextTable.hpp"
@@ -31,6 +32,10 @@
 EXTERN_GLOBAL(s16, word_7064D8);
 EXTERN_GLOBAL(u16, gBriefFont);
 EXTERN_GLOBAL(u8, gSoundSwitchRadioCoolDown);
+
+#if defined(__EMSCRIPTEN__)
+int port_GetAltBinding(int control);
+#endif
 
 namespace PortPauseMenu
 {
@@ -335,12 +340,43 @@ void Release()
 
 static f32 Transcript(f32 top, f32 room, f32 scale = 0, f32 left = 0, f32 menuTop = 0);
 
+#if defined(__EMSCRIPTEN__)
+// In a browser, which takes Escape to leave pointer lock or full screen, Pause and P (unless a control uses it) act as
+// Escape does here.
+s32 WebEscape(s32 action)
+{
+    if (action == DIK_PAUSE)
+    {
+        return DIK_ESCAPE;
+    }
+    if (action != DIK_P)
+    {
+        return action;
+    }
+    for (s32 i = 0; i < 12; i++)
+    {
+        if ((InputDevices::sControlDeviceType[i] == 0 && InputDevices::sPlayerControlsBinding[i] == DIK_P) ||
+            port_GetAltBinding(i) == DIK_P)
+        {
+            return action;
+        }
+    }
+    return DIK_ESCAPE;
+}
+#endif
+
 bool HandleKey(s32 action, Player* pPlayer)
 {
     if (bStartNetworkGame)
     {
         return false; // the server goes on without a pause: Escape is the network game's leave prompt
     }
+#if defined(__EMSCRIPTEN__)
+    if (!PortMenu::IsCapturing())
+    {
+        action = WebEscape(action);
+    }
+#endif
     if (!sOpen)
     {
         if (action != DIK_ESCAPE || pPlayer->mShowQuitMessage || bSkip_quit_confirm || !pPlayer->IsUser())

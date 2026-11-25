@@ -95,9 +95,9 @@ steps from where it started, with the money you had then.
 
 ![RETRY in the pause menu](docs/images/pc_retry.png)
 
-**Frenzy respawn.** GAME > FRENZY RESPAWN: a failed kill frenzy comes back on the map at once, like a job's phone
-after a failure: its skull, or for a vehicle frenzy a new vehicle where the first one was parked. A passed frenzy
-never comes back.
+**Frenzy respawn.** GAME > FRENZY RESPAWN: a failed kill frenzy comes back on the map, like a job's phone after a
+failure: its skull at once, or for a vehicle frenzy a new vehicle where the first one was parked, as soon as that spot
+is clear and out of sight. A passed frenzy never comes back.
 
 **Load game.** RESUME SAVED STATUS shows your saves with a tab per city: church save, autosave and retry,
 each with its money, jobs passed and date.

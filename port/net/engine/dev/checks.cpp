@@ -766,7 +766,7 @@ void net::engine::DebugSoundChannels(uint32_t frame)
     }
     std::string line;
     char buf[96];
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < SOUND_CHANNELS; i++)
     {
         const sound_0x68& a = gSound_obj.mActiveSamples[i];
         if (a.mbIsBeingPlayed)

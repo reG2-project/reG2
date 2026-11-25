@@ -263,6 +263,15 @@ void ExplodingScore::DrawNumbers()
     PortFrameLoop::StepLocked<Fix16> keep(mX, mY);
 #endif
     pCamera->ProjectWorldToScreen_4B90E0(mX, mY, mZ, &screen_x, &screen_y);
+#if defined(GTA2_PORT)
+    // Port: the original's middle half of the screen and pull, in 640x480 pixels; scaled to the real screen, or
+    // above 640x480 the scores jump to the top left.
+    const Fix16 kFp160 = Fix16(pCamera->mScreenPxWidth / 4);
+    const Fix16 kFp480 = Fix16(pCamera->mScreenPxWidth * 3 / 4);
+    const Fix16 kFp120 = Fix16(pCamera->mScreenPxHeight / 4);
+    const Fix16 kFp360 = Fix16(pCamera->mScreenPxHeight * 3 / 4);
+    const Fix16 kFp255_702BC4 = Fix16(255 * pCamera->mScreenPxWidth / 640);
+#endif
     if (screen_x < kFp160)
     {
         screen_x = kFp160 - screen_x;
@@ -439,8 +448,9 @@ void ExplodingScore::DrawSingleNumber(s32 number_to_draw, s32 xpos_sub)
     // Port: drawn between logic steps, the explosion's spread and size are the last step's less the part of a step
     // not yet elapsed (each step adds one to both), and its fade likewise (two a step)
     const f32 back = mExplodeCounter <= -2 ? PortFrameLoop::StepNotElapsed() : 0.0f; // -1: no change from the step before
-    Fix16 x_to_use = proj_x + Fix16(static_cast<f32>(x_off) - back * (x_base - xpos_sub));
-    Fix16 y_to_use = proj_y + Fix16(static_cast<f32>(y_off) + back * 7);
+    // The digits' offsets are 640x480 pixels; scaled like the digits, or above 640x480 they overlap.
+    Fix16 x_to_use = proj_x + Fix16(static_cast<f32>(x_off) - back * (x_base - xpos_sub)) * pCam->mUiScale;
+    Fix16 y_to_use = proj_y + Fix16(static_cast<f32>(y_off) + back * 7) * pCam->mUiScale;
     base_scale = Fix16(base_scale.ToFloat() - back);
     const s32 faded = static_cast<u8>(this->mAlpha) + static_cast<s32>(back * 2 + 0.5f);
     const char_type drawn_alpha = static_cast<char_type>(faded > 255 ? 255 : faded);
@@ -451,11 +461,20 @@ void ExplodingScore::DrawSingleNumber(s32 number_to_draw, s32 xpos_sub)
 
     if (x_to_use >= kFpZero_702DE0)
     {
+#if defined(GTA2_PORT)
+        // Port: the real screen's edges, not 640x480's.
+        if (x_to_use <= Fix16(pCam->mScreenPxWidth))
+#else
         if (x_to_use <= Fix16(640))
+#endif
         {
             if (y_to_use >= kFpZero_702DE0)
             {
+#if defined(GTA2_PORT)
+                if (y_to_use <= Fix16(pCam->mScreenPxHeight))
+#else
                 if (y_to_use <= Fix16(480))
+#endif
                 {
                     s32 palette_type = palette_types_enum::user_remaps_7;
                     Fix16 finalScale = pCam->mUiScale * base_scale;

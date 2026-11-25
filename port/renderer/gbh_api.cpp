@@ -315,7 +315,7 @@ void SyncOptions()
         }
         gTextureEpoch++;
     }
-    const bool mipmaps = gRenderer->Options().mTextureFilter > 0;
+    const bool mipmaps = gRenderer->Options().Mipmaps();
     if (mipmaps != gMipmaps)
     {
         gMipmaps = mipmaps;

@@ -129,6 +129,10 @@ SDL_Window* port_MainSDLWindow()
 
 void port_SetFullscreen(HWND h, bool fullscreen)
 {
+#if defined(__EMSCRIPTEN__)
+    // The page owns full screen (web/site/app.js): its button, F11 and Alt+Enter.
+    return;
+#endif
     if (h)
     {
         sFullscreen = fullscreen;
@@ -158,7 +162,14 @@ HWND WINAPI CreateWindowExA(DWORD exStyle, LPCSTR className, LPCSTR title, DWORD
     int windowW;
     int windowH;
     port_GetWindowSize(&windowW, &windowH);
-    const SDL_WindowFlags flags = port_Headless() ? SDL_WINDOW_HIDDEN : SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
+#if defined(__EMSCRIPTEN__)
+    // The canvas at the page's chosen pixel ratio (web/site/app.js sets devicePixelRatio).
+    const SDL_WindowFlags density = SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#else
+    const SDL_WindowFlags density = 0;
+#endif
+    const SDL_WindowFlags flags =
+        port_Headless() ? SDL_WINDOW_HIDDEN : SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | density;
     SDL_Window* pSdl = SDL_CreateWindow(title, windowW, windowH, flags);
     if (!pSdl)
     {

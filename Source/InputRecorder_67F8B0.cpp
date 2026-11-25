@@ -287,7 +287,12 @@ bool InputDevices::game_pads_init()
 MATCH_FUNC(0x498C00)
 void InputDevices::get_registry_controls()
 {
+#if defined(GTA2_PORT)
+    // Keep in step with kDefaultControls (port/src/menu.cpp) and kDefaultKeys (port/compat/src/pad.cpp).
+    LOCAL_STATIC_ARRAY_INIT(s32, sDefaultControls, 12, 0x61A9E4, DIK_UP COMMA DIK_DOWN COMMA DIK_LEFT COMMA DIK_RIGHT COMMA DIK_LCONTROL COMMA DIK_RETURN COMMA DIK_SPACE COMMA DIK_Z COMMA DIK_X COMMA DIK_C COMMA DIK_LMENU COMMA DIK_RSHIFT);
+#else
     LOCAL_STATIC_ARRAY_INIT(s32, sDefaultControls, 12, 0x61A9E4, DIK_UP COMMA DIK_DOWN COMMA DIK_LEFT COMMA DIK_RIGHT COMMA DIK_LCONTROL COMMA DIK_RETURN COMMA DIK_SPACE COMMA DIK_Z COMMA DIK_X COMMA DIK_TAB COMMA DIK_LMENU COMMA DIK_RSHIFT);
+#endif
     for (u32 i = 0; i < 12; ++i)
     {
         const u32 setting = gRegistry.Get_Control_Setting(i, sDefaultControls[i]);

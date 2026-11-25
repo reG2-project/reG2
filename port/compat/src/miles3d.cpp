@@ -28,7 +28,7 @@ namespace
 // The game only opens a provider whose name starts like this (cSampleManager::Init3DProvider).
 const char kProviderName[] = "Microsoft DirectSound3D hardware support";
 const HPROVIDER kProvider = 1;
-const S32 kMaxSamples = 16;
+const S32 kMaxSamples = 64;
 
 #define GTA2_AL_FUNCS(X)                                       \
     X(LPALCCREATECONTEXT, alcCreateContext)                    \

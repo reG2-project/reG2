@@ -94,6 +94,7 @@ class GLRenderer : public IRenderer
     void CreateTargets();
     void CreateMultisampleTarget(GLenum colourFormat);
     void ResolveMultisample();
+    void BlitColour(GLuint src, bool srcRenderbuffer, GLuint dstTex, s32 x0, s32 y0, s32 x1, s32 y1);
     void SetDrawBuffers();
     void ApplyShadows();
     void ApplyTextureFilter();
@@ -128,6 +129,7 @@ class GLRenderer : public IRenderer
     // MSAA: the scene is drawn into these and resolved into mFbo by FinishFrame.
     GLuint mMsFbo;
     GLuint mMsColour[3];
+    GLuint mBlitFbo[2]; // read and draw, for BlitColour
     s32 mTargetsSamples; // 0 without MSAA
     s32 mMaxSamples;
 
@@ -143,6 +145,7 @@ class GLRenderer : public IRenderer
     GLuint mPresentProgram;
     GLint mUniGamma;
     GLint mUniFlipY;
+    GLint mUniShadowMask;
     GLuint mDownProgram;
     GLint mUniDownTexel;
     GLuint mBlurProgram;
@@ -168,6 +171,9 @@ class GLRenderer : public IRenderer
     u32 mBatchState;
     u32 mAppliedState;
     bool mStateValid;
+    // While mStateValid, what the last Flush set that the next may keep (each call costs in a browser).
+    f32 mFlushScale[2] = {0.0f, 0.0f};
+    int mFlushSmooth = -1;
 
     f32 mOffsetX;
     f32 mOffsetY;
@@ -199,7 +205,6 @@ class GLRenderer : public IRenderer
     GLenum mColourFormat = GL_RGB565;
     GLuint mHazeProgram = 0;
     bool mHazeFailed = false;
-    GLuint mHazeFbo = 0;
     GLuint mHazeTex = 0;
     GLuint mHazeMaskTex = 0; // the soft shadow mask's copy, distorted with the scene by the heat mask
     GLuint mHazeNoise = 0;

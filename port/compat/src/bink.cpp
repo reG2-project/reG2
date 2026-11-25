@@ -161,7 +161,11 @@ BINKDEC s32 __stdcall BinkWait(BINK* hbink)
     {
         return 0;
     }
+#if defined(__EMSCRIPTEN__)
+    port_WebMarkIdle();
+#else
     SDL_DelayPrecise(SDL_min(due - now, 2 * SDL_NS_PER_MS));
+#endif
     return 1;
 }
 

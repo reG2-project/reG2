@@ -105,6 +105,8 @@ bool ExactSpawn();
 Checkpoint LoadedCheckpoint();
 // Its job's LAUNCH_MISSION command, 0 if a phone gave the job or for another save.
 u16 LoadedLaunch();
+// Player::UpdateGameFromSave restores the cars: a car of the saved one's model already on its spot is used instead.
+void BeforeRestore();
 // Player::UpdateGameFromSave restored the cars: the player back in the one he drove.
 void AfterRestore(Player* pPlayer);
 

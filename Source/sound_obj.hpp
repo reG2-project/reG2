@@ -184,11 +184,11 @@ class sound_obj
     char_type mUnused2F; // 0x2F
     sound_0x68 msQueueSample; // 0x30
     u8 mnActiveSampleQueue; // 0x98
-    sound_0x68 masSamples[2][16]; // 0x9C
-    u8 mabSampleQueueIndexTable[2][16]; // 0xD9C
+    sound_0x68 masSamples[2][SOUND_CHANNELS]; // 0x9C
+    u8 mabSampleQueueIndexTable[2][SOUND_CHANNELS]; // 0xD9C
     u8 mSampleRequestQueuesStatus[2]; // 0xDBC
     s16 mUnusedDBE; // 0xDBE
-    sound_0x68 mActiveSamples[16]; // 0xDC0
+    sound_0x68 mActiveSamples[SOUND_CHANNELS]; // 0xDC0
     s32 mUnused1440; // 0x1440
     char_type mUnused1444; // 0x1444
     char_type mUnused1445; // 0x1445

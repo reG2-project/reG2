@@ -1,0 +1,16 @@
+{
+  "name": "reG2",
+  "short_name": "reG2",
+  "description": "Play GTA2 in your browser with your own copy of the game.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#0a0a0b",
+  "theme_color": "#0a0a0b",
+  "icons": [
+    { "src": "icons/reg2_256.png", "sizes": "256x256", "type": "image/png" },
+    { "src": "icons/reg2_512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

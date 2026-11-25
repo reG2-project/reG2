@@ -575,8 +575,8 @@ class Map_0x370
                            u32* outBlockBytes,
                            DmapInfoList** outSubObj,
                            s32* outSubObjBytes);
-#if defined(GTA2_PORT_64BIT)
-    // Port: 64-bit, ScriptManager::LoadSave passes size_t sizes, the same type as u32 on 32-bit targets.
+#if defined(GTA2_PORT_64BIT) || defined(__EMSCRIPTEN__)
+    // Port: 64-bit and wasm32, ScriptManager::LoadSave passes size_t sizes, the same type as u32 on x86's 32-bit targets.
     void GetModifiedMapData(gmp_column_word** outColumnPtr, size_t* outColumnBytes, gmp_block_info** outBlockPtr,
                             size_t* outBlockBytes, DmapInfoList** outSubObj, s32* outSubObjBytes)
     {
