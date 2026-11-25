@@ -6071,6 +6071,14 @@ void Char::UpdateImmobilized()
                         }
                         else
                         {
+#if defined(GTA2_PORT)
+                            // Port: a network game's player cries out at its death instead (gPortPlayersDeathCry), its
+                            // death the server's on a client, where Ped::Kill below is held
+                            if (gPortPlayersDeathCry && mpPed->is_player())
+                            {
+                                mpPed->mVoiceEvent = 0;
+                            }
+#endif
                             mpPed->Kill();
                         }
                     }
