@@ -1,10 +1,13 @@
 #include "MapRenderer.hpp"
 #include "Camera.hpp"
 #if defined(GTA2_PORT)
-// Port: frames between logic steps, the port's lights (headlights, light effects) and the day and night cycle.
+// Port: frames between logic steps, the port's lights (headlights, light effects), the day and night cycle,
+// ambient occlusion and FIRE SMOKE.
+#include "../port/src/fire_smoke.hpp"
 #include "../port/src/frame_loop.hpp"
 #include "../port/src/lights.hpp"
 #include "../port/src/day_night.hpp"
+#include "../port/src/ambient_occlusion.hpp"
 #endif
 #include "winmain.hpp"
 #include "gbh_graphics.hpp"
@@ -33,6 +36,14 @@ DEFINE_GLOBAL(u32, gGradientLevel, 0x6F647C);
 DEFINE_STATIC_MEMBER(gmp_block_info*, MapRenderer, spBlock, 0x6F6478);
 DEFINE_GLOBAL(gmp_map_slope, gCurrentSlope, 0x6F646C);
 DEFINE_GLOBAL_ARRAY(Vert, gTileVerts, 8, 0x6F65A8);
+#if defined(GTA2_PORT)
+// Port: a corner copied onto another for a triangular side takes its world position (gTileVerts[4..7]) too, which
+// per pixel lighting and ambient occlusion read; the original leaves the previous tile's there.
+static inline void PortCopyCornerWorld(s32 dst, s32 src)
+{
+    memcpy(&gTileVerts[dst + 4], &gTileVerts[src + 4], sizeof(Vert));
+}
+#endif
 
 DEFINE_GLOBAL(u32, gZCoordTop, 0x6F62B0); // u32: as gZCoord
 DEFINE_STATIC_MEMBER(u32, MapRenderer, sTileDrawFlags, 0x6F6560);
@@ -617,6 +628,10 @@ void MapRenderer::DrawLeftSide(u16& left_word)
                 {
                     memcpy(&gTileVerts[2], &gTileVerts[3], sizeof(Vert));
                     gTileVerts[2].v = 63.999901f;
+#if defined(GTA2_PORT)
+                    // Port: and its world position (PortCopyCornerWorld).
+                    PortCopyCornerWorld(2, 3);
+#endif
                 }
                 else
                 {
@@ -669,6 +684,10 @@ void MapRenderer::DrawLeftSide(u16& left_word)
                 {
                     memcpy(&gTileVerts[1], &gTileVerts[0], sizeof(Vert));
                     gTileVerts[1].v = 63.999901f;
+#if defined(GTA2_PORT)
+                    // Port: and its world position (PortCopyCornerWorld).
+                    PortCopyCornerWorld(1, 0);
+#endif
                 }
                 else
                 {
@@ -797,6 +816,10 @@ void MapRenderer::DrawRightSide(u16& right_word)
                 {
                     memcpy(&gTileVerts[3], &gTileVerts[2], sizeof(Vert));
                     gTileVerts[3].v = 63.999901f;
+#if defined(GTA2_PORT)
+                    // Port: and its world position (PortCopyCornerWorld).
+                    PortCopyCornerWorld(3, 2);
+#endif
                 }
                 else
                 {
@@ -855,6 +878,10 @@ void MapRenderer::DrawRightSide(u16& right_word)
                 {
                     memcpy(&gTileVerts[0], &gTileVerts[1], sizeof(Vert));
                     gTileVerts[0].v = 63.999901f;
+#if defined(GTA2_PORT)
+                    // Port: and its world position (PortCopyCornerWorld).
+                    PortCopyCornerWorld(0, 1);
+#endif
                 }
                 else
                 {
@@ -958,6 +985,10 @@ void MapRenderer::DrawTopSide(u16& top_word)
                 {
                     memcpy(&gTileVerts[2], &gTileVerts[1], sizeof(Vert));
                     gTileVerts[2].v = 63.999901f;
+#if defined(GTA2_PORT)
+                    // Port: and its world position (PortCopyCornerWorld).
+                    PortCopyCornerWorld(2, 1);
+#endif
                 }
                 else
                 {
@@ -1011,6 +1042,10 @@ void MapRenderer::DrawTopSide(u16& top_word)
                 {
                     memcpy(&gTileVerts[3], &gTileVerts[0], sizeof(Vert));
                     gTileVerts[3].v = 63.999901f;
+#if defined(GTA2_PORT)
+                    // Port: and its world position (PortCopyCornerWorld).
+                    PortCopyCornerWorld(3, 0);
+#endif
                 }
                 else
                 {
@@ -1227,6 +1262,10 @@ void MapRenderer::draw_bottom(u16& bottom_word)
                 {
                     memcpy(&gTileVerts[1], &gTileVerts[2], sizeof(Vert));
                     gTileVerts[1].v = 63.999901f;
+#if defined(GTA2_PORT)
+                    // Port: and its world position (PortCopyCornerWorld).
+                    PortCopyCornerWorld(1, 2);
+#endif
                 }
                 else
                 {
@@ -1291,6 +1330,10 @@ void MapRenderer::draw_bottom(u16& bottom_word)
                 {
                     memcpy(&gTileVerts[0], &gTileVerts[3], sizeof(Vert));
                     gTileVerts[0].v = 63.999901f;
+#if defined(GTA2_PORT)
+                    // Port: and its world position (PortCopyCornerWorld).
+                    PortCopyCornerWorld(0, 3);
+#endif
                 }
                 else
                 {
@@ -3540,6 +3583,10 @@ static inline void AddToDrawListByVal(MapRenderer* pThis, s32 x, s32 y)
 MATCH_FUNC(0x4f6a20)
 void MapRenderer::Draw()
 {
+#if defined(GTA2_PORT)
+    // Port: the map's solid blocks for ambient occlusion, kept up to date before the map is drawn.
+    PortAmbientOcclusion::Update();
+#endif
     // set ambient level
     if (gLighting)
     {
@@ -3563,6 +3610,10 @@ void MapRenderer::Draw()
         if (zLayer != 0)
         {
             gSpriteRenderer->Draw(zLayer); // draw all sprites at zLayer
+#if defined(GTA2_PORT)
+            // Port: FIRE SMOKE at this height, with the sprites, so that the blocks drawn next hide it as they do them.
+            PortFireSmoke::DrawLayer(zLayer);
+#endif
         }
 
         // render blocks
@@ -3689,4 +3740,7 @@ void MapRenderer::Draw()
         }
     }
     gSpriteRenderer->Draw(7);    // draw all sprites on the highest layer
+#if defined(GTA2_PORT)
+    PortFireSmoke::DrawLayer(7);
+#endif
 }

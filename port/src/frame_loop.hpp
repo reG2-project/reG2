@@ -32,6 +32,10 @@ f32 DrawAlpha();
 // stepped once per logic step is drawn less of, as a fraction of its step.
 f32 StepNotElapsed();
 
+// The world's time as drawn, in seconds of logic steps: it stands still while the game is paused (its PAUSE, or the
+// port's pause menu), at the last step's moment as the game's sprites do, and goes on from there.
+f64 WorldSeconds();
+
 // Two values a draw changes, put back at the end of the scope unless a logic step ran before this draw.
 template <typename T>
 class StepLocked

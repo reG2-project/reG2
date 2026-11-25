@@ -77,9 +77,17 @@ BOOL WINAPI ReleaseMutex(HANDLE)
     return TRUE;
 }
 
+#if defined(__EMSCRIPTEN__)
+extern "C" void port_WebMarkIdle();
+#endif
+
 void WINAPI Sleep(DWORD ms)
 {
+#if defined(__EMSCRIPTEN__)
+    port_WebMarkIdle();
+#else
     SDL_Delay((Uint32)(ms / port_ClockSpeed()));
+#endif
 }
 
 DWORD WINAPI GetTickCount()

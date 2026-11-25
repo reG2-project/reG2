@@ -159,7 +159,7 @@ class cSampleManager
   private:
     char_type mStr5[80]; // 0x5
     bool mbMusicFound; // 0x55
-    HSAMPLE mhSamples[16]; // 0x58
+    HSAMPLE mhSamples[SOUND_CHANNELS]; // 0x58
     HSAMPLE mhSample; // 0x98
     HSTREAM mhStreams[2]; // 0x9C
     bool mbLoaded; // 0xA4
@@ -175,7 +175,7 @@ class cSampleManager
     s32 mbEaxSupported; // 0x26B8
     s32 mEaxEnvironment; // 0x26BC
     s32 m3dProvider; // 0x26C0
-    H3DSAMPLE m3dSample[16]; // 0x26C4
+    H3DSAMPLE m3dSample[SOUND_CHANNELS]; // 0x26C4
     f32 mFloat2704; // 0x2704
     f32 mFloat2708; // 0x2708
     f32 mFloat270C; // 0x270C

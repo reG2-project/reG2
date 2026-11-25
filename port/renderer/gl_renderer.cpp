@@ -29,15 +29,19 @@ const char* kFaithfulVS =
 // (transparent texels keep their palette colour), and the edge is one screen pixel wide where the
 // bilinear alpha crosses one half, so magnified glyphs are neither blurred nor blocky. Opaque
 // texels get the plain bilinear sample.
+// uSmooth 2 (SHARP BILINEAR): each texel's centre sampled as is, blended only over a screen pixel at its edges.
 #define SMOOTH_SAMPLE \
     "uniform int uSmooth;\n" \
     "vec4 SmoothSample(vec2 uv)\n" \
     "{\n" \
-    "    vec4 c = texture(uTex, uv);\n" \
     "    vec2 size = vec2(textureSize(uTex, 0));\n" \
     "    vec2 p = uv * size - 0.5;\n" \
-    "    float scale = 1.0 / max(max(fwidth(p).x, fwidth(p).y), 1e-6);\n" \
-    "    if (uSmooth == 0 || scale <= 1.0 || c.a >= 0.999)\n" \
+    "    vec2 fw = max(fwidth(p), vec2(1e-6));\n" \
+    "    if (uSmooth == 2)\n" \
+    "        uv = (floor(p) + clamp((fract(p) - 0.5) / fw + 0.5, 0.0, 1.0) + 0.5) / size;\n" \
+    "    vec4 c = texture(uTex, uv);\n" \
+    "    float scale = 1.0 / max(fw.x, fw.y);\n" \
+    "    if (uSmooth != 1 || scale <= 1.0 || c.a >= 0.999)\n" \
     "        return c;\n" \
     "    ivec2 i0 = ivec2(floor(p));\n" \
     "    ivec2 hi = ivec2(size) - 1;\n" \
@@ -80,6 +84,7 @@ const char* kSceneVS =
     "layout(location = 4) in vec4 aUnlit;\n"
     "layout(location = 5) in float aShade;\n"
     "layout(location = 6) in float aLit;\n"
+    "layout(location = 7) in float aAo;\n"
     "uniform vec2 uScale;\n"
     "uniform vec2 uOffset;\n"
     "out vec4 vCol;\n"
@@ -88,6 +93,7 @@ const char* kSceneVS =
     "out vec4 vUnlit;\n"
     "out float vShade;\n"
     "out float vLit;\n"
+    "out float vAo;\n"
     "void main()\n"
     "{\n"
     "    float w = 1.0 / max(aPos.z, 1e-7);\n"
@@ -99,6 +105,7 @@ const char* kSceneVS =
     "    vUnlit = aUnlit;\n"
     "    vShade = aShade;\n"
     "    vLit = aLit;\n"
+    "    vAo = aAo;\n"
     "}\n";
 
 // Per pixel lighting is the original's LightVertex formula with a real square root.
@@ -127,10 +134,17 @@ const char* kSceneFS =
     "in vec4 vUnlit;\n"
     "in float vShade;\n"
     "in float vLit;\n"
+    "in float vAo;\n"
+    "uniform sampler3D uAoSides;\n"
+    "uniform sampler3D uAoUp;\n"
+    "uniform vec3 uAoGrid;\n"
+    "uniform float uAo;\n"
+    "uniform int uAoDebug;\n"
     "layout(location = 0) out vec4 oColor;\n"
     "layout(location = 1) out vec4 oBloom;\n"
     "layout(location = 2) out vec4 oShadow;\n"
-    "vec3 LightSum()\n"
+    // smoke 1: a particle (FLAG_TINTED in gbh_api.cpp), above the lights' ceilings.
+    "vec3 LightSum(float smoke)\n"
     "{\n"
     "    vec3 acc = vec3(0.0);\n"
     "    vec3 spots = vec3(0.0);\n"
@@ -145,7 +159,7 @@ const char* kSceneFS =
     "            float dist = sqrt(d2);\n"
     "            float att = (r - dist) / max(r, 1e-6);\n"
     // As BelowCeiling in gbh_api.cpp.
-    "            float below = 1.0 - smoothstep(uLightCol[i].w, uLightCol[i].w + 0.4, vWorld.z);\n"
+    "            float below = max(1.0 - smoothstep(uLightCol[i].w, uLightCol[i].w + 0.4, vWorld.z), smoke);\n"
     "            vec4 s = uLightDir[i];\n"
     // As Beam in gbh_api.cpp.
     "            float along = dot(d.xy, s.xy);\n"
@@ -179,8 +193,36 @@ const char* kSceneFS =
     "    }\n"
     "    return sum / float((2 * n + 1) * (2 * n + 1));\n"
     "}\n"
+    // Ambient occlusion from the baked volumes (kAoBakeFS), per texel of the 64 per block as the tiles are drawn.
+    // Slopes blend the axes they face, so that the facing's rounding never picks one axis per pixel.
+    "float Occlusion(vec3 dx, vec3 dy)\n"
+    "{\n"
+    "    vec3 n = cross(dx, dy);\n"
+    "    if (dot(n, n) < 1e-24) return 1.0;\n"
+    "    vec3 a = abs(normalize(n));\n"
+    "    vec3 w = a * a;\n"
+    "    w *= w;\n"
+    "    w *= w;\n"
+    "    w /= w.x + w.y + w.z;\n"
+    "    vec3 p = (floor(vWorld * 64.0) + 0.5) / 64.0;\n"
+    "    float occ = 0.0;\n"
+    "    if (w.z > 0.01 && n.z > 0.0) occ += w.z * textureLod(uAoUp, (vec3(p.xy, vWorld.z) * 2.0 + 0.5) / uAoGrid, 0.0).r;\n"
+    "    if (w.x > 0.01)\n"
+    "    {\n"
+    "        vec4 s = textureLod(uAoSides, (vec3(vWorld.x, p.yz) * 2.0 + 0.5) / uAoGrid, 0.0);\n"
+    "        occ += w.x * (n.x > 0.0 ? s.r : s.g);\n"
+    "    }\n"
+    "    if (w.y > 0.01)\n"
+    "    {\n"
+    "        vec4 s = textureLod(uAoSides, (vec3(p.x, vWorld.y, p.z) * 2.0 + 0.5) / uAoGrid, 0.0);\n"
+    "        occ += w.y * (n.y > 0.0 ? s.b : s.a);\n"
+    "    }\n"
+    "    return 1.0 - uAo * occ;\n"
+    "}\n"
     "void main()\n"
     "{\n"
+    "    vec3 worldDx = dFdx(vWorld);\n"
+    "    vec3 worldDy = dFdy(vWorld);\n"
     "    vec2 uv = vUV - (dFdx(vUV) + dFdy(vUV)) * uSampleShift;\n"
     "    if (uShadow != 0)\n"
     "    {\n"
@@ -188,7 +230,7 @@ const char* kSceneFS =
     "        float a = SoftAlpha(uv, vCol.r * 255.0 / 32.0) * vCol.a;\n"
     "        if (uPerPixel != 0 && vLit > 0.5)\n"
     "        {\n"
-    "            vec3 l = min(255.0 * LightSum() + uAmbient, vec3(255.0));\n"
+    "            vec3 l = min(255.0 * LightSum(0.0) + uAmbient, vec3(255.0));\n"
     "            a *= 0.5 + 0.5 * min((uAmbient.r + uAmbient.g + uAmbient.b) / max(l.r + l.g + l.b, 1.0), 1.0);\n"
     "        }\n"
     "        oColor = vec4(0.0);\n"
@@ -199,11 +241,20 @@ const char* kSceneFS =
     "    vec4 t = uUseTex != 0 ? SmoothSample(uv) : vec4(1.0);\n"
     "    if (uAlphaTest != 0 && t.a < 0.5) discard;\n"
     "    vec4 c = vCol;\n"
+    "    float ao = uAo > 0.0 && vAo > 0.0 ? Occlusion(worldDx, worldDy) : 1.0;\n"
     "    if (uPerPixel != 0 && vLit > 0.5)\n"
     "    {\n"
-    "        c = vec4(min((vShade * vUnlit.rgb * 255.0 * LightSum() + uAmbient * (1.0 - uUnlitAmbient * (1.0 - vUnlit.rgb))) / 255.0, vec3(1.0)), vUnlit.a);\n"
+    // Ambient occlusion takes the ambient light and a quarter of the lights' (kAoOfLights in gbh_api.cpp). A tinted
+    // particle (lit 2, FLAG_TINTED) has its colour multiplied by the ambient light too, takes twice the lights (they
+    // light it through, not only its surface) and may be lit up to 3 times its colour (overbright, as Quake 3's).
+    "        c = vec4(min((vShade * vUnlit.rgb * 255.0 * LightSum(vLit > 1.5 ? 1.0 : 0.0) * (vLit > 1.5 ? 2.0 : 1.0) * mix(1.0, ao, 0.25) + uAmbient * ao * (1.0 - (vLit > 1.5 ? 1.0 : uUnlitAmbient) * (1.0 - vUnlit.rgb))) / 255.0, vec3(vLit > 1.5 ? 3.0 : 1.0)), vUnlit.a);\n"
+    "    }\n"
+    "    else\n"
+    "    {\n"
+    "        c.rgb *= 1.0 - (1.0 - ao) * vAo;\n"
     "    }\n"
     "    oColor = t * c;\n"
+    "    if (uAoDebug != 0 && vAo > 0.0) oColor.rgb = vec3(ao) * t.a;\n"
     "    if (uPerPixel != 0 && vLit > 0.5) oColor.rgb += min(gHaze, vec3(0.3)) * t.a;\n"
     "    oShadow = vec4(0.0, 0.0, 0.0, oColor.a);\n"
     // With a shadow mask, additive draws blend with (1, 1 - alpha): no alpha keeps them additive, and the
@@ -230,6 +281,7 @@ const char* kPresentFS =
     "uniform sampler2D uTex;\n"
     "uniform vec3 uGamma;\n"
     "uniform int uFlipY;\n"
+    "uniform int uShadowMask;\n" // the soft shadow mask (red) as black of that alpha
     "in vec2 vUV;\n"
     "layout(location = 0) out vec4 oColor;\n"
     "layout(location = 2) out vec4 oShadow;\n"
@@ -237,6 +289,7 @@ const char* kPresentFS =
     "{\n"
     "    vec2 uv = uFlipY != 0 ? vec2(vUV.x, 1.0 - vUV.y) : vUV;\n"
     "    vec4 c = texture(uTex, uv);\n"
+    "    if (uShadowMask != 0) c = vec4(0.0, 0.0, 0.0, c.r);\n"
     "    oColor = vec4(pow(c.rgb, 1.0 / uGamma), c.a);\n"
     "    oShadow = vec4(0.0, 0.0, 0.0, c.a);\n"
     "}\n";
@@ -281,8 +334,46 @@ const char* kComposeFS =
     "    oColor = vec4(min(c, vec3(1.0)), 1.0);\n"
     "}\n";
 
+// Ambient occlusion baked on a grid of half blocks, one z slice per draw: for each axis facing, how solid the map is
+// on a ring of half a block round the point half a block out (never its own block): 0.5 on a wall's contact line,
+// 0.75 in an inner corner, nothing a block away.
+const char* kAoBakeFS =
+    "uniform sampler3D uOcc;\n"
+    "uniform vec3 uOccScale;\n"
+    "uniform float uZ;\n"
+    "layout(location = 0) out vec4 oSides;\n"
+    "layout(location = 1) out vec4 oUp;\n"
+    // How solid the map is at a point, trilinear between block centres.
+    "float Solid(vec3 p)\n"
+    "{\n"
+    "    return textureLod(uOcc, p * uOccScale, 0.0).r;\n"
+    "}\n"
+    "float Occlusion(vec3 p, vec3 n, vec3 t1, vec3 t2)\n"
+    "{\n"
+    "    const vec2 ring[8] = vec2[](vec2(0.92388, 0.38268), vec2(0.38268, 0.92388), vec2(-0.38268, 0.92388), vec2(-0.92388, 0.38268),\n"
+    "                                vec2(-0.92388, -0.38268), vec2(-0.38268, -0.92388), vec2(0.38268, -0.92388), vec2(0.92388, -0.38268));\n"
+    "    float sum = 0.0;\n"
+    "    for (int k = 0; k < 8; k++)\n"
+    "    {\n"
+    "        sum += Solid(p + n * 0.5 + (t1 * ring[k].x + t2 * ring[k].y) * 0.5);\n"
+    "    }\n"
+    "    return sum * 0.125;\n"
+    "}\n"
+    "void main()\n"
+    "{\n"
+    "    vec3 p = vec3(floor(gl_FragCoord.xy), uZ) * 0.5;\n"
+    "    vec3 x = vec3(1.0, 0.0, 0.0), y = vec3(0.0, 1.0, 0.0), z = vec3(0.0, 0.0, 1.0);\n"
+    "    oSides = vec4(Occlusion(p, x, y, z), Occlusion(p, -x, y, z), Occlusion(p, y, x, z), Occlusion(p, -y, x, z));\n"
+    "    oUp = vec4(Occlusion(p, z, x, y));\n"
+    "}\n";
+
 const s32 kMaxBatchVerts = 6 * 4096;
 const s32 kMaxLights = 256;
+// Ambient occlusion textures' units (0 is the batch's texture, 1 the bloom's): the baked sides and up volumes, and
+// the map's blocks they are baked from.
+const s32 kAoSidesUnit = 2;
+const s32 kAoUpUnit = 3;
+const s32 kOcclusionUnit = 4;
 const u32 kStateMipmap = 1u << 31; // the batch's texture has mip levels and is filtered
 const GLenum kTextureMaxAnisotropy = 0x84FE;
 const GLenum kMaxTextureMaxAnisotropy = 0x84FF;
@@ -366,7 +457,8 @@ GLRenderer::GLRenderer()
       mDownProgram(0), mBlurProgram(0), mComposeProgram(0), mVao(0), mVbo(0), mLightUbo(0), mSamplerNearest(0), mSamplerLinear(0),
       mSamplerMip(0), mMaxAnisotropy(1.0f), mWhiteTex(0), mSurfaceTex(0), mSurfaceW(0), mSurfaceH(0), mBatchTex(0), mBatchState(0), mAppliedState(0), mStateValid(false),
       mOffsetX(0.5f - 1.0f / 2048.0f), mOffsetY(0.5f - 1.0f / 2048.0f), mSampleShift(1.0f / 1024.0f), mNumLights(0),
-      mAmbient{255.0f, 255.0f, 255.0f}, mUnlitAmbient(0.0f), mDrawCalls(0), mUploads(0), mVertices(0)
+      mAmbient{255.0f, 255.0f, 255.0f}, mUnlitAmbient(0.0f), mOccTex(0), mAoTex{0, 0}, mAoFbo(0), mAoGrid{1, 1, 1}, mAoStrength(0.0f),
+      mAoBakeProgram(0), mUniBakeOccScale(-1), mUniBakeZ(-1), mUniAoGrid(-1), mUniAo(-1), mUniAoDebug(-1), mDrawCalls(0), mUploads(0), mVertices(0)
 {
     memset(mScene, 0, sizeof(mScene));
     mActiveScene = 0;
@@ -388,7 +480,7 @@ GLuint GLRenderer::CompileProgram(const char* vs, const char* fs, const char** p
     static char log[1024];
     const char* version = reinterpret_cast<const char*>(gl.glGetString(GL_VERSION));
     const char* header = (version && strncmp(version, "OpenGL ES", 9) == 0)
-        ? "#version 300 es\nprecision highp float;\nprecision highp int;\n"
+        ? "#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler3D;\n"
         : "#version 330 core\n";
     GLuint shaders[2];
     const char* srcs[2] = {vs, fs};
@@ -441,7 +533,8 @@ bool GLRenderer::Init(GLFuncs::Loader loader, const char** ppError)
     mDownProgram = mPresentProgram ? CompileProgram(kPresentVS, kDownFS, ppError) : 0;
     mBlurProgram = mDownProgram ? CompileProgram(kPresentVS, kBlurFS, ppError) : 0;
     mComposeProgram = mBlurProgram ? CompileProgram(kPresentVS, kComposeFS, ppError) : 0;
-    if (!mComposeProgram)
+    mAoBakeProgram = mComposeProgram ? CompileProgram(kPresentVS, kAoBakeFS, ppError) : 0;
+    if (!mAoBakeProgram)
     {
         return false;
     }
@@ -465,11 +558,17 @@ bool GLRenderer::Init(GLFuncs::Loader loader, const char** ppError)
     }
     mUniGamma = gl.glGetUniformLocation(mPresentProgram, "uGamma");
     mUniFlipY = gl.glGetUniformLocation(mPresentProgram, "uFlipY");
+    mUniShadowMask = gl.glGetUniformLocation(mPresentProgram, "uShadowMask");
     mUniDownTexel = gl.glGetUniformLocation(mDownProgram, "uTexel");
     mUniBlurStep = gl.glGetUniformLocation(mBlurProgram, "uStep");
     mUniBloomIntensity = gl.glGetUniformLocation(mComposeProgram, "uIntensity");
     gl.glUseProgram(mProgram);
     gl.glUniformBlockBinding(mProgram, gl.glGetUniformBlockIndex(mProgram, "Lights"), 0);
+    gl.glUniform1i(gl.glGetUniformLocation(mProgram, "uAoSides"), kAoSidesUnit);
+    gl.glUniform1i(gl.glGetUniformLocation(mProgram, "uAoUp"), kAoUpUnit);
+    mUniAoGrid = gl.glGetUniformLocation(mProgram, "uAoGrid");
+    mUniAo = gl.glGetUniformLocation(mProgram, "uAo");
+    mUniAoDebug = gl.glGetUniformLocation(mProgram, "uAoDebug");
     GLuint posts[4] = {mPresentProgram, mDownProgram, mBlurProgram, mComposeProgram};
     for (int i = 0; i < 4; i++)
     {
@@ -477,6 +576,10 @@ bool GLRenderer::Init(GLFuncs::Loader loader, const char** ppError)
         gl.glUniform1i(gl.glGetUniformLocation(posts[i], "uTex"), 0);
     }
     gl.glUniform1i(gl.glGetUniformLocation(mComposeProgram, "uBloom"), 1);
+    gl.glUseProgram(mAoBakeProgram);
+    gl.glUniform1i(gl.glGetUniformLocation(mAoBakeProgram, "uOcc"), kOcclusionUnit);
+    mUniBakeOccScale = gl.glGetUniformLocation(mAoBakeProgram, "uOccScale");
+    mUniBakeZ = gl.glGetUniformLocation(mAoBakeProgram, "uZ");
 
     gl.glGenBuffers(1, &mLightUbo);
     gl.glBindBuffer(GL_UNIFORM_BUFFER, mLightUbo);
@@ -502,6 +605,8 @@ bool GLRenderer::Init(GLFuncs::Loader loader, const char** ppError)
     gl.glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(RVertex), (void*)offsetof(RVertex, shade));
     gl.glEnableVertexAttribArray(6);
     gl.glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(RVertex), (void*)offsetof(RVertex, lit));
+    gl.glEnableVertexAttribArray(7);
+    gl.glVertexAttribPointer(7, 1, GL_FLOAT, GL_FALSE, sizeof(RVertex), (void*)offsetof(RVertex, ao));
 
     gl.glGenSamplers(1, &mSamplerNearest);
     gl.glGenSamplers(1, &mSamplerLinear);
@@ -553,6 +658,7 @@ bool GLRenderer::Init(GLFuncs::Loader loader, const char** ppError)
     gl.glGenTextures(2, mBlurTex);
     gl.glGenFramebuffers(1, &mMsFbo);
     gl.glGenRenderbuffers(3, mMsColour);
+    gl.glGenFramebuffers(2, mBlitFbo);
 
     mBatch.reserve(kMaxBatchVerts);
     mReady = true;
@@ -563,6 +669,10 @@ bool GLRenderer::Init(GLFuncs::Loader loader, const char** ppError)
 
 void GLRenderer::ThrottleFrames()
 {
+#if defined(__EMSCRIPTEN__)
+    // The browser keeps the GPU at most a frame or two behind, and WebGL cannot wait on a fence.
+    return;
+#endif
     if (mFrameFence)
     {
         gl.glClientWaitSync(mFrameFence, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000000ull);
@@ -592,8 +702,17 @@ void GLRenderer::Shutdown()
     gl.glDeleteTextures(2, mBlurTex);
     gl.glDeleteFramebuffers(1, &mMsFbo);
     gl.glDeleteRenderbuffers(3, mMsColour);
+    gl.glDeleteFramebuffers(2, mBlitFbo);
     gl.glDeleteSamplers(1, &mSamplerMip);
     gl.glDeleteTextures(1, &mWhiteTex);
+    gl.glDeleteTextures(1, &mOccTex);
+    gl.glDeleteTextures(2, mAoTex);
+    gl.glDeleteFramebuffers(1, &mAoFbo);
+    gl.glDeleteProgram(mAoBakeProgram);
+    mOccTex = 0;
+    mAoTex[0] = mAoTex[1] = 0;
+    mAoFbo = 0;
+    mAoGrid[0] = mAoGrid[1] = mAoGrid[2] = 1;
     gl.glDeleteTextures(1, &mSurfaceTex);
     gl.glDeleteSamplers(1, &mSamplerNearest);
     gl.glDeleteSamplers(1, &mSamplerLinear);
@@ -606,6 +725,7 @@ void GLRenderer::Shutdown()
     gl.glDeleteProgram(mDownProgram);
     gl.glDeleteProgram(mBlurProgram);
     gl.glDeleteProgram(mComposeProgram);
+    FreeHaze();
     mReady = false;
 }
 
@@ -689,6 +809,7 @@ void GLRenderer::CreateTargets()
         gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
         gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mFboTex, 0);
     }
+    mColourFormat = colourFormat;
     mTargetsTrueColour = mOptions.mTrueColour;
     mTargetsBloom = mOptions.mBloom > 0.0f;
     const GLenum one[1] = {GL_COLOR_ATTACHMENT0};
@@ -723,13 +844,8 @@ void GLRenderer::CreateTargets()
     gl.glBindFramebuffer(GL_FRAMEBUFFER, mFbo);
     if (mTargetsShadows)
     {
-        // Sampled as (0, 0, 0, mask) to darken the scene with alpha blending.
         gl.glBindTexture(GL_TEXTURE_2D, mShadowTex);
         gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
-        gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_ZERO);
-        gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_ZERO);
-        gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_ZERO);
-        gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_RED);
     }
     gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, mTargetsShadows ? mShadowTex : 0, 0);
     SetDrawBuffers();
@@ -778,24 +894,37 @@ void GLRenderer::ResolveMultisample()
     {
         return;
     }
-    gl.glBindFramebuffer(GL_READ_FRAMEBUFFER, mMsFbo);
-    gl.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mFbo);
     const bool used[3] = {true, mTargetsBloom, mTargetsShadows};
+    const GLuint targets[3] = {mFboTex, mBloomSrcTex, mShadowTex};
     for (s32 i = 0; i < 3; i++)
     {
-        if (!used[i])
+        if (used[i])
         {
-            continue;
+            BlitColour(mMsColour[i], true, targets[i], 0, 0, mTargetW, mTargetH);
         }
-        const GLenum buffers[3] = {i == 0 ? (GLenum)GL_COLOR_ATTACHMENT0 : (GLenum)GL_NONE,
-                                   i == 1 ? (GLenum)GL_COLOR_ATTACHMENT1 : (GLenum)GL_NONE, GL_COLOR_ATTACHMENT2};
-        gl.glReadBuffer(GL_COLOR_ATTACHMENT0 + i);
-        gl.glDrawBuffers(i + 1, buffers);
-        gl.glBlitFramebuffer(0, 0, mTargetW, mTargetH, 0, 0, mTargetW, mTargetH, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     }
-    SetDrawBuffers();
-    gl.glReadBuffer(GL_COLOR_ATTACHMENT0);
     gl.glBindFramebuffer(GL_FRAMEBUFFER, mFbo);
+}
+
+// Through framebuffers with only these two attached: Apple's AMD driver crashes in blits from or to framebuffers
+// with several colour attachments (issue 17).
+void GLRenderer::BlitColour(GLuint src, bool srcRenderbuffer, GLuint dstTex, s32 x0, s32 y0, s32 x1, s32 y1)
+{
+    gl.glBindFramebuffer(GL_READ_FRAMEBUFFER, mBlitFbo[0]);
+    gl.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mBlitFbo[1]);
+    if (srcRenderbuffer)
+    {
+        gl.glFramebufferRenderbuffer(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, src);
+    }
+    else
+    {
+        gl.glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, src, 0);
+    }
+    gl.glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dstTex, 0);
+    gl.glBlitFramebuffer(x0, y0, x1, y1, x0, y0, x1, y1, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    // Detached so that freed buffers aren't kept alive by these framebuffers.
+    gl.glFramebufferRenderbuffer(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, 0);
+    gl.glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
 }
 
 // For the bound scene target: colour, bloom source and shadow mask, as the options have them.
@@ -816,9 +945,12 @@ void GLRenderer::ApplyShadows()
     gl.glViewport(0, 0, mTargetW, mTargetH);
     const GLenum one[1] = {GL_COLOR_ATTACHMENT0};
     gl.glDrawBuffers(1, one);
+    // Detached while it is sampled: WebGL refuses a draw that reads a texture attached to its target.
+    gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, 0, 0);
     gl.glUseProgram(mPresentProgram);
     gl.glUniform3f(mUniGamma, 1.0f, 1.0f, 1.0f);
     gl.glUniform1i(mUniFlipY, 0);
+    gl.glUniform1i(mUniShadowMask, 1);
     gl.glActiveTexture(GL_TEXTURE0);
     gl.glBindTexture(GL_TEXTURE_2D, mShadowTex);
     gl.glBindSampler(0, mSamplerNearest);
@@ -826,6 +958,8 @@ void GLRenderer::ApplyShadows()
     gl.glBlendEquation(GL_FUNC_ADD);
     gl.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     DrawFullscreen();
+    gl.glUniform1i(mUniShadowMask, 0);
+    gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, mShadowTex, 0);
     SetDrawBuffers();
     const GLfloat zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     gl.glClearBufferfv(GL_COLOR, 2, zero);
@@ -919,7 +1053,7 @@ void GLRenderer::UploadTexture(RTexture* pTex, s32 width, s32 height, const u32*
         gl.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pRgba);
     }
     s32 levels = 1;
-    if (mipmaps != RMIP_NONE && mOptions.mTextureFilter > 0)
+    if (mipmaps != RMIP_NONE && mOptions.Mipmaps())
     {
         // The levels below the base hold about a third of its texels; the margin covers thin sizes.
         mMipBuffer.resize((size_t)width * height / 2 + width + height + 8);
@@ -962,6 +1096,8 @@ void GLRenderer::FreeTexture(RTexture* pTex)
 void GLRenderer::BeginScene()
 {
     mStateValid = false;
+    mHeatVerts.clear();
+    mHeatDraws.clear();
 }
 
 void GLRenderer::EndScene()
@@ -1004,6 +1140,79 @@ void GLRenderer::SetLights(const RLight* pLights, s32 count, const f32* pAmbient
     mStateValid = false;
 }
 
+namespace
+{
+void SetVolumeParameters(const GLFuncs& gl)
+{
+    gl.glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl.glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl.glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    gl.glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    gl.glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    gl.glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, 0);
+}
+} // namespace
+
+void GLRenderer::SetOcclusion(const u8* pCells, s32 width, s32 height, s32 depth, f32 strength)
+{
+    if (!mReady)
+    {
+        return;
+    }
+    Flush();
+    mAoStrength = strength;
+    mStateValid = false;
+    if (!pCells)
+    {
+        return;
+    }
+    if (!mOccTex)
+    {
+        gl.glGenTextures(1, &mOccTex);
+        gl.glGenTextures(2, mAoTex);
+        gl.glGenFramebuffers(1, &mAoFbo);
+    }
+    gl.glActiveTexture(GL_TEXTURE0 + kOcclusionUnit);
+    gl.glBindTexture(GL_TEXTURE_3D, mOccTex);
+    gl.glTexImage3D(GL_TEXTURE_3D, 0, GL_R8, width, height, depth, 0, GL_RED, GL_UNSIGNED_BYTE, pCells);
+    SetVolumeParameters(gl);
+
+    // The baked volumes: a point every half block, the map's edges and the top of its levels included.
+    const s32 grid[3] = {width * 2 + 1, height * 2 + 1, depth + 1};
+    const bool resized = grid[0] != mAoGrid[0] || grid[1] != mAoGrid[1] || grid[2] != mAoGrid[2];
+    const GLenum formats[2] = {GL_RGBA8, GL_R8};
+    const GLenum layouts[2] = {GL_RGBA, GL_RED};
+    const s32 units[2] = {kAoSidesUnit, kAoUpUnit};
+    for (s32 i = 0; i < 2; i++)
+    {
+        gl.glActiveTexture(GL_TEXTURE0 + units[i]);
+        gl.glBindTexture(GL_TEXTURE_3D, mAoTex[i]);
+        if (resized)
+        {
+            gl.glTexImage3D(GL_TEXTURE_3D, 0, formats[i], grid[0], grid[1], grid[2], 0, layouts[i], GL_UNSIGNED_BYTE, NULL);
+            SetVolumeParameters(gl);
+        }
+    }
+    gl.glActiveTexture(GL_TEXTURE0);
+    mAoGrid[0] = grid[0], mAoGrid[1] = grid[1], mAoGrid[2] = grid[2];
+
+    gl.glBindFramebuffer(GL_FRAMEBUFFER, mAoFbo);
+    const GLenum two[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+    gl.glDrawBuffers(2, two);
+    gl.glViewport(0, 0, grid[0], grid[1]);
+    gl.glDisable(GL_BLEND);
+    gl.glUseProgram(mAoBakeProgram);
+    gl.glUniform3f(mUniBakeOccScale, 1.0f / width, 1.0f / height, 1.0f / depth);
+    for (s32 z = 0; z < grid[2]; z++)
+    {
+        gl.glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, mAoTex[0], 0, z);
+        gl.glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, mAoTex[1], 0, z);
+        gl.glUniform1f(mUniBakeZ, (f32)z);
+        DrawFullscreen();
+    }
+    BindTarget();
+}
+
 void GLRenderer::ApplyState(u32 state)
 {
     if (mStateValid && state == mAppliedState)
@@ -1037,6 +1246,10 @@ void GLRenderer::ApplyState(u32 state)
         gl.glUniform3f(sp.mAmbient, mAmbient[0], mAmbient[1], mAmbient[2]);
         gl.glUniform1f(sp.mUnlitAmbient, mUnlitAmbient);
         gl.glUniform1i(sp.mShadow, (state & RS_SHADOW) ? 1 : 0);
+        static const char* sAoDebug = getenv("GTA2_AO_DEBUG");
+        gl.glUniform1f(mUniAo, mAoStrength);
+        gl.glUniform1i(mUniAoDebug, sAoDebug && atoi(sAoDebug) ? 1 : 0);
+        gl.glUniform3f(mUniAoGrid, (f32)mAoGrid[0], (f32)mAoGrid[1], (f32)mAoGrid[2]);
     }
     gl.glBindSampler(0, (state & kStateMipmap) ? mSamplerMip : (state & RS_FILTER_LINEAR) ? mSamplerLinear : mSamplerNearest);
     if (state & RS_PIXEL_EXACT)
@@ -1087,25 +1300,43 @@ void GLRenderer::Flush()
         mBatch.clear();
         return;
     }
-    BindTarget();
-    const int scene = (mOptions.mBloom > 0.0f || mOptions.mPerPixelLighting || mTargetsShadows) ? 1 : 0;
+    const int scene = (mOptions.mBloom > 0.0f || mOptions.mPerPixelLighting || mTargetsShadows || mAoStrength > 0.0f) ? 1 : 0;
     if (scene != mActiveScene)
     {
         mActiveScene = scene;
         mStateValid = false;
     }
-    gl.glUseProgram(mScene[scene].mId);
-    gl.glUniform2f(mScene[scene].mScale, 2.0f / mLogicalW, 2.0f / mLogicalH);
-    gl.glUniform1i(mScene[scene].mSmooth, mSmoothMagnify && !(mBatchState & RS_TEXELS) ? 1 : 0);
-    gl.glBindVertexArray(mVao);
+    // The target, program and vertex array stay from the last batch unless something else drew since (mStateValid).
+    if (!mStateValid)
+    {
+        BindTarget();
+        gl.glUseProgram(mScene[scene].mId);
+        gl.glBindVertexArray(mVao);
+        gl.glActiveTexture(GL_TEXTURE0);
+        mFlushScale[0] = 0.0f;
+        mFlushSmooth = -1;
+    }
+    if (mFlushScale[0] != 2.0f / mLogicalW || mFlushScale[1] != 2.0f / mLogicalH)
+    {
+        mFlushScale[0] = 2.0f / mLogicalW;
+        mFlushScale[1] = 2.0f / mLogicalH;
+        gl.glUniform2f(mScene[scene].mScale, mFlushScale[0], mFlushScale[1]);
+    }
+    const int smooth = mSmoothMagnify ? !(mBatchState & RS_TEXELS)
+                       : mOptions.mTextureFilter == 4 && (mBatchState & RS_FILTER_LINEAR) ? 2
+                                                                                           : 0;
+    if (smooth != mFlushSmooth)
+    {
+        mFlushSmooth = smooth;
+        gl.glUniform1i(mScene[scene].mSmooth, smooth);
+    }
     gl.glBindBuffer(GL_ARRAY_BUFFER, mVbo);
-    gl.glBufferData(GL_ARRAY_BUFFER, kMaxBatchVerts * sizeof(RVertex), NULL, GL_STREAM_DRAW);
-    gl.glBufferSubData(GL_ARRAY_BUFFER, 0, mBatch.size() * sizeof(RVertex), &mBatch[0]);
-    gl.glActiveTexture(GL_TEXTURE0);
+    gl.glBufferData(GL_ARRAY_BUFFER, mBatch.size() * sizeof(RVertex), &mBatch[0], GL_STREAM_DRAW);
     gl.glBindTexture(GL_TEXTURE_2D, mBatchTex ? mBatchTex->mId : mWhiteTex);
-    const bool mipmap = mOptions.mTextureFilter > 0 && mBatchTex && mBatchTex->mLevels > 1 &&
-                        (mBatchState & (RS_FILTER_LINEAR | RS_PIXEL_EXACT)) == RS_FILTER_LINEAR;
-    ApplyState(mipmap ? mBatchState | kStateMipmap : mBatchState);
+    const u32 state = mOptions.mTextureFilter == 3 && !mSmoothMagnify ? mBatchState & ~RS_FILTER_LINEAR : mBatchState;
+    const bool mipmap = mOptions.Mipmaps() && mBatchTex && mBatchTex->mLevels > 1 &&
+                        (state & (RS_FILTER_LINEAR | RS_PIXEL_EXACT)) == RS_FILTER_LINEAR;
+    ApplyState(mipmap ? state | kStateMipmap : state);
     gl.glDrawArrays(GL_TRIANGLES, 0, (GLsizei)mBatch.size());
     mDrawCalls++;
     mVertices += (u32)mBatch.size();

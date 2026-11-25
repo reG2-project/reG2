@@ -1,0 +1,220 @@
+/* The game page: what ds.css (the site's design system, copied here by build.sh) does not have. Actions read as
+   the game's menu items: tracked capitals, the main one red and underlined. */
+#page {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: max(1.25rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 2rem max(1rem, env(safe-area-inset-left));
+}
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 0.5rem 0 2.5rem; }
+.logo img { display: block; width: 78px; height: 52px; object-fit: cover; }
+.top ul { list-style: none; display: flex; gap: var(--space-4) var(--space-6); margin: 0; padding: 0; }
+.top nav a { display: inline-block; padding: var(--space-2) 0; text-decoration: none; border-bottom: 1px solid transparent; }
+.top nav a:hover { border-bottom-color: currentColor; }
+
+h1 { font: 400 var(--step-3)/1.25 var(--font-display); text-transform: uppercase; letter-spacing: 0.06em; }
+h2, h3 { font-family: var(--font-display); font-size: var(--step--1); text-transform: uppercase; letter-spacing: var(--track); line-height: 1.5; }
+.lede { font-size: var(--step-1); line-height: 1.5; margin: 0 0 2.5rem; }
+
+.how { margin-bottom: 2.5rem; }
+.steps { list-style: none; counter-reset: step; padding: 0; margin: 0; display: grid; gap: 1rem; }
+.steps li { counter-increment: step; display: grid; grid-template-columns: 2.5rem 1fr; align-items: baseline; }
+.steps li::before { content: counter(step); font: 400 var(--step-1)/1 var(--font-display); color: var(--red); }
+
+.panel { border-top: 1px solid var(--line); padding: 1.5rem 0 0.5rem; margin: 0 0 2rem; }
+.panel.warn h2 { color: var(--amber); }
+
+.row { display: flex; flex-wrap: wrap; gap: 0.25rem 2rem; margin: 0.75rem 0; }
+.btn {
+  font: 400 var(--step-0)/1.2 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: var(--track);
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0.6rem 0;
+  min-height: 44px;
+  cursor: pointer;
+  text-align: left;
+}
+.btn:hover, .btn:focus-visible { color: var(--red); border-bottom-color: var(--red); outline: none; }
+.btn.primary { color: var(--red); border-bottom-color: var(--red); }
+.btn.big { font-size: var(--step-3); margin: 0.5rem 0 1rem; }
+.btn.danger { color: var(--muted); }
+.btn.danger:hover, .btn.danger:focus-visible { color: var(--red); }
+.btn:disabled { opacity: 0.4; cursor: default; border-bottom-color: transparent; color: var(--muted); }
+
+.drop { border: 1px dashed var(--line); padding: 1.25rem; margin-bottom: 1rem; transition: border-color 0.15s, background 0.15s; }
+.drop.over { border-color: var(--red); background: color-mix(in srgb, var(--red) 8%, transparent); }
+.drop-main { margin: 0 0 0.25rem; }
+
+.small-btn { font-size: var(--step--1); }
+
+.error { color: var(--red); white-space: pre-line; }
+.upload-line { border-top: 1px solid var(--line); padding-top: 0.75rem; }
+
+details summary { cursor: pointer; font-family: var(--font-display); font-size: var(--step--1); text-transform: uppercase; letter-spacing: var(--track); padding: 0.6rem 0; }
+.nogame { margin: 0.5rem 0 1rem; }
+
+.checks { list-style: none; padding: 0; margin: 0 0 0.5rem; }
+.checks li { padding: 0.25rem 0 0.25rem 1.8rem; position: relative; }
+.checks li::before { position: absolute; left: 0; }
+.checks li.yes::before { content: "\2713"; color: var(--ok); }
+.checks li.no::before { content: "\2715"; color: var(--red); }
+.checks li.part::before { content: "\2013"; color: var(--amber); }
+
+progress { width: 100%; height: 0.8rem; accent-color: var(--red); }
+
+.settings { border-top: 1px solid var(--line); margin-top: 1rem; padding-top: 1rem; }
+.field { display: grid; grid-template-columns: 10rem 1fr; gap: 0.75rem; align-items: center; margin: 0.6rem 0; }
+.field select, .field input[type=range] { width: 100%; min-height: 40px; font: inherit; accent-color: var(--red); }
+.field select { background: var(--bg); color: var(--text); border: 1px solid var(--line); padding: 0 0.5rem; }
+.field + .help { margin: -0.4rem 0 0.9rem 10.75rem; }
+.data { margin-top: 1rem; }
+.data .help { margin: 0 0 0.75rem; }
+.data .btn { display: inline-flex; align-items: center; gap: 0.6em; }
+.foot { margin-top: 3rem; padding-top: 1rem; }
+
+@media (max-width: 30rem) {
+  .field { grid-template-columns: 1fr; gap: 0.25rem; }
+  .field + .help { margin-left: 0; }
+}
+
+/* The game: the whole viewport, nothing the browser may scroll, zoom or select. */
+#game {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+  z-index: 5;
+}
+body.playing { overflow: hidden; overscroll-behavior: none; }
+#canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; }
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  background: rgba(8, 9, 12, 0.92);
+  color: #ecebe6;
+  text-align: center;
+  font-size: 1.2rem;
+}
+.overlay progress { max-width: 22rem; }
+.crash-box { max-width: 32rem; }
+.crash-box .btn { color: #ecebe6; border-color: #ecebe6; }
+#rotate p::before { content: "\21BB"; display: block; font-size: 3rem; color: var(--amber); }
+
+/* Pause and full screen: small glyphs on dark plates, as the game's HUD and menu panels, at the right edge under
+   the HUD's money, lives and frame counter; red when pointed at (also with the game's cursor, .aimed) or focused;
+   faded while the mouse rests. */
+#game-bar {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 15%);
+  right: max(0.5rem, env(safe-area-inset-right));
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  transition: opacity 0.3s;
+}
+#game-bar.idle { opacity: 0; pointer-events: none; }
+#fs-button, #pause-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+  background: rgba(10, 10, 11, 0.62);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+#fs-button::before, #pause-button::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  -webkit-mask: var(--glyph) center / contain no-repeat;
+  mask: var(--glyph) center / contain no-repeat;
+}
+#fs-button:hover, #pause-button:hover, #fs-button.aimed, #pause-button.aimed,
+#fs-button:focus-visible, #pause-button:focus-visible { color: var(--red); border-color: var(--red); outline: none; }
+#pause-button { --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='6' y='5' width='4' height='14'/%3E%3Crect x='14' y='5' width='4' height='14'/%3E%3C/svg%3E"); }
+#fs-button { --glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5'%3E%3Cpath d='M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'/%3E%3C/svg%3E"); }
+body.no-fullscreen #fs-button, body.fullscreen #fs-button { display: none; }
+
+/* Touch controls (touch.js): round plates in the game's colours, sizes from --size times --touch-scale, opacity from
+   --touch-opacity. In a game the blocker takes the touches that miss the controls. */
+#touch { position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: var(--touch-opacity, 0.6);
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#touch .zone { position: absolute; pointer-events: auto; touch-action: none; }
+#touch .blocker { inset: 0; }
+#touch .stick-zone { left: 0; top: 18%; bottom: 0; width: 50%; }
+#touch .aim-zone { left: 50%; top: 18%; bottom: 0; right: calc(96px * var(--touch-scale, 1) + env(safe-area-inset-right)); }
+#touch .stick-base {
+  position: absolute; left: 32%; top: 62%; opacity: 0.45;
+  width: calc(130px * var(--touch-scale, 1)); height: calc(130px * var(--touch-scale, 1));
+  margin: calc(-65px * var(--touch-scale, 1)) 0 0 calc(-65px * var(--touch-scale, 1));
+  border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.6); background: rgba(10, 10, 11, 0.35);
+  pointer-events: none;
+}
+#touch .stick-base.on { opacity: 1; }
+#touch .aim-zone .stick-base { left: 50%; }
+#touch .stick-knob {
+  position: absolute; left: 25%; top: 25%; width: 50%; height: 50%;
+  border-radius: 50%; background: rgba(255, 255, 255, 0.7);
+}
+#touch .tbtn {
+  position: absolute;
+  width: calc(var(--size, 64px) * var(--touch-scale, 1));
+  height: calc(var(--size, 64px) * var(--touch-scale, 1));
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  background: rgba(10, 10, 11, 0.55);
+  color: #fff;
+  font: 400 calc(0.62rem * var(--touch-scale, 1))/1.1 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  pointer-events: auto; touch-action: none;
+}
+#touch .tbtn.down { background: rgba(224, 33, 63, 0.8); border-color: #fff; }
+#touch .dpad {
+  position: absolute; pointer-events: auto; touch-action: none;
+  left: calc(12px * var(--touch-scale, 1) + env(safe-area-inset-left));
+  bottom: calc(12px * var(--touch-scale, 1) + env(safe-area-inset-bottom));
+  width: calc(171px * var(--touch-scale, 1)); height: calc(171px * var(--touch-scale, 1));
+}
+#touch .dpad span {
+  position: absolute; width: 33%; height: 33%; box-sizing: border-box; border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.8); background: rgba(10, 10, 11, 0.55); color: #fff;
+  font-size: calc(1.4rem * var(--touch-scale, 1)); display: flex; align-items: center; justify-content: center;
+}
+#touch .dpad .u { left: 33.5%; top: 0; }
+#touch .dpad .d { left: 33.5%; bottom: 0; }
+#touch .dpad .l { left: 0; top: 33.5%; }
+#touch .dpad .r { right: 0; top: 33.5%; }
+#touch .dpad span.down { background: rgba(224, 33, 63, 0.8); border-color: #fff; }
+body.touch-on #pause-button { display: none; }
+body.touch-on #game-bar { top: calc(env(safe-area-inset-top) + 21%); right: calc(80px * var(--touch-scale, 1) + env(safe-area-inset-right)); }
+#touch[data-mode="menu"] .game-only, #touch:not([data-mode="menu"]) .menu-only,
+#touch:not([data-mode="classic"]) .classic-only, #touch:not([data-mode="twin"]) .twin-only,
+#touch:not([data-mode="car"]) .car-only { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+
+/* ?stats */
+#stats { position: absolute; left: max(0.5rem, env(safe-area-inset-left)); bottom: 0.5rem; margin: 0; padding: 0.4rem 0.6rem; z-index: 4; background: rgba(0, 0, 0, 0.7); color: #fff; font: 12px/1.4 var(--font-mono); pointer-events: none; white-space: pre; }

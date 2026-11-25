@@ -74,6 +74,8 @@ struct LightInternal
 };
 
 IRenderer* gRenderer;
+// The heat of the quads being drawn (port_HeatLevel): above 0, flames that go into HEAT HAZE's heat mask.
+f32 gHeatLevel;
 SGlobals gGlobals;
 PalEntry* gPals[16384];
 std::vector<ImageEntry> gImages;
@@ -88,6 +90,14 @@ bool gLightAreaSet;
 f32 gAmbient[3] = {255.0f, 255.0f, 255.0f};
 // The game's and the port's lights scaled by it (the DAY-NIGHT CYCLE's fade).
 f32 gLightScale = 1.0f;
+// Ambient occlusion (port_SetOcclusion): 0 when off.
+f32 gAoStrength;
+// The game's tile and sprite vertices (port_SetGameVerts): pVerts[4..7] are world positions, LIGHTING or not.
+const void* gpGameVerts[2];
+// The last blocks port_SetOcclusion gave, sent again to a new renderer (gbh_InitDLL) at its first scene.
+const u8* gpAoCells;
+s32 gAoSize[3];
+bool gAoResend;
 f32 gWindow[4];
 s32 gScreenTable[1700];
 u32 gTextureId;
@@ -305,7 +315,7 @@ void SyncOptions()
         }
         gTextureEpoch++;
     }
-    const bool mipmaps = gRenderer->Options().mTextureFilter > 0;
+    const bool mipmaps = gRenderer->Options().Mipmaps();
     if (mipmaps != gMipmaps)
     {
         gMipmaps = mipmaps;
@@ -403,6 +413,8 @@ f32 Cap(f32 v)
 
 // A light is gone this far above its ceiling (also in the shader's LightSum).
 const f32 kCeilingFade = 0.4f;
+// The ceiling of a light for the smoke only (port_AddSmokeLight): far below anything, so the world gets none of it.
+const f32 kSmokeOnly = -1e6f;
 
 f32 BelowCeiling(const LightInternal& light, f32 z)
 {
@@ -452,8 +464,17 @@ u32 NearLights(const Vert* pWorld, s32 count)
     return n;
 }
 
-// numNear: the primitive's NearLights.
-u32 LightVertex(const Vert& vert, u8 shade, u32 colour, u32 numNear)
+// The share of a lit colour that ambient occlusion darkens: all of the ambient light and a little of the lights'.
+const f32 kAoOfLights = 0.25f;
+
+f32 AoShare(f32 ambient, f32 total)
+{
+    return total > 1.0f ? (ambient + kAoOfLights * (total - ambient)) / total : 1.0f;
+}
+
+// numNear: the primitive's NearLights. pAoShare, when given: AoShare of the result. smoke: a particle (FLAG_TINTED),
+// which floats above the lights' ceilings and gets the smoke's own lights.
+u32 LightVertex(const Vert& vert, u8 shade, u32 colour, u32 numNear, f32* pAoShare = NULL, bool smoke = false)
 {
     f32 lr = 0.0f, lg = 0.0f, lb = 0.0f;
     f32 sr = 0.0f, sg = 0.0f, sb = 0.0f;
@@ -477,7 +498,7 @@ u32 LightVertex(const Vert& vert, u8 shade, u32 colour, u32 numNear)
         if (att > 0.0f)
         {
             const bool spot = light.mBeam > 0.0f;
-            const f32 k = light.mBrightness * (spot ? Beam(light, dx, dy) : att) * BelowCeiling(light, vert.z);
+            const f32 k = light.mBrightness * (spot ? Beam(light, dx, dy) : att) * (smoke ? 1.0f : BelowCeiling(light, vert.z));
             (spot ? sr : lr) += light.mR * k;
             (spot ? sg : lg) += light.mG * k;
             (spot ? sb : lb) += light.mB * k;
@@ -495,6 +516,12 @@ u32 LightVertex(const Vert& vert, u8 shade, u32 colour, u32 numNear)
     const u32 ri = r > 255.0f ? 255 : (u32)r;
     const u32 gi = g > 255.0f ? 255 : (u32)g;
     const u32 bi = b > 255.0f ? 255 : (u32)b;
+    if (pAoShare)
+    {
+        const f32 ambient = Ambient(0, (colour >> 16) & 0xFF) + Ambient(1, (colour >> 8) & 0xFF) + Ambient(2, colour & 0xFF);
+        const f32 total = (f32)(ri + gi + bi);
+        *pAoShare = AoShare(ambient < total ? ambient : total, total);
+    }
     return (colour & 0xFF000000u) | (ri << 16) | (gi << 8) | bi;
 }
 
@@ -520,6 +547,9 @@ const u32 FLAG_INTERNAL_BLIT = 0x80000000u;
 // The port's sprite shadow (port/src/shadows.cpp): a quad with world positions in pVerts[4..7] and its blur
 // radius in the red channel (texels * 32), drawn soft when the option is on.
 const u32 FLAG_SOFT_SHADOW = 0x40000000u;
+// The port's particles (port_DrawParticles), lit as the world's sprites but in their own colour: the vertex colour
+// is a tint that the light, ambient included, multiplies, where the game's sprites take theirs from the texture.
+const u32 FLAG_TINTED = 0x10000000u;
 
 // Grows a sprite quad (corners in the order of increasing u, then v) by its blur radius plus a texel.
 void ExpandShadow(Vert* pVerts)
@@ -550,7 +580,8 @@ void ExpandShadow(Vert* pVerts)
     }
 }
 
-void RenderVerts(u32 flags, STexture* pTexture, Vert* pVerts, s32 count, u32 baseColour)
+// pOwn: a texture of the port's own instead of pTexture, its UVs normalised.
+void RenderVerts(u32 flags, STexture* pTexture, Vert* pVerts, s32 count, u32 baseColour, RTexture* pOwn = NULL)
 {
     if (gTraceScene && gSceneCount == gTraceScene)
     {
@@ -583,10 +614,14 @@ void RenderVerts(u32 flags, STexture* pTexture, Vert* pVerts, s32 count, u32 bas
         flags |= FLAG_NO_FILTER;
     }
 
-    RTexture* pTex = pTexture ? Resolve(pTexture, (flags & (FLAG_BLEND_ADD | FLAG_BLEND_ALPHA | FLAG_COLOUR_KEY)) ? kAlpha : kOpaque) : 0;
+    RTexture* pTex = pOwn;
+    if (!pTex && pTexture)
+    {
+        pTex = Resolve(pTexture, (flags & (FLAG_BLEND_ADD | FLAG_BLEND_ALPHA | FLAG_COLOUR_KEY)) ? kAlpha : kOpaque);
+    }
     const f32 texW = pTexture && pTexture->field_E_width ? (f32)pTexture->field_E_width : 1.0f;
     const f32 texH = pTexture && pTexture->field_10_height ? (f32)pTexture->field_10_height : 1.0f;
-    const bool image = pTexture && Data(pTexture) && Data(pTexture)->mImage;
+    const bool image = pOwn || (pTexture && Data(pTexture) && Data(pTexture)->mImage);
     const f32 slotScale = image ? 1.0f : 1.0f / (f32)SlotSize((s32)texW, (s32)texH);
     const f32 scaleU = image ? 1.0f / texW : slotScale;
     const f32 scaleV = image ? 1.0f / texH : slotScale;
@@ -630,9 +665,14 @@ void RenderVerts(u32 flags, STexture* pTexture, Vert* pVerts, s32 count, u32 bas
         }
     }
     const bool fullAmbient = gAmbient[0] == 255.0f && gAmbient[1] == 255.0f && gAmbient[2] == 255.0f;
-    const bool lit = (flags & FLAG_LIGHTING) && !fullAmbient;
+    // Particles take the lights even at full ambient, where the smoke's own are the only ones (port_AddSmokeLight).
+    const bool lit = (flags & FLAG_LIGHTING) && (!fullAmbient || ((flags & FLAG_TINTED) && gNumLights));
     const bool shadowLit = softShadow && !fullAmbient;
     const bool perPixel = (lit || shadowLit) && gRenderer->Options().mPerPixelLighting;
+    // Ambient occlusion needs world positions: those of FLAG_LIGHTING draws, and the game's tiles and sprites at NOON.
+    const bool occluded = gAoStrength > 0.0f && ((flags & FLAG_LIGHTING) || pVerts == gpGameVerts[0] || pVerts == gpGameVerts[1]) &&
+                          !softShadow && !(flags & FLAG_INTERNAL_BLIT);
+    f32 aoShare[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     u32 unlit[4];
     const u32 numNear = lit || (shadowLit && !perPixel) ? NearLights(pVerts + 4, count) : 0;
     if (lit)
@@ -640,7 +680,20 @@ void RenderVerts(u32 flags, STexture* pTexture, Vert* pVerts, s32 count, u32 bas
         for (s32 i = 0; i < count; i++)
         {
             unlit[i] = pVerts[i].diff;
-            pVerts[i].diff = LightVertex(pVerts[i + 4], shade, pVerts[i].diff, numNear);
+            if (flags & FLAG_TINTED)
+            {
+                const u32 light = LightVertex(pVerts[i + 4], shade, 0xFFFFFFu, numNear, occluded ? &aoShare[i] : NULL, true);
+                u32 tinted = unlit[i] & 0xFF000000u;
+                for (s32 k = 0; k < 24; k += 8)
+                {
+                    tinted |= (((unlit[i] >> k) & 0xFF) * ((light >> k) & 0xFF) / 255) << k;
+                }
+                pVerts[i].diff = tinted;
+            }
+            else
+            {
+                pVerts[i].diff = LightVertex(pVerts[i + 4], shade, pVerts[i].diff, numNear, occluded ? &aoShare[i] : NULL);
+            }
         }
     }
     else if (shadowLit)
@@ -702,20 +755,27 @@ void RenderVerts(u32 flags, STexture* pTexture, Vert* pVerts, s32 count, u32 bas
         rv[i].v = pVerts[i].v * scaleV;
         if (perPixel)
         {
-            rv[i].wx = pVerts[i + 4].x;
-            rv[i].wy = pVerts[i + 4].y;
-            rv[i].wz = pVerts[i + 4].z;
             rv[i].unlit = ArgbToRgba(unlit[i]);
             rv[i].shade = shade / 255.0f;
-            rv[i].lit = 1.0f;
+            rv[i].lit = (flags & FLAG_TINTED) ? 2.0f : 1.0f;
         }
         else
         {
-            rv[i].wx = rv[i].wy = rv[i].wz = 0.0f;
             rv[i].unlit = 0;
             rv[i].shade = 0.0f;
             rv[i].lit = 0.0f;
         }
+        if (perPixel || occluded)
+        {
+            rv[i].wx = pVerts[i + 4].x;
+            rv[i].wy = pVerts[i + 4].y;
+            rv[i].wz = pVerts[i + 4].z;
+        }
+        else
+        {
+            rv[i].wx = rv[i].wy = rv[i].wz = 0.0f;
+        }
+        rv[i].ao = occluded ? aoShare[i] : 0.0f;
     }
     RVertex tris[6];
     s32 n = 3;
@@ -735,6 +795,10 @@ void RenderVerts(u32 flags, STexture* pTexture, Vert* pVerts, s32 count, u32 bas
                 pVerts[1].diff, pVerts[2].diff, count > 3 ? pVerts[3].diff : 0);
     }
     gRenderer->DrawTriangles(tris, n, pTex, state);
+    if (gHeatLevel > 0.0f)
+    {
+        gRenderer->AddHeat(tris, n, pTex, gHeatLevel);
+    }
     gGlobals.mNumPolysDrawn += count - 2;
 }
 
@@ -758,6 +822,7 @@ void DrawColouredQuad(f32 l, f32 t, f32 r, f32 b, u32 argb)
         v[i].unlit = 0;
         v[i].shade = 0.0f;
         v[i].lit = 0.0f;
+        v[i].ao = 0.0f;
     }
     gRenderer->DrawTriangles(v, 6, 0, 0);
 }
@@ -816,6 +881,7 @@ GBH_EXPORT u32 GTA2_CC gbh_InitDLL(SVideo* pVideo)
     }
     gRenderer = pHeader->mRenderer;
     gFlipCounter = pHeader->mFlipCounter;
+    gAoResend = gpAoCells != NULL;
     gCmd.Init("gl");
     return 1;
 }
@@ -860,6 +926,11 @@ GBH_EXPORT void GTA2_CC gbh_BeginScene()
 #endif
     if (gRenderer)
     {
+        if (gAoResend)
+        {
+            gAoResend = false;
+            gRenderer->SetOcclusion(gpAoCells, gAoSize[0], gAoSize[1], gAoSize[2], gAoStrength);
+        }
         gRenderer->BeginScene();
     }
 }
@@ -1097,6 +1168,29 @@ GBH_EXPORT void GTA2_CC gbh_SetAmbient(f32 ambient)
     gLightsDirty = true;
 }
 
+// The map's solid blocks (port/src/ambient_occlusion.cpp), width x height x depth bytes, x fastest, 255 solid;
+// strength is how much of the ambient light the most occluded surfaces lose. NULL blocks only set the strength.
+void port_SetOcclusion(const u8* pCells, s32 width, s32 height, s32 depth, f32 strength)
+{
+    gAoStrength = strength;
+    if (pCells)
+    {
+        gpAoCells = pCells;
+        gAoSize[0] = width, gAoSize[1] = height, gAoSize[2] = depth;
+    }
+    if (gRenderer)
+    {
+        gRenderer->SetOcclusion(pCells, width, height, depth, strength);
+    }
+}
+
+// The game's tile and sprite vertex arrays, for ambient occlusion without LIGHTING's flag.
+void port_SetGameVerts(const void* pTileVerts, const void* pSpriteVerts)
+{
+    gpGameVerts[0] = pTileVerts;
+    gpGameVerts[1] = pSpriteVerts;
+}
+
 // The level's ambient light in colour, and the scale of the lights added after it.
 void port_SetAmbient(f32 r, f32 g, f32 b, f32 lights)
 {
@@ -1105,6 +1199,50 @@ void port_SetAmbient(f32 r, f32 g, f32 b, f32 lights)
     gAmbient[2] = b * 255.0f;
     gLightScale = lights;
     gLightsDirty = true;
+}
+
+// The heat of the sprite about to be drawn (port/src/heat_haze.cpp): above 0, flames that go into the heat mask.
+void port_HeatLevel(f32 level)
+{
+    gHeatLevel = level;
+}
+
+// FIRE SMOKE's lights (port/src/lights.cpp's SmokeLights), for the particles only: kept at their brightness
+// whatever the DAY-NIGHT CYCLE's fade of the lights, and with a ceiling no world surface is under.
+void port_AddSmokeLight(SLight* pLight)
+{
+    gbh_AddLight(pLight);
+    if (gLightAdded)
+    {
+        LightInternal& l = gLights[gNumLights - 1];
+        l.mBrightness = (pLight->field_0 & 0xFF) / 255.0f;
+        l.mCeiling = kSmokeOnly;
+    }
+}
+
+// The last frame's smoke lights out of the list (the game resets its own only when it has LIGHTING).
+void port_ClearSmokeLights()
+{
+    u32 kept = 0;
+    for (u32 i = 0; i < gNumLights; i++)
+    {
+        if (gLights[i].mCeiling != kSmokeOnly)
+        {
+            gLights[kept++] = gLights[i];
+        }
+    }
+    gLightsDirty = gLightsDirty || kept != gNumLights;
+    gNumLights = kept;
+}
+
+// HEAT HAZE (port/src/heat_haze.cpp) over the flames drawn so far.
+void port_Haze(f32 texel, f32 worldX, f32 worldY, f32 time, f32 amplitude, f32 ripple, f32 speed, f32 rise)
+{
+    if (gRenderer)
+    {
+        const RHazeParams params = {texel, worldX, worldY, time, amplitude, ripple, speed, rise};
+        gRenderer->DrawHaze(params);
+    }
 }
 
 // TWIN STICK's reticle (port/src/twin_stick.cpp): an aged bronze ring round a red lamp, shaded as the HUD's sprites
@@ -1213,6 +1351,61 @@ void port_FreePictures()
         }
     }
     memset(gPictures, 0, sizeof(gPictures));
+}
+
+namespace
+{
+// The port's particle textures (port/src/fire_smoke.cpp), by slot.
+const s32 kNumParticleTextures = 2;
+RTexture* gParticleTextures[kNumParticleTextures];
+u32 gParticleVersions[kNumParticleTextures];
+IRenderer* gParticleTexturesOwner;
+} // namespace
+
+// Quads of a particle texture uploaded from pRgba (RGBA8, top row first) the first time and again when its version
+// changes: per quad, four corners of
+// x, y (screen), u, v and the world position x, y, z in blocks; a colour (ARGB) each. Alpha blended in that colour,
+// lit as the world's sprites are (FLAG_TINTED), or additive and unlit.
+void port_DrawParticles(s32 slot, s32 width, s32 height, const u32* pRgba, u32 version, const f32* pCorners, const u32* pColours,
+                        s32 count, bool additive)
+{
+    if (!gRenderer || slot < 0 || slot >= kNumParticleTextures)
+    {
+        return;
+    }
+    if (gParticleTexturesOwner != gRenderer)
+    {
+        memset(gParticleTextures, 0, sizeof(gParticleTextures));
+        gParticleTexturesOwner = gRenderer;
+    }
+    if (!gParticleTextures[slot] || gParticleVersions[slot] != version)
+    {
+        if (!gParticleTextures[slot])
+        {
+            gParticleTextures[slot] = gRenderer->CreateTexture();
+        }
+        gRenderer->UploadTexture(gParticleTextures[slot], width, height, pRgba, RMIP_ALPHA);
+        gParticleVersions[slot] = version;
+    }
+    const u32 flags = FLAG_VERTEX_DIFFUSE | (additive ? FLAG_BLEND_ADD : FLAG_BLEND_ALPHA | FLAG_LIGHTING | FLAG_TINTED);
+    for (s32 q = 0; q < count; q++)
+    {
+        Vert v[8] = {};
+        for (s32 i = 0; i < 4; i++)
+        {
+            const f32* c = &pCorners[(q * 4 + i) * 7];
+            v[i].x = c[0];
+            v[i].y = c[1];
+            v[i].z = 1.0f;
+            v[i].diff = pColours[q];
+            v[i].u = c[2];
+            v[i].v = c[3];
+            v[i + 4].x = c[4];
+            v[i + 4].y = c[5];
+            v[i + 4].z = c[6];
+        }
+        RenderVerts(flags, NULL, v, 4, 255, gParticleTextures[slot]);
+    }
 }
 
 GBH_EXPORT void GTA2_CC gbh_DrawQuad(s32 flags, STexture* pTexture, Vert* pVerts, s32 baseColour)

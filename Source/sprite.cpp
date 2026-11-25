@@ -29,7 +29,8 @@
 #include "winmain.hpp" // for gLighting
 #include "block_face.hpp"
 #if defined(GTA2_PORT)
-// Port: SHADOWS SOFT, the day and night cycle and TWIN STICK's strafe legs.
+// Port: SHADOWS SOFT, the day and night cycle, TWIN STICK's strafe legs and HEAT HAZE's flames.
+#include "../port/src/heat_haze.hpp"
 #include "../port/src/shadows.hpp"
 #include "../port/src/day_night.hpp"
 #include "../port/src/twin_stick.hpp"
@@ -1261,10 +1262,15 @@ void Sprite::Draw()
     }
 
 #if defined(GTA2_PORT)
+    // Port: HEAT HAZE, a flame also goes into the heat mask.
+    PortHeatHaze::HeatSprite(this);
     // Port: TWIN STICK strafe legs, the player's walk drawn with the legs toward the move and the torso at the aim.
     if (!PortTwinStick::DrawLegs(this, pTexture, Sprite::ComputeDrawFlags(), gSpriteVerts, 8))
 #endif
     pgbh_DrawQuad(Sprite::ComputeDrawFlags(), pTexture, gSpriteVerts, 255);
+#if defined(GTA2_PORT)
+    PortHeatHaze::HeatSprite(NULL);
+#endif
 
 #if defined(GTA2_PORT)
     // Port: the DAY-NIGHT CYCLE, no car lights by day.
@@ -2315,6 +2321,14 @@ void Sprite::ResolveCollisionWithCarPedOrObject()
         else if (pCurrent->GetType() == sprite_types_enum::ped_3)
         {
             Char* pChar = pCurrent->AsCharB4();
+#if defined(GTA2_PORT)
+            // Port: an autosave or checkpoint spawns the player where he was, maybe where the script parks a car as the
+            // level loads (a kill frenzy's tank): freeing his ped there left the game on a dangling player ped.
+            if (pChar->mpPed->PedTypeIs(ped_type::player_2))
+            {
+                continue;
+            }
+#endif
             pChar->mpPed->Deallocate();
         }
         else if (pCurrent->IsObject2CType())

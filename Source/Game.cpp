@@ -75,6 +75,8 @@
 #include "../port/src/saves.hpp"
 // Port: VIBRATION for explosions (ShakeCamerasAtPos).
 #include "../port/src/rumble.hpp"
+// Port: HEAT HAZE over fires (Draw).
+#include "../port/src/heat_haze.hpp"
 #endif
 
 // A service only the server runs draws its own random numbers in a network game (port/src/rand/owner.hpp)
@@ -422,6 +424,11 @@ void Game::Draw()
     pgbh_BeginScene();
 
     gpMapRenderer->Draw(); // Note: Also seems to draw sprites
+
+#if defined(GTA2_PORT)
+    // Port: HEAT HAZE over fires and blasts, on the world but not on the HUD.
+    PortHeatHaze::Draw();
+#endif
 
     if (!bExplodingScoresOff)
     {

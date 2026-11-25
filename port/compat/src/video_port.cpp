@@ -71,6 +71,17 @@ void port_SetRenderOptions(bool trueColour, int bloomTenths, bool perPixelLighti
     sGameOptions.mPerPixelLighting = perPixelLighting;
     sGameOptions.mTextureFilter = textureFilter;
     sGameOptions.mMsaa = msaa;
+#if defined(__EMSCRIPTEN__)
+    // The page's limits for the device and the player (web/site/app.js): anti-aliasing on phones, bloom's flashes.
+    if (const char* pCap = getenv("GTA2_MSAA_CAP"))
+    {
+        sGameOptions.mMsaa = SDL_min(msaa, atoi(pCap));
+    }
+    if (getenv("GTA2_CALM"))
+    {
+        sGameOptions.mBloom = 0.0f;
+    }
+#endif
     sGameOptions.mSoftShadows = softShadows;
     sHasGameOptions = true;
     if (sVidSystem)
@@ -113,12 +124,20 @@ unsigned long long port_NowNs()
 
 void port_DelayNs(unsigned long long ns)
 {
+#if defined(__EMSCRIPTEN__)
+    port_WebMarkIdle();
+#else
     SDL_DelayPrecise((Uint64)(ns / port_ClockSpeed()));
+#endif
 }
 
 // The refresh period the swap waits for; 0 without vsync or when the screen does not say.
 unsigned long long port_SwapRefreshNs()
 {
+#if defined(__EMSCRIPTEN__)
+    // The browser's frames, which the loop yields to (web/src/web_platform.cpp).
+    return port_WebRefreshNs();
+#endif
     SDL_Window* pWindow = port_MainSDLWindow();
     int interval = 0;
     if (!sVidSystem || !pWindow || !SDL_GL_GetSwapInterval(&interval) || !interval)
@@ -131,6 +150,11 @@ unsigned long long port_SwapRefreshNs()
 
 void port_PresentAgain()
 {
+#if defined(__EMSCRIPTEN__)
+    // The canvas keeps showing the last frame until something is drawn: the loop only waits for the next one.
+    port_WebMarkIdle();
+    return;
+#endif
     if (sVidSystem)
     {
         sVidSystem->Represent();
@@ -338,6 +362,9 @@ const SDL_DisplayMode* port_FullscreenMode()
 // VSYNC: adaptive where the driver has it (a late frame is shown at once), else plain.
 void port_ApplyVsync()
 {
+#if defined(__EMSCRIPTEN__)
+    return;
+#endif
     if (!SDL_GL_GetCurrentContext())
     {
         return;
@@ -356,6 +383,25 @@ void port_UpdateGameResolution()
 {
     int w;
     int h;
+#if defined(__EMSCRIPTEN__)
+    // The page's canvas is the screen, full screen or not; the browser's screen size says nothing about it.
+    int canvasW = 0;
+    int canvasH = 0;
+    SDL_Window* pWindow = port_MainSDLWindow();
+    if (pWindow && SDL_GetWindowSizeInPixels(pWindow, &canvasW, &canvasH) && canvasW > 0 && canvasH > 0)
+    {
+        GameSize(canvasW, canvasH, &w, &h);
+        if (w != (int)ScreenGet("full_width", 0) || h != (int)ScreenGet("full_height", 0))
+        {
+            port_WebCanvasResized();
+        }
+        ScreenSet("full_width", w);
+        ScreenSet("full_height", h);
+        ScreenSet("window_width", w);
+        ScreenSet("window_height", h);
+        return;
+    }
+#endif
     const SDL_DisplayMode* pMode = port_FullscreenMode();
     if (!pMode)
     {

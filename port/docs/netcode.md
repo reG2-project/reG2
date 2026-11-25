@@ -585,11 +585,13 @@ Other files' statics the netcode reads (winmain.cpp's inputs and its player, the
 the registry by their 10.5.exe address (`PortStatic`, accessors in `engine/internal.hpp`).
 
 reG2's own extras that would change the game outside the input bits a server gets are off in a network game: twin stick,
-mouse aim, the turret's aim, the pad's analog driving and the aim camera (`port/src/twin_stick.cpp`, `view.cpp`), each
+mouse aim, the turret's aim, the pad's analog driving and the aim camera (`port/src/twin_stick.cpp`), each
 player's day and night (`day_night.cpp`) and the pause menu (`pause_menu.cpp`). AUTOSAVE, RETRY JOBS and FRENZY RESPAWN
 (`autosave.cpp`, `retry.cpp`) are for single player only, and INFINITE LIVES goes with the debug flags a network game
 clears (`InitializeGame`). Vibration is the local player's, from the ticks a client predicts (`gPortNoRumble`). A
-client runs reG2's frame loop and interpolation ("The game loop").
+client runs reG2's frame loop and interpolation ("The game loop"). The GRAPHICS settings only draw: they read the game
+and draw no random number from it (FIRE EFFECTS hash their own), so they stay on, the fire effects placed by the drawn
+player's view (`view.cpp`) and timed by the steps the client ran, not by its resimulated ones.
 
 ## Checks
 

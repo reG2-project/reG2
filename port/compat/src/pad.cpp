@@ -19,13 +19,13 @@ namespace
 {
 const int kNumControls = 12;
 const DWORD kDefaultKeys[kNumControls] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN,
-                                          DIK_SPACE, DIK_Z, DIK_X, DIK_TAB, DIK_LMENU, DIK_RSHIFT};
+                                          DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT};
 // Forward, backward, left, right, attack, enter/exit, jump/handbrake, previous and next weapon,
 // special 1 to 3.
 const int kDefaultPad[kNumControls] = {kPadUp, kPadDown, kPadLeft, kPadRight, 0, 3, 1, 4, 5, 2, 10, 11};
-// W, S, A, D and F by position.
+// W, S, A, D, F and E by position.
 const int kDefaultAlt[kNumControls] = {DIK_W, DIK_S, DIK_A, DIK_D, kMouseCode + SDL_BUTTON_LEFT, DIK_F, 0,
-                                       kWheelUpCode, kWheelDownCode, 0, 0, 0};
+                                       kWheelUpCode, kWheelDownCode, DIK_E, 0, 0};
 const Sint16 kThreshold = 24000;
 
 const int kMaxGamepads = 8;
@@ -375,6 +375,12 @@ void port_OpenGamepad()
     SDL_free(pIds);
 }
 
+// Whether the pads or the second keys hold a control down (0 forward to 11 special 3), as the game gets it.
+bool port_ControlHeld(int control)
+{
+    return control >= 0 && control < kNumControls && sHeld[control];
+}
+
 bool port_PadMode()
 {
     return sMode == kPadMode;
@@ -453,9 +459,24 @@ int port_GetAltBinding(int control)
     if (!sAltRead)
     {
         sAltRead = true;
+        const DWORD kUnsaved = 0xFFFFFFFF;
+        bool unsaved[kNumControls];
         for (int i = 0; i < kNumControls; i++)
         {
-            sAlt[i] = static_cast<int>(ReadControl("alt_%d", i, static_cast<DWORD>(kDefaultAlt[i])));
+            const DWORD saved = ReadControl("alt_%d", i, kUnsaved);
+            unsaved[i] = saved == kUnsaved;
+            sAlt[i] = static_cast<int>(unsaved[i] ? static_cast<DWORD>(kDefaultAlt[i]) : saved);
+        }
+        // A default the player already uses on another control stays unbound.
+        for (int i = 0; i < kNumControls; i++)
+        {
+            for (int j = 0; unsaved[i] && sAlt[i] && j < kNumControls; j++)
+            {
+                if (j != i && (sAlt[j] == sAlt[i] || static_cast<int>(KeyFor(j)) == sAlt[i]))
+                {
+                    sAlt[i] = 0;
+                }
+            }
         }
     }
     return sAlt[control];

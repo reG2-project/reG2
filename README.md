@@ -48,7 +48,8 @@ A few things differ anyway, whatever you pick:
 ## Extras
 
 **Graphics.** GRAPHICS > PRESET switches between CLASSIC and ENHANCED: true colour, per-pixel lighting,
-car headlights, light from gunfire, explosions and fires, soft shadows, bloom, anti-aliasing.
+car headlights, light from gunfire, explosions and fires, fire effects (heat haze, smoke and embers),
+ambient occlusion, soft shadows, bloom, anti-aliasing.
 
 ![Classic and enhanced graphics](docs/images/pc_compare_graphics.png)
 
@@ -94,9 +95,9 @@ steps from where it started, with the money you had then.
 
 ![RETRY in the pause menu](docs/images/pc_retry.png)
 
-**Frenzy respawn.** GAME > FRENZY RESPAWN: a failed kill frenzy comes back on the map at once, like a job's phone
-after a failure: its skull, or for a vehicle frenzy a new vehicle where the first one was parked. A passed frenzy
-never comes back.
+**Frenzy respawn.** GAME > FRENZY RESPAWN: a failed kill frenzy comes back on the map, like a job's phone after a
+failure: its skull at once, or for a vehicle frenzy a new vehicle where the first one was parked, as soon as that spot
+is clear and out of sight. A passed frenzy never comes back.
 
 **Load game.** RESUME SAVED STATUS shows your saves with a tab per city: church save, autosave and retry,
 each with its money, jobs passed and date.

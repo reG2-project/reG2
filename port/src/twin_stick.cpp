@@ -851,7 +851,7 @@ void DrawReticle()
 {
 #if defined(GTA2_PORT_SDL)
     const Sprite* pSprite = AimFrom();
-    if (!pSprite || !gViewCamera || (!sMouse && !sAimSteps))
+    if (!pSprite || !gViewCamera || (!sMouse && !sAimSteps) || !PortSettings::Crosshair())
     {
         return;
     }

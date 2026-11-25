@@ -12,6 +12,9 @@ void SetAmbient(f32 ambient);
 // CLOCK: the hour on the HUD, by the money.
 void DrawClock();
 
+// How much of their light the level's lights give this frame: 0 at NOON, 1 with LIGHTING, 0 to 1 in the cycle.
+f32 LightsShare();
+
 // gLighting, but false by day in the cycle: cars keep their lights in their sprite, as at NOON.
 bool Lit();
 } // namespace PortDayNight

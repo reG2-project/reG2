@@ -593,6 +593,19 @@ void ScriptThread::SCRCMD_CAR_DECSET(SCR_CAR_DATA_DEC* pCmd, SCR_POINTER* pPoint
 MATCH_FUNC(0x503f80)
 void ScriptThread::SCRCMD_PARKED_CAR_DECSET(SCR_POINTER* pCmd)
 {
+#if defined(GTA2_PORT)
+    // A parked car above the top of its map column floats, without physics until something hits it: the Industrial
+    // multiplayer scripts park the hospital's two ambulances at z 3.0 over ground at 2.0 (bil.scr has 2.0)
+    SCR_CAR_DATA_DEC* pData = reinterpret_cast<SCR_CAR_DATA_DEC*>(pCmd);
+    if (pData->mPos.z != kFp255)
+    {
+        const Fix16 ground = gMap_0x370->FindGroundZForCoord(pData->mPos.x, pData->mPos.y);
+        if (pData->mPos.z > ground)
+        {
+            pData->mPos.z = ground;
+        }
+    }
+#endif
     ScriptThread::SCRCMD_CAR_DECSET(reinterpret_cast<SCR_CAR_DATA_DEC*>(pCmd), pCmd);
     (pCmd->mCar)->ReassignCarStats(car_kind::parked_car_9);
     Car* pCar = pCmd->mCar;

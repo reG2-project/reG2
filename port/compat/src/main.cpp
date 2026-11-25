@@ -10,7 +10,7 @@
 #include <vector>
 #include "../../net/net_main.hpp"
 #include "../../src/net_hooks.hpp" // gPortCrashHook, gPortServer
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
     #include <execinfo.h>
     #include <pthread.h>
     #include <signal.h>
@@ -69,6 +69,12 @@ __attribute__((constructor(101))) static void EnterGameFolderAtStart()
 {
     EnterGameFolder(__argc, __argv);
 }
+#elif defined(__EMSCRIPTEN__)
+// Constructors take no arguments in WebAssembly; the page gives the game none.
+__attribute__((constructor(101))) static void EnterGameFolderAtStart()
+{
+    EnterGameFolder(0, NULL);
+}
 #else
 // glibc and macOS pass the program's arguments to constructors.
 __attribute__((constructor(101))) static void EnterGameFolderAtStart(int argc, char** argv, char**)
@@ -77,7 +83,7 @@ __attribute__((constructor(101))) static void EnterGameFolderAtStart(int argc, c
 }
 #endif
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 static volatile sig_atomic_t sCrashSignal;
 
 // The report isn't all signal-safe (a lock the crash left held, malloc after a heap corruption): if it hangs, the
@@ -124,7 +130,7 @@ static void OnCrash(int sig, siginfo_t* info, void*)
 
 void port_InstallCrashReport()
 {
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
     void* frame;
     backtrace(&frame, 1); // loads what backtrace needs now, not in the handler
     struct sigaction sa = {};
@@ -194,6 +200,10 @@ int main(int argc, char** argv)
     port_InitTestInput();
 
     const int result = WinMain(reinterpret_cast<HINSTANCE>(1), NULL, &cmdLine[0], SW_SHOWNORMAL);
+#if defined(__EMSCRIPTEN__)
+    // The page takes over (stores the files, shows itself); the runtime stays, as exit() from a resumed stack traps.
+    port_WebQuit(result);
+#endif
     port_LogExit(result);
     SDL_Quit();
     return result;

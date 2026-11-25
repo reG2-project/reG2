@@ -26,6 +26,7 @@
     X(PFNGLBINDTEXTUREPROC, glBindTexture)                                 \
     X(PFNGLTEXIMAGE2DPROC, glTexImage2D)                                   \
     X(PFNGLTEXSUBIMAGE2DPROC, glTexSubImage2D)                             \
+    X(PFNGLTEXIMAGE3DPROC, glTexImage3D)                                   \
     X(PFNGLTEXPARAMETERIPROC, glTexParameteri)                             \
     X(PFNGLACTIVETEXTUREPROC, glActiveTexture)                             \
     X(PFNGLDRAWARRAYSPROC, glDrawArrays)                                   \
@@ -63,6 +64,7 @@
     X(PFNGLDELETEFRAMEBUFFERSPROC, glDeleteFramebuffers)                   \
     X(PFNGLBINDFRAMEBUFFERPROC, glBindFramebuffer)                         \
     X(PFNGLFRAMEBUFFERTEXTURE2DPROC, glFramebufferTexture2D)               \
+    X(PFNGLFRAMEBUFFERTEXTURELAYERPROC, glFramebufferTextureLayer)         \
     X(PFNGLCHECKFRAMEBUFFERSTATUSPROC, glCheckFramebufferStatus)           \
     X(PFNGLGENSAMPLERSPROC, glGenSamplers)                                 \
     X(PFNGLDELETESAMPLERSPROC, glDeleteSamplers)                           \

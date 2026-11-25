@@ -34,7 +34,7 @@ list(TRANSFORM lib_src PREPEND ${ROOT}/)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+if(CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT EMSCRIPTEN)
     set(arch_flags -m32)
 endif()
 # No warnings, or only the 64 to 32-bit integer truncations, which build.sh checks in the Windows x64 build.
@@ -87,7 +87,7 @@ if(WIN32 AND GTA2_PORT_DIRECTX)
     target_compile_definitions(binkw32 PRIVATE BUILD_BINK)
 
     add_executable(gta2 WIN32 ${lib_src} ${ROOT}/test.cpp ${ROOT}/StdAfx.cpp
-        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp src/port_globals.cpp src/rand/rand.cpp src/rand/particle.cpp src/net_hooks.cpp ${CMAKE_CURRENT_LIST_DIR}/resources.rc)
+        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/heat_haze.cpp src/fire_smoke.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/ambient_occlusion.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp src/port_globals.cpp src/rand/rand.cpp src/rand/particle.cpp src/net_hooks.cpp ${CMAKE_CURRENT_LIST_DIR}/resources.rc)
     target_link_libraries(gta2 PRIVATE mss32 binkw32
         ddraw dinput dxguid dplayx winmm ole32 oleaut32 user32 gdi32 advapi32 version shell32 comdlg32)
     target_link_options(gta2 PRIVATE -static -static-libgcc -static-libstdc++ -lpthread)
@@ -106,6 +106,10 @@ else()
     # or from GTA2_SETUP_DEPS_DIR (an install prefix with both built static, and zlib and xz, needed for MinGW).
     set(GTA2_SETUP_DEPS_DIR "" CACHE PATH "Install prefix of libarchive and unshield")
     file(GLOB setup_src ${CMAKE_CURRENT_LIST_DIR}/setup/*.cpp)
+    if(EMSCRIPTEN)
+        # The page imports the game's data with install.cpp alone (web/web.cmake's reg2_import).
+        set(setup_src ${CMAKE_CURRENT_LIST_DIR}/setup/install.cpp)
+    endif()
     add_library(gta2setup STATIC ${setup_src})
     target_link_libraries(gta2setup PRIVATE SDL3::SDL3)
     if(GTA2_SETUP_DEPS_DIR)
@@ -183,8 +187,8 @@ else()
 
     list(FILTER lib_src EXCLUDE REGEX "/Source/(NetPlay|NetUi)\\.cpp$")
     add_executable(gta2 ${lib_src} ${net_game_src} ${ROOT}/test.cpp ${ROOT}/StdAfx.cpp
-        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp src/port_globals.cpp src/rand/rand.cpp src/rand/particle.cpp src/net_hooks.cpp src/build_id.cpp ${compat_src})
-    target_compile_definitions(gta2 PRIVATE GTA2_PORT_SDL)
+        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/heat_haze.cpp src/fire_smoke.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/ambient_occlusion.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp src/port_globals.cpp src/rand/rand.cpp src/rand/particle.cpp src/net_hooks.cpp src/build_id.cpp ${compat_src})
+    target_compile_definitions(gta2 PRIVATE GTA2_PORT_SDL GTA2_NET_PLAY)
     # The git commit, looked up at every build (the network game's join compares it); GTA2_COMMIT where git can't see the
     # source tree (the packages' containers)
     set(GTA2_COMMIT "$ENV{GTA2_COMMIT}" CACHE STRING "The git commit when git can't find it")
@@ -192,17 +196,25 @@ else()
         COMMAND ${CMAKE_COMMAND} -DSRC=${ROOT} -DOUT=${CMAKE_CURRENT_BINARY_DIR}/reg2_commit.h -DFALLBACK=${GTA2_COMMIT}
             -P ${CMAKE_CURRENT_LIST_DIR}/git_commit.cmake)
     add_dependencies(gta2 reg2_commit)
-    # Off in the Flatpak, which has no network access and updates itself.
+    # Off in the Flatpak, which has no network access and updates itself, and on the web.
+    if(EMSCRIPTEN)
+        set(GTA2_UPDATE_CHECK OFF CACHE BOOL "" FORCE)
+    endif()
     option(GTA2_UPDATE_CHECK "Look for a newer release on GitHub at start, through curl or wget" ON)
     if(GTA2_UPDATE_CHECK)
         target_compile_definitions(gta2 PRIVATE GTA2_UPDATE_CHECK)
     endif()
     # reg2, not gta2: unpacked into a GTA2 folder, it must not replace the original's gta2.exe.
     set_target_properties(gta2 PROPERTIES OUTPUT_NAME reg2)
-    # dladdr: the network game's random draw log (net/engine/dev/compare.cpp); in libdl before glibc 2.34.
-    # pthread_sigmask (the crash report, compat/src/main.cpp): in libpthread before glibc 2.34.
-    find_package(Threads REQUIRED)
-    target_link_libraries(gta2 PRIVATE gta2gl gta2setup bink SDL3::SDL3 enet ${CMAKE_DL_LIBS} Threads::Threads)
+    if(EMSCRIPTEN)
+        include(${CMAKE_CURRENT_LIST_DIR}/web/web.cmake)
+        target_link_libraries(gta2 PRIVATE enet)
+    else()
+        # dladdr: the network game's random draw log (net/engine/dev/compare.cpp); in libdl before glibc 2.34.
+        # pthread_sigmask (the crash report, compat/src/main.cpp): in libpthread before glibc 2.34.
+        find_package(Threads REQUIRED)
+        target_link_libraries(gta2 PRIVATE gta2gl gta2setup bink SDL3::SDL3 enet ${CMAKE_DL_LIBS} Threads::Threads)
+    endif()
     if(openal_runtime AND NOT APPLE)
         add_custom_command(TARGET gta2 POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${openal_runtime} $<TARGET_FILE_DIR:gta2>)
@@ -243,7 +255,7 @@ else()
             # The Khronos header the renderer declares its OpenGL entry points with; macOS has none.
             target_include_directories(gta2 PRIVATE ${CMAKE_CURRENT_LIST_DIR}/renderer/khronos ${compat}/macos)
             target_include_directories(gta2gl PRIVATE ${CMAKE_CURRENT_LIST_DIR}/renderer/khronos)
-        else()
+        elseif(NOT EMSCRIPTEN)
             target_link_options(gta2 PRIVATE ${arch_flags} -Wl,--no-dependent-libraries -Wl,--error-limit=0)
         endif()
     endif()

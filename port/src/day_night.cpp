@@ -22,6 +22,8 @@ const u32 kTicksPerMinute = 60000 / 33;
 
 // 1 by day, 0 by night, as of the frame's SetAmbient.
 f32 sDay;
+// The share of their light the lights give, as of the frame's SetAmbient.
+f32 sLights;
 
 f32 SmoothStep(f32 from, f32 to, f32 x)
 {
@@ -86,11 +88,13 @@ void SetAmbient(f32 ambient)
     if (!PortSettings::DayNightCycle() || !gpRng || bStartNetworkGame)
     {
         SetDay(0.0f);
+        sLights = 1.0f;
         port_SetAmbient(ambient, ambient, ambient, 1.0f);
         return;
     }
     SetDay(Daylight());
     const f32 night = 1.0f - sDay;
+    sLights = night;
     const f32 warm = 4.0f * sDay * night;
     const f32 level = ambient * night + sDay;
     port_SetAmbient(level * (1.0f + 0.10f * warm - 0.05f * night), level * (1.0f - 0.01f * warm - 0.02f * night),
@@ -138,6 +142,11 @@ void DrawClock()
         DrawGlyph(i, ('9' + 1 - '0' - digits[i]) * h, w, h, x + k * w / 2, kClockY);
         x += k * w;
     }
+}
+
+f32 LightsShare()
+{
+    return gLighting ? sLights : 0.0f;
 }
 
 bool Lit()

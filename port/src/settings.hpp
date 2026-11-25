@@ -46,6 +46,9 @@ enum Id
     kRetry,
     kKfRespawn,
     kInfiniteLives,
+    kAmbientOcclusion,
+    kFireEffects,
+    kCrosshair,
     kCount,
     // Group titles in the pages' lists: the settings after one, up to the next, are under it.
     kSavesGroup,
@@ -91,6 +94,10 @@ void Change(Id id, s32 delta);
 // Car headlight beams, and the other added lights (lights.hpp), with the dusk and pixel lighting.
 bool Headlights();
 bool LightEffects();
+// AMBIENT OCCLUSION (ambient_occlusion.hpp).
+bool AmbientOcclusion();
+// FIRE EFFECTS: HEAT HAZE (heat_haze.hpp), smoke and embers (fire_smoke.hpp).
+bool FireEffects();
 
 // LIGHTING's DAY-NIGHT CYCLE (day_night.hpp), its CYCLE LENGTH in minutes and its START TIME, the hour a
 // level starts at.
@@ -109,6 +116,7 @@ bool TwinStick();
 bool AimCamera();
 // STRAFE ANIMATION: with TWIN STICK, the legs follow the walk rather than the aim.
 bool StrafeAnimation();
+bool Crosshair();
 // VIBRATION: the gamepad shakes as the player is hit, in explosions and in crashes (rumble.hpp).
 bool Vibration();
 

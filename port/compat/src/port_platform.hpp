@@ -15,6 +15,16 @@ const char* port_WriteLog(); // the log's UTF-8 path, empty if it could not be w
 std::string port_WithLogPath(const char* text); // text and, after it, the written log's path
 void port_LogWrite(const char* text, size_t size); // to the written log, without allocating
 void port_LogExit(int code);
+#if defined(__EMSCRIPTEN__)
+// A wait: the game's loop yields to the browser instead (web/src/web_platform.cpp).
+extern "C" void port_WebMarkIdle();
+extern "C" void port_WebMarkPresented();
+extern "C" unsigned long long port_WebRefreshNs();
+extern "C" void port_WebQuit(int code);
+// True when the page has the file and is reading it in from its storage (a music track kept out of memory).
+extern "C" bool port_WebLoadFile(const char* path);
+void port_WebCanvasResized();
+#endif
 // Windows (crash_win32.cpp): an unhandled exception or abort() reported in the log and a message box.
 void port_InstallCrashHandler();
 
@@ -108,6 +118,7 @@ void port_SetGameCursor(); // cursor.cpp
 bool port_MouseLeftDown();
 // The position in the game's frame.
 void port_MousePos(float* pX, float* pY);
+void port_MouseWindowPos(float* pX, float* pY);
 
 // The size of the frame the game draws (video_port.cpp).
 void port_FrameSize(int* pW, int* pH);
@@ -138,6 +149,7 @@ bool port_MenuUsesMouse(); // the frontend or the pause menu
 bool port_DebugKeys(); // the game's do_debug_keys debug setting
 // TWIN STICK and the local player with the controls on: 1 on foot, 2 in a vehicle, else 0.
 int port_TwinStick();
+bool port_ControlHeld(int control);
 // TWIN STICK aims: on foot, or in a vehicle with a roof gun.
 bool port_TwinStickAims();
 // The local player with the controls on, in a vehicle, in either CONTROLS style.

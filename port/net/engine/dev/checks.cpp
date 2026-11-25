@@ -30,7 +30,7 @@
 #include "Source/root_sound.hpp"
 #include "Source/sprite.hpp"
 #include <math.h>
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 #include <dlfcn.h>
 #include <execinfo.h>
 #endif
@@ -766,7 +766,7 @@ void net::engine::DebugSoundChannels(uint32_t frame)
     }
     std::string line;
     char buf[96];
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < SOUND_CHANNELS; i++)
     {
         const sound_0x68& a = gSound_obj.mActiveSamples[i];
         if (a.mbIsBeingPlayed)
@@ -973,7 +973,7 @@ static void SpriteMovedOff(Sprite* sp)
                p ? (void*)p->mPlayer : NULL);
     }
     fflush(stdout);
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
     void* frames[24];
     const int n = backtrace(frames, 24);
     backtrace_symbols_fd(frames, n, 1);

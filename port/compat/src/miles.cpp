@@ -43,6 +43,10 @@ struct Sample
     double mPos = 0; // in frames
     float mGain[2] = {-1, -1}; // left and right as mixed, -1 until the first frame
     int mFade = -1;            // frames left in a fade-out, -1 when not stopping
+    // When the game started or stopped it, 0 once mixed: the mix puts a start or a stop at the same point of its
+    // next buffer, so that the game's rhythm (a shot every 3 steps) survives large audio buffers.
+    Uint64 mStartNs = 0;
+    Uint64 mStopNs = 0;
 };
 
 // A WAV file read block by block on the audio thread.
@@ -62,6 +66,12 @@ struct Stream
     S32 mPlayRate = 0;
     S32 mLoopCount = 1;
     U32 mStatus = SMP_DONE;
+
+#if defined(__EMSCRIPTEN__)
+    // A music track the page is still reading from its storage (web/site/app.js): silent until it is there.
+    std::string mPendingPath;
+    double mPendingMs = 0;
+#endif
 
     std::vector<s16> mBuf; // decoded frames, interleaved
     u32 mBufFirst = 0;     // frame index of mBuf[0]
@@ -108,6 +118,51 @@ bool FadeStep(int* pFade, float* pGain)
 }
 
 Driver* sDriver;
+
+// GTA2_SOUND_LOG: once a second, the samples started, those stopped before they could play (lost), and the
+// delay from a start to its sound; 2: also a line per start and per first frame played.
+struct SoundLog
+{
+    bool mOn = SDL_getenv("GTA2_SOUND_LOG") != NULL;
+    bool mEach = mOn && SDL_atoi(SDL_getenv("GTA2_SOUND_LOG")) == 2;
+    Uint64 mSince = 0;
+    int mStarts = 0;
+    int mLost = 0;
+    int mPlayed = 0;
+    double mDelayMs = 0;
+    double mMaxDelayMs = 0;
+
+    void Started(const Sample* s, Uint64 now)
+    {
+        if (now - mSince >= 1000000000)
+        {
+            if (mSince && mStarts)
+            {
+                SDL_Log("sound: %d starts, %d lost, played after %.1f ms (at most %.1f)", mStarts, mLost,
+                        mPlayed ? mDelayMs / mPlayed : 0.0, mMaxDelayMs);
+            }
+            *this = SoundLog();
+            mSince = now;
+        }
+        mStarts++;
+        if (mEach)
+        {
+            SDL_Log("sound start %p at %.1f", (const void*)s->mData, now / 1e6);
+        }
+    }
+
+    void Played(const Sample* s, Uint64 startNs, Uint64 playNs)
+    {
+        if (mEach)
+        {
+            SDL_Log("sound mixed %p at %.1f", (const void*)s->mData, playNs / 1e6);
+        }
+        const double ms = (playNs - startNs) / 1e6;
+        mPlayed++;
+        mDelayMs += ms;
+        mMaxDelayMs = SDL_max(mMaxDelayMs, ms);
+    }
+} sSoundLog;
 
 const int kImaSteps[89] = {7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80,
     88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876,
@@ -437,6 +492,34 @@ void MixSample(Sample* s, float* out, int frames)
     mix(s, out, frames, loopStart, loopEnd, left, right);
 }
 
+#if defined(__EMSCRIPTEN__)
+// Whether the stream can play: a pending track opens once the page has loaded it.
+bool StreamReady(Stream* s)
+{
+    if (s->mPendingPath.empty())
+    {
+        return true;
+    }
+    if (OpenWav(s, s->mPendingPath.c_str()))
+    {
+        s->mPendingPath.clear();
+        s->mPos = SDL_min(s->mPendingMs * s->mRate / 1000.0, (double)s->mTotalFrames);
+        return true;
+    }
+    if (s->mFile)
+    {
+        fclose(s->mFile);
+        s->mFile = NULL;
+    }
+    return false;
+}
+#else
+bool StreamReady(Stream*)
+{
+    return true;
+}
+#endif
+
 void MixStream(Stream* s, float* out, int frames)
 {
     const double step = (double)(s->mPlayRate ? s->mPlayRate : s->mRate) / kOutRate;
@@ -537,6 +620,58 @@ void MixMovieSound(float* out, int frames)
     }
 }
 
+// The buffer being mixed covers the time since the previous one: a start or stop at that time's point in it.
+struct MixWindow
+{
+    Uint64 mFrom;
+    Uint64 mTo;
+    int mFrames;
+
+    int Offset(Uint64 ns) const
+    {
+        if (ns <= mFrom || mTo <= mFrom)
+        {
+            return 0;
+        }
+        return (int)SDL_min((ns - mFrom) * mFrames / (mTo - mFrom), (Uint64)mFrames - 1);
+    }
+};
+
+void MixSampleTimed(Sample* s, float* out, const MixWindow& window)
+{
+    int start = 0;
+    if (s->mStartNs)
+    {
+        start = window.Offset(s->mStartNs);
+        if (sSoundLog.mOn)
+        {
+            sSoundLog.Played(s, s->mStartNs, window.mTo + (Uint64)start * 1000000000 / kOutRate);
+        }
+    }
+    int stop = window.mFrames;
+    if (s->mStopNs)
+    {
+        stop = window.Offset(s->mStopNs);
+        if (stop <= start && s->mStartNs)
+        {
+            sSoundLog.mLost++;
+            s->mStatus = SMP_DONE;
+            return;
+        }
+        stop = SDL_max(stop, start);
+    }
+    s->mStartNs = 0;
+    MixSample(s, out + start * 2, stop - start);
+    if (s->mStopNs && s->mStatus == SMP_PLAYING)
+    {
+        s->mStopNs = 0;
+        s->mFade = kRampFrames;
+        MixSample(s, out + stop * 2, window.mFrames - stop);
+    }
+}
+
+Uint64 sMixedUntil;
+
 void SDLCALL AudioCallback(void*, SDL_AudioStream* stream, int additional, int)
 {
     const int frames = additional / (int)(2 * sizeof(float));
@@ -549,16 +684,19 @@ void SDLCALL AudioCallback(void*, SDL_AudioStream* stream, int additional, int)
         std::lock_guard<std::recursive_mutex> lock(Lock());
         if (sDriver)
         {
+            const Uint64 now = SDL_GetTicksNS();
+            const MixWindow window = {sMixedUntil ? sMixedUntil : now, now, frames};
+            sMixedUntil = now;
             for (Sample* s : sDriver->mSamples)
             {
                 if (s->mStatus == SMP_PLAYING)
                 {
-                    MixSample(s, mix.data(), frames);
+                    MixSampleTimed(s, mix.data(), window);
                 }
             }
             for (Stream* s : sDriver->mStreams)
             {
-                if (s->mStatus == SMP_PLAYING)
+                if (s->mStatus == SMP_PLAYING && StreamReady(s))
                 {
                     MixStream(s, mix.data(), frames);
                 }
@@ -566,7 +704,7 @@ void SDLCALL AudioCallback(void*, SDL_AudioStream* stream, int additional, int)
             for (size_t i = 0; i < sDriver->mFadingSamples.size();)
             {
                 Sample* s = sDriver->mFadingSamples[i];
-                MixSample(s, mix.data(), frames);
+                MixSampleTimed(s, mix.data(), window);
                 if (s->mStatus == SMP_PLAYING)
                 {
                     i++;
@@ -584,7 +722,10 @@ void SDLCALL AudioCallback(void*, SDL_AudioStream* stream, int additional, int)
                     i++;
                     continue;
                 }
-                fclose(s->mFile);
+                if (s->mFile)
+                {
+                    fclose(s->mFile);
+                }
                 delete s;
                 sDriver->mFadingStreams.erase(sDriver->mFadingStreams.begin() + i);
             }
@@ -608,16 +749,17 @@ Sample* S(HSAMPLE h)
     return reinterpret_cast<Sample*>(h);
 }
 
-// Stops the sample at once for the game, while a copy of it fades out.
+// Stops the sample at once for the game, while a copy of it plays to the stop's point in the mix, then fades out.
 void StopSample(Sample* s)
 {
     if (sDriver && s->mStatus == SMP_PLAYING && s->mFade < 0)
     {
         Sample* pCopy = new Sample(*s);
-        pCopy->mFade = kRampFrames;
+        pCopy->mStopNs = SDL_GetTicksNS();
         sDriver->mFadingSamples.push_back(pCopy);
     }
     s->mStatus = SMP_DONE;
+    s->mStartNs = 0;
 }
 
 void DropFading()
@@ -632,7 +774,10 @@ void DropFading()
     }
     for (Stream* s : sDriver->mFadingStreams)
     {
-        fclose(s->mFile);
+        if (s->mFile)
+        {
+            fclose(s->mFile);
+        }
         delete s;
     }
     sDriver->mFadingSamples.clear();
@@ -682,7 +827,11 @@ DXDEC S32 AILCALL AIL_set_preference(U32, S32)
 // Intervals of 1/60 s.
 DXDEC void AILCALL AIL_delay(S32 intervals)
 {
+#if defined(__EMSCRIPTEN__)
+    port_WebMarkIdle();
+#else
     SDL_Delay((Uint32)(intervals * 1000 / 60));
+#endif
 }
 
 // The game closes and reopens the driver to switch 3D sound on or off: the SDL device stays open
@@ -790,9 +939,15 @@ DXDEC void AILCALL AIL_start_sample(HSAMPLE h)
 {
     LOCK;
     StopSample(S(h));
+    const Uint64 now = SDL_GetTicksNS();
+    if (sSoundLog.mOn)
+    {
+        sSoundLog.Started(S(h), now);
+    }
     S(h)->mPos = 0;
     S(h)->mGain[0] = S(h)->mGain[1] = -1;
     S(h)->mStatus = SMP_PLAYING;
+    S(h)->mStartNs = now;
     if (gPortSampleStartHook)
     {
         gPortSampleStartHook(h);
@@ -860,7 +1015,18 @@ DXDEC HSTREAM AILCALL AIL_open_stream(HDIGDRIVER, char FAR* filename, S32)
         if (s->mFile)
         {
             fclose(s->mFile);
+            s->mFile = NULL;
         }
+#if defined(__EMSCRIPTEN__)
+        char real[PATH_MAX];
+        if (sDriver && port_WebLoadFile(port_resolve_path(filename, real)))
+        {
+            s->mPendingPath = filename;
+            LOCK;
+            sDriver->mStreams.push_back(s);
+            return reinterpret_cast<HSTREAM>(s);
+        }
+#endif
         delete s;
         return NULL;
     }
@@ -875,13 +1041,16 @@ DXDEC void AILCALL AIL_close_stream(HSTREAM h)
     if (sDriver && h)
     {
         sDriver->mStreams.erase(std::find(sDriver->mStreams.begin(), sDriver->mStreams.end(), St(h)));
-        if (St(h)->mStatus == SMP_PLAYING)
+        if (St(h)->mStatus == SMP_PLAYING && St(h)->mFile)
         {
             St(h)->mFade = kRampFrames;
             sDriver->mFadingStreams.push_back(St(h));
             return;
         }
-        fclose(St(h)->mFile);
+        if (St(h)->mFile)
+        {
+            fclose(St(h)->mFile);
+        }
         delete St(h);
     }
 }
@@ -935,6 +1104,9 @@ DXDEC void AILCALL AIL_set_stream_ms_position(HSTREAM h, S32 milliseconds)
 {
     LOCK;
     Stream* s = St(h);
+#if defined(__EMSCRIPTEN__)
+    s->mPendingMs = milliseconds;
+#endif
     s->mPos = SDL_min((double)milliseconds * s->mRate / 1000.0, (double)s->mTotalFrames);
     s->mCurFrame = UINT_MAX;
 }

@@ -407,6 +407,11 @@ bool Update(Frontend* pFrontend)
             RoundCorners(&sPictures[kLogoSlot]);
             sSelected = PortSettings::kEnhancedStyle;
             sState = kShown;
+            // Clicks made during the intro movie (on the web, the one that focuses the game) wait here: not a choice.
+            f32 x;
+            f32 y;
+            int clicks[3];
+            port_TakeMouse(&x, &y, &clicks[0], &clicks[1], &clicks[2]);
         }
     }
     if (sState != kShown)
