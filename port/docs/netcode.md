@@ -645,6 +645,13 @@ world, and the channels playing them are kept over a restore.
 
 `GTA2_NET_SFXLOG` measures it: a server with it listens at a client's player, both print every sample they start.
 
+A client's log has its sound in one line every 300 frames, at the old game's end and at a new game's start
+(`engine/sound_diag.cpp`, from `gPortSoundStats` in `sound_obj.cpp` and `port_MixerStats` in `compat/src/miles.cpp`): the
+samples asked for by live frames and by resimulated ticks, by kind; those dropped from a full queue, beyond their range or
+at volume 0; the samples started and the ones refused; the entities, the sound's switches and its bank; the listener
+against the local player and whose camera it follows; and the mixer: its device, callbacks, starts, voices and loudest
+output. Where the sound stops shows as the first count that drops to 0.
+
 Measured with it: a server with three arena bots and a bot client (all armed, burning cars and trucks put beside the
 client), the samples the server's game started at the client's player against the client's (matched by owner, tick
 within 12 and place), LAN and three links (30 ms with 10 of jitter, 45 with 15 and 1% loss, 60 with 20 and 2%), 2

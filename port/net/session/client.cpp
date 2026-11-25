@@ -1089,6 +1089,7 @@ void net::Client::StartOver()
     mBot.reset(); // and its map of the old one
     mNavMap.reset();
     printf("net: frame %u, a new game\n", mFrame);
+    engine::PrintSoundDiag(("frame " + std::to_string(mFrame) + ", the new game").c_str());
 }
 
 // Not running ahead of the server (yet, or any more), or far off: jump to where we should be
@@ -1248,6 +1249,7 @@ void net::Client::PrintStats(const Snapshot& snap)
     }
     int poolCars = 0, poolPeds = 0, poolChars = 0, sent = 0, driven = 0, same = 0, traffic = 0, trafficHere = 0;
     engine::PrintReplicaLog();
+    engine::PrintSoundDiag(("frame " + std::to_string(mFrame)).c_str());
     engine::PoolUse(&poolCars, &poolPeds, &poolChars);
     engine::DriverStats(snap, &sent, &driven, &same);
     engine::TrafficDriverStats(snap, &traffic, &trafficHere);

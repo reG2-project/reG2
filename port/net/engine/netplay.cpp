@@ -190,6 +190,7 @@ bool NextNetworkGame()
         return false;
     }
     gNextPending = false;
+    net::engine::PrintSoundDiag("the old game's end");
     // The game takes the map's files from its session, which Start_NetworkGame set once for the first game
     char path[260];
     snprintf(path, sizeof(path), "data\\%s", gNetGame.gmp.c_str());

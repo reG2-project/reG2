@@ -306,7 +306,9 @@ void net::engine::SoundLogResimTick(bool applied)
             off.push_back(o);
         }
     }
+    gPortSoundSide = 1;
     s.InterrogateAudioEntities();
+    gPortSoundSide = 0;
     for (SoundObject* o : off)
     {
         o->mbStatus = false;

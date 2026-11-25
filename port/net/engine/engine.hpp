@@ -314,6 +314,8 @@ void DumpNavMap(const NavMap& map, const char* path); // as a picture (PGM): gre
 void ReplicaStats(const Snapshot& snap, int* pCars, int* pPeds, float* pMaxDrift);
 void PoolUse(int* pCars, int* pPeds, int* pChars); // live cars, peds, chars in this game
 void PrintReplicaLog(); // what the replicas did since the last call (explosions carried out, wrecks and corpses made again...)
+// The sound since the last call, from the game's requests to the mixer, and its state: one line, <when> its start
+void PrintSoundDiag(const char* when);
 // Drivers: how many peds the snapshot has in a car, how many of their cars have a driver here, and how many of
 // those are the same (mapped) ped
 void DriverStats(const Snapshot& snap, int* pSent, int* pDriven, int* pSame);
