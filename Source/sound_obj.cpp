@@ -32,6 +32,7 @@
 #if defined(GTA2_PORT)
 #include "../port/src/rand/sound.hpp" // VC6's rand, on a stream of its own in a network game (port/docs/netcode.md)
 #include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
+#include <stdio.h>
 #include "Char_Pool.hpp"
 
 // A car's own sounds take the sample indices 0 to 15 and 100 to 199
@@ -3457,6 +3458,9 @@ bool sound_obj::CalculateDistance(Fix16 max_dist)
         }
         return true;
     }
+#if defined(GTA2_PORT)
+    gPortSoundStats.far[gPortSoundSide]++;
+#endif
     return false;
 }
 
@@ -3469,6 +3473,9 @@ bool sound_obj::VolCalc(u8 base_volume, Fix16 max_dist, bool bHasSolidAbove)
     {
         msQueueSample.mnVolume = volume >> 1;
     }
+#if defined(GTA2_PORT)
+    gPortSoundStats.silent[gPortSoundSide] += msQueueSample.mnVolume == 0;
+#endif
     return msQueueSample.mnVolume != 0 ? true : false;
 }
 
@@ -3658,6 +3665,9 @@ s32 sound_obj::AddSoundObject(SoundObject* pSoundObj)
                 }
                 else
                 {
+#if defined(GTA2_PORT)
+                    gPortSoundStats.cameraRefused++;
+#endif
                     return 0;
                 }
             }
@@ -3697,6 +3707,9 @@ s32 sound_obj::AddSoundObject(SoundObject* pSoundObj)
                 }
             }
 
+#if defined(GTA2_PORT)
+            gPortSoundStats.entityAdds++;
+#endif
             return idx;
         }
         idx++;
@@ -3704,6 +3717,9 @@ s32 sound_obj::AddSoundObject(SoundObject* pSoundObj)
         ++pEntityIter;
     }
 
+#if defined(GTA2_PORT)
+    gPortSoundStats.addFails++;
+#endif
     return 0;
 }
 
@@ -3749,6 +3765,9 @@ void sound_obj::FreeSoundEntry(u32 idx)
     mAudioEntities[idx].mbUsed = false;
     mAudioEntities[idx].mpObj->mpAny.pAny = NULL;
     mAudioEntities[idx].mAge = 0;
+#if defined(GTA2_PORT)
+    gPortSoundStats.entityFrees++;
+#endif
 
     if (mAudioEntities[idx].mpObj->mObjectType == SoundObjectTypeEnum::Camera_0xBC_5)
     {
@@ -3780,8 +3799,24 @@ bool sound_obj::LoadStyle(const char_type* pStyleName)
 {
     if (mbSoundInitialized)
     {
+#if defined(GTA2_PORT)
+        // Port: the bank's load in the log, for a game without sound to tell why
+        const char_type* pName = GetFileName(pStyleName);
+        const bool bLoaded = gSampManager.LoadWavSdtData(pName);
+        s32 count = 0;
+        for (s32 i = 0; i < 320; i++)
+        {
+            count += gSampManager.GetSampleLength(i) != 0;
+        }
+        printf("Sound bank %s: %s, %d samples\n", pName, bLoaded ? "loaded" : "NOT loaded", count);
+        return bLoaded;
+#else
         return gSampManager.LoadWavSdtData(GetFileName(pStyleName));
+#endif
     }
+#if defined(GTA2_PORT)
+    printf("Sound bank for %s: none, the sound isn't initialised\n", pStyleName);
+#endif
     return false;
 }
 
@@ -3928,6 +3963,9 @@ void sound_obj::ServiceSoundEffects()
         mnActiveSampleQueue = mnActiveSampleQueue != 1;
         ClearRequestedQueue();
 #if defined(GTA2_PORT)
+        gPortSoundStats.frames++;
+        gPortSoundStats.pausedFrames += mIsPaused;
+        gPortSoundStats.noListenerFrames += !mType5Idx;
         // Port: a network client's sound log (port/net/engine/sound_log.cpp) notes what this frame asks for and adds
         // what its resimulated ticks owe
         if (gPortSoundRequestsHook)
@@ -4141,6 +4179,18 @@ MATCH_FUNC(0x41A850)
 void sound_obj::AddSampleToRequestedQueue()
 {
     u32 newVol = msQueueSample.mReleasingVolumeModificator * (127 - msQueueSample.mnVolume);
+#if defined(GTA2_PORT)
+    {
+        const SoundObject* pObj = mAudioEntities[msQueueSample.mEntityIndex].mpObj;
+        const s32 type = pObj ? pObj->mObjectType : 0;
+        const int kind = msQueueSample.mpReleaseSource ? PortSoundStats::kReleasing
+            : type == SoundObjectTypeEnum::Sprite_1                     ? PortSoundStats::kSprite
+            : type == SoundObjectTypeEnum::Weapon_30_7                  ? PortSoundStats::kWeapon
+            : type == SoundObjectTypeEnum::CollisionSoundQueue_6        ? PortSoundStats::kCollision
+                                                                        : PortSoundStats::kOther;
+        gPortSoundStats.requests[gPortSoundSide][kind]++;
+    }
+#endif
 
     u8 new_requested_count;
     if (mSampleRequestQueuesStatus[mnActiveSampleQueue] < mnActiveSamples)
@@ -4154,6 +4204,9 @@ void sound_obj::AddSampleToRequestedQueue()
 
         if (masSamples[mnActiveSampleQueue][new_requested_count].mnCalculatedVolume <= newVol)
         {
+#if defined(GTA2_PORT)
+            gPortSoundStats.queueFull[gPortSoundSide]++;
+#endif
             return;
         }
     }
@@ -4483,10 +4536,27 @@ void sound_obj::ProcessActiveQueues()
         for (j = 0; j < mnActiveSamples; j++)
         {
             sound_0x68& active = mActiveSamples[j];
+#if defined(GTA2_PORT)
+            if (active.mbIsBeingPlayed)
+            {
+                continue;
+            }
+            if (!InitSampleForType(&sample))
+            {
+                gPortSoundStats.refused++;
+                continue;
+            }
+            if (sample.mSampIdx >= 321)
+            {
+                gPortSoundStats.badSample++;
+                continue;
+            }
+#else
             if (active.mbIsBeingPlayed || !InitSampleForType(&sample) || sample.mSampIdx >= 321)
             {
                 continue;
             }
+#endif
 
             UpdateFramesToPlay(&sample);
 
@@ -4496,6 +4566,9 @@ void sound_obj::ProcessActiveQueues()
                 u32 samplesToPlay = sample.mLoopCount * gSampManager.GetSampleLength(sample.mSampIdx);
                 if (samplesPerFrame == 0)
                 {
+#if defined(GTA2_PORT)
+                    gPortSoundStats.noRate++;
+#endif
                     continue;
                 }
                 sample.mReleasingVolumeDivider = samplesToPlay / samplesPerFrame + 1;
@@ -4556,9 +4629,20 @@ void sound_obj::ProcessActiveQueues()
             active.mbIsBeingPlayed = true;
             sample.mbIsBeingPlayed = true;
             sample.mVolumeChange = -1;
+#if defined(GTA2_PORT)
+            gPortSoundStats.started++;
+#endif
             break;
         }
     }
+#if defined(GTA2_PORT)
+    u32 busy = 0;
+    for (j = 0; j < mnActiveSamples; j++)
+    {
+        busy += mActiveSamples[j].mbIsBeingPlayed;
+    }
+    gPortSoundStats.busyMax = busy > gPortSoundStats.busyMax ? busy : gPortSoundStats.busyMax;
+#endif
 }
 
 MATCH_FUNC(0x41B490)

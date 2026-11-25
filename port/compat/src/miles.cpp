@@ -118,6 +118,7 @@ bool FadeStep(int* pFade, float* pGain)
 }
 
 Driver* sDriver;
+PortMixerStats sMixerStats; // under Lock(), for port_MixerStats
 
 // GTA2_SOUND_LOG: once a second, the samples started, those stopped before they could play (lost), and the
 // delay from a start to its sound; 2: also a line per start and per first frame played.
@@ -680,6 +681,7 @@ void SDLCALL AudioCallback(void*, SDL_AudioStream* stream, int additional, int)
         return;
     }
     std::vector<float> mix((size_t)frames * 2, 0.0f);
+    u32 voices = 0;
     {
         std::lock_guard<std::recursive_mutex> lock(Lock());
         if (sDriver)
@@ -691,6 +693,7 @@ void SDLCALL AudioCallback(void*, SDL_AudioStream* stream, int additional, int)
             {
                 if (s->mStatus == SMP_PLAYING)
                 {
+                    voices++;
                     MixSampleTimed(s, mix.data(), window);
                 }
             }
@@ -736,6 +739,18 @@ void SDLCALL AudioCallback(void*, SDL_AudioStream* stream, int additional, int)
         }
     }
     Miles3D_Render(mix.data(), frames);
+    float peak = 0;
+    for (float v : mix)
+    {
+        peak = SDL_max(peak, SDL_fabsf(v));
+    }
+    {
+        std::lock_guard<std::recursive_mutex> lock(Lock());
+        sMixerStats.callbacks++;
+        sMixerStats.frames += (u32)frames;
+        sMixerStats.voicesMax = SDL_max(sMixerStats.voicesMax, voices);
+        sMixerStats.peak = SDL_max(sMixerStats.peak, peak);
+    }
     sLimiter.Process(mix.data(), frames);
     for (float& v : mix)
     {
@@ -856,6 +871,10 @@ DXDEC S32 AILCALL AIL_waveOutOpen(HDIGDRIVER FAR* drvr, LPHWAVEOUT FAR*, S32, LP
         }
         SDL_Log("Audio: %s", SDL_GetCurrentAudioDriver());
     }
+    else
+    {
+        SDL_Log("Audio: the driver opened again");
+    }
     sDriver = new Driver();
     sDriver->mDevice = sDevice;
     SDL_ResumeAudioStreamDevice(sDevice);
@@ -863,9 +882,25 @@ DXDEC S32 AILCALL AIL_waveOutOpen(HDIGDRIVER FAR* drvr, LPHWAVEOUT FAR*, S32, LP
     return 0;
 }
 
+void port_MixerStats(PortMixerStats* pOut)
+{
+    LOCK;
+    sMixerStats.streams = 0;
+    for (const Stream* s : sDriver ? sDriver->mStreams : std::vector<Stream*>())
+    {
+        sMixerStats.streams += s->mStatus == SMP_PLAYING;
+    }
+    sMixerStats.open = sDevice && sDriver;
+    sMixerStats.paused = sDevice && SDL_AudioDevicePaused(SDL_GetAudioStreamDevice(sDevice));
+    sMixerStats.driver = SDL_GetCurrentAudioDriver();
+    *pOut = sMixerStats;
+    sMixerStats = PortMixerStats();
+}
+
 DXDEC void AILCALL AIL_waveOutClose(HDIGDRIVER)
 {
     LOCK;
+    SDL_Log("Audio: the driver closed");
     DropFading();
     delete sDriver;
     sDriver = NULL;
@@ -948,6 +983,8 @@ DXDEC void AILCALL AIL_start_sample(HSAMPLE h)
     S(h)->mGain[0] = S(h)->mGain[1] = -1;
     S(h)->mStatus = SMP_PLAYING;
     S(h)->mStartNs = now;
+    sMixerStats.starts++;
+    sMixerStats.emptyStarts += !S(h)->mData || !S(h)->mLen;
     if (gPortSampleStartHook)
     {
         gPortSampleStartHook(h);

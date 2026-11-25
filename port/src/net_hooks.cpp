@@ -12,6 +12,8 @@ bool gPortNoDraw;
 bool gPortNoAudio;
 void (*gPortSampleStartHook)(const void*);
 void (*gPortSoundRequestsHook)(bool);
+PortSoundStats gPortSoundStats;
+int gPortSoundSide;
 bool gPortServer;
 bool gPortNoRumble;
 s32 gPortTrafficCap = 16;

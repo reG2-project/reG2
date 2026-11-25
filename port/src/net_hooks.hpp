@@ -42,6 +42,42 @@ extern bool gPortNoAudio;
 extern void (*gPortSoundRequestsHook)(bool requested);
 // After the mixer starts a sample (compat/src/miles.cpp, miles3d.cpp: its handle); NULL but for a log (GTA2_NET_SFXLOG)
 extern void (*gPortSampleStartHook)(const void* handle);
+// The sound's counters for a network client's log (port/net/engine/sound_diag.cpp), each an increment where sound_obj
+// decides: what was asked for, by kind, and why it went unheard. Index 0 for a live frame, 1 for a resimulated tick
+struct PortSoundStats
+{
+    enum
+    {
+        kSprite,
+        kWeapon,
+        kCollision,
+        kOther,
+        kReleasing, // AddReleasingSounds: a sound fading out, asked for again
+        kKinds
+    };
+    u32 requests[2][kKinds]; // AddSampleToRequestedQueue
+    u32 queueFull[2]; // quieter than the queue's quietest, the queue full
+    u32 far[2]; // beyond its range (CalculateDistance)
+    u32 silent[2]; // at volume 0 (VolCalc)
+    u32 frames, pausedFrames, noListenerFrames; // ServiceSoundEffects: paused (or the results), no camera entity
+    u32 started, refused, badSample, noRate; // ProcessActiveQueues' new samples: started, InitSampleForType said no...
+    u32 busyMax; // channels playing at a frame's end, the most
+    u32 entityAdds, entityFrees, addFails, cameraRefused; // AddSoundObject, FreeSoundEntry: a full table, a second camera
+};
+extern PortSoundStats gPortSoundStats;
+extern int gPortSoundSide; // 1 while a network client's resimulated tick asks for its sounds
+// The mixer's (compat/src/miles.cpp) since the last call, then reset
+struct PortMixerStats
+{
+    u32 starts, emptyStarts; // AIL_start_sample, of them with no data
+    u32 callbacks, frames; // the audio device's callbacks and the frames they asked for
+    u32 voicesMax; // samples playing in a callback, the most
+    u32 streams; // streams playing now
+    float peak; // the loudest output sample, before the clamp
+    bool open, paused; // the device
+    const char* driver;
+};
+void port_MixerStats(PortMixerStats* pOut);
 // A dedicated server (--server), known before anything runs (compat/src/main.cpp): no message box, no setup, and none of
 // the files only a player uses (the keyboard layout, the attract mode replays)
 extern bool gPortServer;
