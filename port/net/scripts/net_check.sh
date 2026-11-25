@@ -158,17 +158,19 @@ maps() {
   local secs=120 p=$((BASE + 204))
   [ -n "$QUICK" ] && secs=60
   rm -f "$OUT"/maps_*.log
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_SPEED=4 exec "$BIN" --server --port $p --maps mp1-6p,mp2-6p,downtown-6p --players 6 --timelimit 1 \
+  # The server listens where m_rammer (player 3, after the arena's three) does, for its gunfire to compare with
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_SPEED=4 GTA2_NET_SFXLOG=3 exec "$BIN" --server --port $p --maps mp1-6p,mp2-6p,downtown-6p --players 6 --timelimit 1 \
     --arena simple,hunter,soldier > "$OUT/maps_server.log" 2>&1) &
   sleep 2
   for b in rammer soldier; do
-    (cd "$GAME" && GTA2_HEADLESS=1 GTA2_SPEED=4 GTA2_NET_CHECKGRID=1 exec "$BIN" --connect 127.0.0.1:$p --name m_$b --bot $b \
+    (cd "$GAME" && GTA2_HEADLESS=1 GTA2_SPEED=4 GTA2_NET_CHECKGRID=1 GTA2_NET_SFXLOG=1 exec "$BIN" --connect 127.0.0.1:$p --name m_$b --bot $b \
       > "$OUT/maps_$b.log" 2>&1) &
+    sleep 1
   done
   sleep $secs
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
-  local changes crashes checks followed=1 heard=1 b
+  local changes crashes checks followed=1 heard=1 gunfire=1 b
   changes=$(grep -c "net: the next map:" "$OUT/maps_server.log")
   crashes=$(grep -l "crashed" "$OUT"/maps_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/maps_*.log | grep -c "net: CHECK")
@@ -178,10 +180,20 @@ maps() {
     # the sound log plays the resimulated ticks' sounds on a later map too (its ticks are that map's game cycle)
     awk '/a new game/ { n++ } /net: [1-9][0-9]* sounds of the resimulated ticks played/ && n { ok = 1 } END { exit !ok }' "$OUT/maps_$b.log" || heard=0
   done
-  if [ "$changes" -lt 3 ] || [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $followed = 0 ] || [ $heard = 0 ]; then
-    fail "maps: $changes map changes, clients followed: $followed, resimulated sounds on a later map: $heard, $crashes crashed, $checks CHECK lines ($BUILD/net_check/maps_*.log)"
+  # On every later map m_rammer hears the others' gunfire as the server's listener at its place does: at least half
+  # the shots' samples of a map the server heard 20 of (the last map's, maybe cut short, not counted)
+  if grep -q "as player 3 of" "$OUT/maps_rammer.log"; then
+    awk '/net: the next map:/ { n++ } /^sfx: / && / weapon/ && !/\/p3 / && n { s[n]++ } END { for (i = 1; i < n; i++) print i, s[i] + 0 }' \
+      "$OUT/maps_server.log" > "$OUT/maps_gunfire_server.txt"
+    awk '/a new game/ { n++ } /^sfx: / && / weapon/ && !/\/p3 / && n { c[n]++ } END { for (i = 1; i <= n; i++) print i, c[i] + 0 }' \
+      "$OUT/maps_rammer.log" > "$OUT/maps_gunfire_client.txt"
+    awk 'NR == FNR { s[$1] = $2; next } ($1 in s) && s[$1] >= 20 && $2 * 2 < s[$1] { bad = 1; print "  maps: map " $1 + 1 ", the others gunfire: " $2 " samples for m_rammer, " s[$1] " for the server" }
+         END { exit bad }' "$OUT/maps_gunfire_server.txt" "$OUT/maps_gunfire_client.txt" || gunfire=0
+  fi
+  if [ "$changes" -lt 3 ] || [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $followed = 0 ] || [ $heard = 0 ] || [ $gunfire = 0 ]; then
+    fail "maps: $changes map changes, clients followed: $followed, resimulated sounds on a later map: $heard, the others' gunfire heard: $gunfire, $crashes crashed, $checks CHECK lines ($BUILD/net_check/maps_*.log)"
   else
-    pass "maps: $changes map changes, both clients followed, both played the resimulated ticks' sounds on a later map"
+    pass "maps: $changes map changes, both clients followed, both played the resimulated ticks' sounds on a later map, m_rammer heard the others' gunfire there as the server did"
   fi
 }
 
