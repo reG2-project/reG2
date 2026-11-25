@@ -367,6 +367,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
             welcome.timeLimitMin = (uint16_t)mConfig.game.timeLimitMin;
             welcome.tickMs = (uint16_t)mConfig.game.tickMs;
             welcome.police = (uint8_t)mConfig.game.police;
+            welcome.kit = (uint8_t)mConfig.game.kit;
             welcome.session = mSession;
             welcome.name = name;
             welcome.map = mMap < mConfig.voteMaps.size() ? mConfig.voteMaps[mMap].name : "";

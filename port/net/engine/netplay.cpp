@@ -98,6 +98,7 @@ void net::engine::StartNetworkGame(const NetworkGame& game)
     gPortFullQueueRanked = true;
     gPortScoreBonusHook = net::engine::ScoreBonus;
     gPortKillCamTicks = KillCamTicks;
+    gPortSpawnKit = gNetGame.kit ? SpawnKit : NULL;
     gPortDeathViewPed = DeathCamera;
     gPortCorpseKept = CorpseKept;
     InstallStarts(true);
@@ -147,6 +148,7 @@ void net::engine::StopNetworkGame()
     gPortChatChar = NULL;
     gPortScoreBonusHook = NULL;
     gPortKillCamTicks = NULL;
+    gPortSpawnKit = NULL;
     gPortDeathViewPed = NULL;
     gPortCorpseKept = NULL;
     InstallStarts(false);

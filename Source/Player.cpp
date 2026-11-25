@@ -906,6 +906,12 @@ void Player::InitPlayerPed(Ped* pPed)
     mSavedPedWeaponIdx = -1;
     mSavedCarWeaponIdx = 27;
     Player::ClearPowerUps();
+#if defined(GTA2_PORT)
+    if (gPortSpawnKit)
+    {
+        gPortSpawnKit(this);
+    }
+#endif
 }
 
 MATCH_FUNC(0x565740)
@@ -1895,6 +1901,12 @@ void Player::Wasted()
                 }
                 mPlayerPed->ResetForPlayerRespawn();
                 mWastedOrBusted = false;
+#if defined(GTA2_PORT)
+                if (gPortSpawnKit)
+                {
+                    gPortSpawnKit(this);
+                }
+#endif
             }
             else
             {

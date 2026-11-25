@@ -260,6 +260,7 @@ Sprite* CharSprite(const Ped* ped); // its char's (on foot), NULL without one
 Sprite* PedSprite(Ped* ped); // its car's when it is in one
 Ped* ViewedPed(Player* p); // the ped its view camera follows (PlayerFoci)
 s32 KillCamTicks(Player* p, Player* killer); // gPortKillCamTicks
+void SpawnKit(Player* p); // gPortSpawnKit, with --kit
 // The killer's during the kill cam (coming: from the death on, the kill cam to come), else auxPed
 Ped* DeathViewPed(Player* p, Ped* auxPed, bool coming = false);
 Ped* DeathCamera(Player* p, Ped* auxPed); // gPortDeathViewPed

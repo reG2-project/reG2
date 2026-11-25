@@ -75,6 +75,7 @@ void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
     mGameType = welcome.gameType;
     mFragLimit = (int)welcome.fragLimit;
     pGame->police = welcome.police;
+    pGame->kit = welcome.kit;
     pGame->gmp = welcome.gmp;
     pGame->sty = welcome.sty;
     pGame->scr = welcome.scr;

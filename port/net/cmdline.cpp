@@ -30,6 +30,7 @@ const char kUsage[] =
     "  --timelimit min       a round's time limit\n"
     "  --tickms N            the simulation step, 33\n"
     "  --police [stars]      police on (off by default), up to 1 star or 1-6\n"
+    "  --kit smg             every start and respawn: a machine gun with 50 shots and armour\n"
     "  --traffic N           ambient traffic cars per player, 16\n"
     "  --packets N           a snapshot's packets at most, 1-8, 4\n"
     "  --interest blocks     how far around a client its snapshots reach, 24\n"
@@ -65,7 +66,7 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
     // A server's options: an error without --server, so a single-player game never takes one (--traffic) or drops it
     static const char* const kServerOnly[] = {"--window", "--port", "--map", "--maps", "--minplayers", "--warmup", "--results",
                                               "--votes", "--rounds", "--players", "--gametype", "--fraglimit", "--timelimit",
-                                              "--tickms", "--interest", "--traffic", "--police", "--packets", "--arena", "--seed",
+                                              "--tickms", "--interest", "--traffic", "--police", "--kit", "--packets", "--arena", "--seed",
                                               "--ticks"};
     std::string serverOption;
     bool fragLimitGiven = false;
@@ -171,6 +172,10 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
             {
                 sc.game.police = std::max(1, std::min(6, atoi(args[++i].c_str()))); // the most stars (the game's own: 1)
             }
+        }
+        else if (a == "--kit" && more)
+        {
+            sc.game.kit = args[++i] == "smg" ? 1 : 0;
         }
         else if (a == "--packets" && more)
         {

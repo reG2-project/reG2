@@ -71,6 +71,7 @@ struct Welcome
     uint16_t timeLimitMin = 10;
     uint16_t tickMs = 33;
     uint8_t police = 0;
+    uint8_t kit = 0; // what each player gets at every start and respawn: 0 nothing, 1 a machine gun (50) and armour
     uint32_t session = 0; // the server's run, drawn at its start: a client back after a drop finds another one if it restarted
     std::string name; // the player's name, as the server has it (another than the hello's if that was taken)
     std::string map; // the map's name (data/<map>.mmp)

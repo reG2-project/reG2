@@ -205,6 +205,8 @@ extern bool (*gPortScoreBonusHook)(Player* pPlayer, s32 voice);
 // Asked as a player is wasted (Player::Wasted), with the player who killed it (NULL: none): the ticks its death's
 // countdown runs longer. NULL but in a network game, whose kill cam then shows the killer
 extern s32 (*gPortKillCamTicks)(Player* pPlayer, Player* pKiller);
+// Called as a player starts (Player::InitPlayerPed) and respawns: a network game's weapons and armour for it. NULL: none
+extern void (*gPortSpawnKit)(Player* pPlayer);
 // The ped a wasted or busted player's view follows (Player::Service, camera mode 2) in place of its corpse or arrested
 // self, pAuxPed. NULL but in a network game: the killer's during the kill cam
 extern Ped* (*gPortDeathViewPed)(Player* pPlayer, Ped* pAuxPed);
