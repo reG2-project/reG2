@@ -6067,7 +6067,8 @@ void sound_obj::HandlePedVoiceEvent(Sound_Params* pParams)
 }
 
 #if defined(GTA2_PORT)
-// Port: a network game's players cry out at their death (gPortPlayersDeathCry) as the other peds do in HandlePedVoiceEvent
+// Port: a network game's players cry out at their death (gPortPlayersDeathCry) as the other peds do in HandlePedVoiceEvent,
+// first in the mixer's queue (a priority of 0) so that the shots and impacts around a kill never push it out
 void sound_obj::PortPlayerDeathCry(Sound_Params* pParams, u8 sample_index)
 {
     if (!CalculateDistance(Fix16(81)) || !VolCalc(35, Fix16(9), pParams->mbHasSolidAbove))
@@ -6084,7 +6085,7 @@ void sound_obj::PortPlayerDeathCry(Sound_Params* pParams, u8 sample_index)
     msQueueSample.mSpeedMultiplier = 0;
     msQueueSample.mSampleIndex = sample_index;
     msQueueSample.mReleasingSoundFlag = 1;
-    msQueueSample.mReleasingVolumeModificator = 7;
+    msQueueSample.mReleasingVolumeModificator = 0;
     msQueueSample.mbIs2D = false;
     msQueueSample.mLoopStart = 0;
     msQueueSample.mLoopEnd = -1;
