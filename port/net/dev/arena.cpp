@@ -264,10 +264,17 @@ void net::Arena::Score(const Snapshot& world)
             body.throwables = engine::PlayerAmmo(e, 4) + engine::PlayerAmmo(e, 5);
         }
     }
+    // A new round sets every score back to 0: no frag or death that tick
+    bool newRound = false;
+    for (size_t i = 0; i < mBots.size(); i++)
+    {
+        newRound |= bodies[i].deaths < mBots[i].last.deaths;
+    }
     for (size_t i = 0; i < mBots.size(); i++)
     {
         const Bot::Body& me = bodies[i];
         Bot& bot = mBots[i];
+        const int frags = newRound ? 0 : me.frags - bot.last.frags, deaths = newRound ? 0 : me.deaths - bot.last.deaths;
         float nearest = 1e9f, shooterDist = 1e9f, nearestOnFoot = 1e9f, nearestInCar = 1e9f, carDist = 1e9f;
         for (size_t c = 0; c + 1 < cars.size(); c += 2)
         {
@@ -311,9 +318,10 @@ void net::Arena::Score(const Snapshot& world)
         }
         if (mTicks > 0)
         {
-            bot.reward += kFragReward * (me.frags - bot.last.frags) + kDeathReward * (me.deaths - bot.last.deaths);
-            bot.reward += me.car || bot.last.car ? kCarFragReward * (me.frags - bot.last.frags) : 0;
-            bot.droveThisLife &= me.deaths == bot.last.deaths;
+            bot.reward += kFragReward * frags + kDeathReward * deaths;
+            bot.reward += me.car || bot.last.car ? kCarFragReward * frags : 0;
+            bot.frags += frags, bot.deaths += deaths;
+            bot.droveThisLife &= deaths == 0;
             if (me.car && !bot.droveThisLife)
             {
                 bot.droveThisLife = true;
@@ -451,8 +459,7 @@ void net::Arena::Finish(const Snapshot& world)
         if (engine::PlayerOf(e, &p, &b) && p < (int)mBots.size())
         {
             const Bot& bot = mBots[p];
-            printf("net: arena %d %s frags %d deaths %d near %.3f dealt %d cars %d pickups %d\n", p, bot.kind.c_str(), engine::PlayerFrags(e),
-                   engine::PlayerDeaths(e), mTicks ? bot.closeness / mTicks : 0.0, bot.dealt, bot.cars, bot.pickups);
+            printf("net: arena %d %s frags %d deaths %d near %.3f dealt %d cars %d pickups %d\n", p, bot.kind.c_str(), bot.frags, bot.deaths, mTicks ? bot.closeness / mTicks : 0.0, bot.dealt, bot.cars, bot.pickups);
             printf("net: arena %d %s stuck %.1f s longest %.1f s searches %u failed %u giveups %u recoveries %u in a car %.1f s\n", p,
                    bot.kind.c_str(), bot.stuckTicks / 30.0, bot.longestStuck / 30.0, bot.nav.searches, bot.nav.failed, bot.nav.giveUps,
                    bot.nav.recoveries, bot.carStuckTicks / 30.0);

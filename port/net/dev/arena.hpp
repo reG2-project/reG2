@@ -45,7 +45,7 @@ class Arena
         uint32_t buttons = 0;
         Body last;
         double closeness = 0; // summed per tick: 1 - distance / 50 blocks to the nearest other player
-        int dealt = 0, cars = 0, pickups = 0;
+        int dealt = 0, cars = 0, pickups = 0, frags = 0, deaths = 0; // frags and deaths over all the rounds
         float reward = 0; // since the last message (remote)
         bool droveThisLife = false; // (remote) the car reward is paid once a life
         BotMemory memory; // its features' (remote)
