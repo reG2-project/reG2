@@ -65,8 +65,14 @@ class Arena
         // Getting into or out of a car under 5 s after the last time; fire on foot armed: presses, and ticks held
         int quickSwitches = 0, firePresses = 0;
         uint32_t carSwitchTick = 0, fireTicks = 0, lastButtons = 0;
+        // Idle: a meter window still without pressing on or firing; retreats: seconds going away from someone within
+        // 10 blocks, and turnbacks: a retreat followed within 3 s by a second going at the same one
+        uint32_t idleTicks = 0, idleRun = 0, longestIdle = 0, firingInWindow = 0, retreatTicks = 0, lastRetreat = 0;
+        int turnbacks = 0, fleeFrom = -1, retreatFrom = -1;
+        float fleeX = 0, fleeY = 0, fleeOx = 0, fleeOy = 0;
     };
     void Meter(Bot& bot, const Bot::Body& me, float carDist);
+    void MeterRetreat(Bot& bot, const Bot::Body& me, const std::vector<Bot::Body>& bodies, int self);
     void Score(const Snapshot& world);
     void AddRemote(int slot, std::vector<float>& message);
     bool Exchange(const std::vector<float>& message, bool done);

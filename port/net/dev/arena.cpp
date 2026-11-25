@@ -351,6 +351,7 @@ void net::Arena::Score(const Snapshot& world)
             bot.fistAtCarTicks += unarmedOnFoot && nearestInCar < 1.5f;
         }
         Meter(bot, me, carDist);
+        MeterRetreat(bot, me, bodies, (int)i);
         bot.last = me;
         bot.last.nearest = nearest;
     }
@@ -371,9 +372,10 @@ void net::Arena::Meter(Bot& bot, const Bot::Body& me, float carDist)
     if (!bot.windowOpen)
     {
         bot.windowOpen = true;
-        bot.windowFrom = mTicks, bot.pushing = 0, bot.windowInCar = inCar, bot.windowX = me.x, bot.windowY = me.y;
+        bot.windowFrom = mTicks, bot.pushing = 0, bot.firingInWindow = 0, bot.windowInCar = inCar, bot.windowX = me.x, bot.windowY = me.y;
     }
     bot.pushing += (bot.buttons & (inCar ? kBtnForward | kBtnBack : kBtnForward)) != 0;
+    bot.firingInWindow += (bot.buttons & kBtnAttack) != 0;
     const uint32_t length = inCar ? 60 : 45;
     if (mTicks - bot.windowFrom + 1 < length)
     {
@@ -385,7 +387,50 @@ void net::Arena::Meter(Bot& bot, const Bot::Body& me, float carDist)
     bot.carStuckFootTicks += stuck && !inCar && carDist < 1.5f ? length : 0;
     bot.stuckRun = stuck ? bot.stuckRun + length : 0;
     bot.longestStuck = bot.stuckRun > bot.longestStuck ? bot.stuckRun : bot.longestStuck;
+    const bool idle = bot.pushing * 2 < length && bot.firingInWindow * 2 < length &&
+                      hypotf(me.x - bot.windowX, me.y - bot.windowY) < (inCar ? 0.5f : 0.3f);
+    bot.idleTicks += idle ? length : 0;
+    bot.idleRun = idle ? bot.idleRun + length : 0;
+    bot.longestIdle = bot.idleRun > bot.longestIdle ? bot.idleRun : bot.longestIdle;
     bot.windowOpen = false;
+}
+
+// Each second: how far it went away from (or at) the nearest other player within 10 blocks at the start of it
+void net::Arena::MeterRetreat(Bot& bot, const Bot::Body& me, const std::vector<Bot::Body>& bodies, int self)
+{
+    if (me.health <= 0)
+    {
+        bot.fleeFrom = bot.retreatFrom = -1;
+        return;
+    }
+    if (mTicks % 30 != 0)
+    {
+        return;
+    }
+    if (bot.fleeFrom >= 0)
+    {
+        const float away = (me.x - bot.fleeX) * bot.fleeOx + (me.y - bot.fleeY) * bot.fleeOy;
+        if (away > 1.5f)
+        {
+            bot.retreatTicks += 30;
+            bot.retreatFrom = bot.fleeFrom, bot.lastRetreat = mTicks;
+        }
+        else if (away < -1.5f && bot.fleeFrom == bot.retreatFrom && mTicks - bot.lastRetreat <= 90)
+        {
+            bot.turnbacks++;
+            bot.retreatFrom = -1;
+        }
+    }
+    bot.fleeFrom = -1;
+    float nearest = 10;
+    for (size_t j = 0; j < bodies.size(); j++)
+    {
+        const float dx = me.x - bodies[j].x, dy = me.y - bodies[j].y, d = hypotf(dx, dy);
+        if ((int)j != self && bodies[j].health > 0 && d < nearest && d > 0.01f)
+        {
+            nearest = d, bot.fleeFrom = (int)j, bot.fleeX = me.x, bot.fleeY = me.y, bot.fleeOx = dx / d, bot.fleeOy = dy / d;
+        }
+    }
 }
 
 uint32_t net::Arena::Buttons(int slot) const
@@ -416,6 +461,8 @@ void net::Arena::Finish(const Snapshot& world)
                    bot.farThrows);
             printf("net: arena %d %s car switches under 5 s %d fire presses %d held %.1f s\n", p, bot.kind.c_str(), bot.quickSwitches,
                    bot.firePresses, bot.fireTicks / 30.0);
+            printf("net: arena %d %s idle %.1f s longest %.1f s retreats %.1f s turnbacks %d\n", p, bot.kind.c_str(), bot.idleTicks / 30.0,
+                   bot.longestIdle / 30.0, bot.retreatTicks / 30.0, bot.turnbacks);
         }
     }
     printf("net: arena search cells per tick: mean %.0f max %llu\n", mTicks ? (double)mExpanded / mTicks : 0.0, (unsigned long long)mMaxExpanded);
