@@ -784,7 +784,9 @@ uint32_t net::Client::ChooseInput(uint32_t recordedInput)
         }
         FillBotView(mBotView, mReceived[mLatestTick % kRing], mSlot, mFrame, mNavMap.get());
         // The keyboard's key events go with a bot's controls: Escape and the leave prompt, the chat (GTA2_INPUT in tests)
-        local = (mBot ? mBot->Think(mBotView) : 0) | (local & kKeyEventBits);
+        const uint32_t bot = mBot ? mBot->Think(mBotView) : 0;
+        const bool idle = mTick >= Env().botIdleFrom && mTick < Env().botIdleTo;
+        local = (idle ? 0 : bot) | (local & kKeyEventBits);
     }
     local &= 0x3FFFFF;
     // F12, or the key under Esc (` or §: keyboards without F12), keys the game doesn't use (here as their DirectInput

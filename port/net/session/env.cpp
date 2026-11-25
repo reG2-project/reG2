@@ -26,6 +26,11 @@ const net::SessionEnv& net::Env()
         e.testKill = getenv("GTA2_NET_TESTKILL");
         e.testArm = getenv("GTA2_NET_TESTARM");
         e.compare = getenv("GTA2_NET_COMPARE") != NULL;
+        e.botIdleFrom = e.botIdleTo = 0;
+        if (const char* d = getenv("GTA2_NET_BOTIDLE"))
+        {
+            sscanf(d, "%u:%u", &e.botIdleFrom, &e.botIdleTo);
+        }
         e.divergeTick = 0, e.divergeTicks = 300;
         if (const char* d = getenv("GTA2_NET_DIVERGE")) // <server tick>[:<ticks>]
         {

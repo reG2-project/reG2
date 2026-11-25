@@ -245,8 +245,9 @@ throws() {
     --map mp1-6p --players 6 --arena simple,simple > "$OUT/throws_server.log" 2>&1) &
   sleep 2
   # The blend off: what the client shows at a tick is its prediction of it, the server's state there to the bit. Its own
-  # player drowned and electrocuted on its own at times (the server never has it)
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_THROWLOG=1 GTA2_NET_SELFLOG=1 GTA2_NET_TESTLOCALPHASE=${own#,} GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
+  # player drowned and electrocuted on its own at times (the server never has it). Its bot idle around the jacks: a car
+  # entry of its own the server's test calls off would go on here
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_BOTIDLE=700:1200 GTA2_NET_THROWLOG=1 GTA2_NET_SELFLOG=1 GTA2_NET_TESTLOCALPHASE=${own#,} GTA2_NET_BLEND=1 GTA2_NET_BLEND_FAR=1 GTA2_NET_BLEND_SELF=1 \
     exec "$BIN" --connect 127.0.0.1:$p --name c_watch --bot carhop --lag 60 --jitter 5 > "$OUT/throws_client.log" 2>&1) &
   sleep 60
   kill $(jobs -p) 2>/dev/null
