@@ -112,11 +112,12 @@ class Server
     int FreeSlot(const std::string& name, bool bot, bool kept) const; // the slot a joining <name> gets (mSlots.size(): none)
     int BotSlotForPerson() const;
     void MakeRoom(int slot);
+    void RecallArenaBots();
     int ReturningSlot(const Hello& hello) const; // the slot a reconnect's token is for, in use or not (-1: none)
     void OnCommands(int slot, BitReader& r);
     void StartGameOnce();
     void PollTransport();
-    bool Deserted() const; // nobody to play for: no client connected or connecting, no arena bot
+    bool Deserted() const; // nobody to play for: no client connected or connecting, no arena
     void OnEvent(const TransportEvent& e);
     void SetNextInputs(const Snapshot& world);
     void RunRounds(const Snapshot& world); // the round flow's tick and what it asks for

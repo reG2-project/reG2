@@ -340,6 +340,28 @@ void net::Server::MakeRoom(int slot)
     Notice(-1, name + " left for a player");
 }
 
+// An arena bot back in its slot once no person has it or may come back to it: the server keeps its bots
+void net::Server::RecallArenaBots()
+{
+    for (int i = 0; mStarted && !engine::MapChangePending() && i < mArena.Count(); i++)
+    {
+        Slot& s = mSlots[i];
+        if (s.used || KeptForReturn(s))
+        {
+            continue;
+        }
+        s = Slot();
+        s.used = true;
+        s.peer = kArenaPeer;
+        s.name = "bot" + std::to_string(i);
+        mArena.Bench(i, false);
+        engine::PutInGame(i, true);
+        engine::SetPlayerName(i, s.name.c_str());
+        printf("net: %s is back as player %d\n", s.name.c_str(), i);
+        Notice(-1, s.name + " joined");
+    }
+}
+
 // A client back after its connection dropped, whose old connection may not have timed out here yet
 int net::Server::ReturningSlot(const Hello& hello) const
 {
@@ -947,7 +969,7 @@ void net::Server::Idle()
 
 bool net::Server::Deserted() const
 {
-    if (!mStarted || !mPending.empty() || !mHelloWait.empty())
+    if (!mStarted || !mPending.empty() || !mHelloWait.empty() || mArena.Count())
     {
         return false;
     }
@@ -1396,6 +1418,7 @@ void net::Server::Frame()
     engine::GuardPeds();
     StartGameOnce();
     PollTransport();
+    RecallArenaBots();
     mProbe.Tests(mTick, (int)mSlots.size());
     Snapshot world;
     engine::Capture(world);
