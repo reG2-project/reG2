@@ -63,6 +63,7 @@ struct
 {
     uint8_t mDone[MAX_PLAYERS];
     bool mKnown[MAX_PLAYERS];
+    bool mHeld[MAX_PLAYERS]; // a death of this game's own held (ClientPedMayDie) since the last snapshot
     ShownDeath mShown[kShownDeaths];
 } gNetDeaths;
 
@@ -611,6 +612,7 @@ bool net::engine::ApplyPlayer(const EntityState& e)
         }
     }
     gDyingThere[i] = e.f[kPlayerHealth] <= 0;
+    gNetDeaths.mHeld[i] = false;
     // First: a death carried out on a thrown ped takes at its landing, as the server's
     ApplyPhases(ped, e, kPlayerPhase, (e.f[kPlayerState] & kPlayerDead) != 0, e.f[kPlayerInCar] ? RefCar(e.f[kPlayerCar]) : NULL);
     if (CarryOutDeath(i, p, ped, e))
@@ -773,6 +775,10 @@ bool net::engine::ClientPedMayDie(Ped* ped)
     // Held: alive, and on its feet knocked down until the server's state says what became of it (getting into or out
     // of a car, it goes on: the door's states are the entering's and leaving's)
     ped->mHealth = ped->mHealth > 0 ? ped->mHealth : 1;
+    if (ped->mPlayer && ped->mPlayer->mPlayerIdx < MAX_PLAYERS)
+    {
+        gNetDeaths.mHeld[ped->mPlayer->mPlayerIdx] = true;
+    }
     if (ped->mPedState1 != ped_state_1::immobilized_8 && !InCarTransition(ped))
     {
         ped->ChangeNextPedState1(ped_state_1::immobilized_8);
@@ -780,6 +786,12 @@ bool net::engine::ClientPedMayDie(Ped* ped)
         ped->SetStateInitPending();
     }
     return false;
+}
+
+bool net::engine::ClientCharSolid(const Char* c)
+{
+    const Player* p = c->mpPed ? c->mpPed->mPlayer : NULL;
+    return !p || p->mPlayerIdx >= MAX_PLAYERS || !gNetDeaths.mHeld[p->mPlayerIdx] || c->mpPed->mCar;
 }
 
 namespace

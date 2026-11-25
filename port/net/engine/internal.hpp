@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 class Car;
+class Char;
 class Object;
 class Ped;
 class Player;
@@ -345,6 +346,8 @@ void GuardThrow(Ped* ped);
 // gPortPedMayDie on a client: only the server's death (KillNow), or one in a car; another is held, the ped knocked down
 // (an ambient ped shown dead, ShowDeath)
 bool ClientPedMayDie(Ped* ped);
+// gPortCharSolid on a client: a player whose death it holds collides with nothing, as a corpse (the server's, or a guess)
+bool ClientCharSolid(const Char* c);
 bool PlayerDyingThere(const Ped* ped); // a player the newest snapshot has at 0 health: dying or dead there
 bool ClientPedMayFire(Ped* ped);
 int ShownDeathAge(const Ped* ped); // ticks since an ambient ped was shown dead here, -1: not shown dead

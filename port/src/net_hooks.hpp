@@ -5,6 +5,7 @@
 #include "types.hpp"
 
 class Car;
+class Char;
 class Explosion;
 class Object;
 class Ped;
@@ -87,6 +88,9 @@ extern bool (*gPortBlastDebris)(Explosion* pExplosion);
 // Asked as a ped would die (Ped::Kill): false, and it doesn't. NULL but on a network client, whose peds on foot die by
 // the server's death only
 extern bool (*gPortPedMayDie)(Ped* pPed);
+// Asked as a char would collide with a sprite (Char::ShouldCollideWithSprite): false, and it doesn't. NULL but on a network
+// client, whose players held from a death of its own are as the dead to cars, peds and shots
+extern bool (*gPortCharSolid)(const Char* pChar);
 // Asked as a ped would use its weapon (Ped::ManageWeapon): false, and it does not. NULL but on a network client
 extern bool (*gPortPedMayFire)(Ped* pPed);
 // Asked as a jacker's char pulls a driver out (Char::UpdateCharB4): false, and the jacker waits at the door. NULL but in

@@ -399,7 +399,11 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
 - **Deaths are the server's** (`ClientPedMayDie`, `gPortPedMayDie` in `Ped::Kill`): a server's ped on foot (a player, or one
   mapped to a snapshot's; the client's own die as the game has them) dies only by
   the server's death (`KillNow`, also the ambient peds'); its own death, from a predicted shot, car or fall, is held
-  (health 1, knocked down on its feet) until a snapshot says what became of it. An ambient ped on its feet or lying is
+  (health 1, knocked down on its feet) until a snapshot says what became of it. A player held so collides with nothing
+  until the next snapshot (`ClientCharSolid`, `gPortCharSolid` in `Char::ShouldCollideWithSprite`), as the server's
+  corpse doesn't: lying, it would stop the car that ran it over each tick (`CarPhysics::StepMovementAndCollisions` ends
+  a car's move at a sprite it hits twice), and the local player's car fell up to 0.6 blocks behind the server's until
+  the snapshot pulled it on. An ambient ped on its feet or lying is
   shown dead at once instead (`ShowDeath`: its state, cry, corpse's sprite layer and blood), the rest of `Ped::Kill`
   (its corpse's AI, a dropped weapon, the score, the killer's wanted level) left to the server's death, which `KillNow`
   then carries out without starting its dying again; one the server still has alive `kShownDeathTicks` after it was
@@ -832,6 +836,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Car.cpp` | `gPortCarMayExplode` | a client's car the server sends blows up when a snapshot says the server's did, not on its own prediction |
 | `Object_5C.cpp` | `gPortObjectMade` | an object made: a network game keys the shots it predicts (`engine/shots.cpp`) |
 | `Explosion.cpp` | `gPortBlastHurts` | a client's blast made from a snapshot hurts nothing: the server's did |
+| `char.cpp` | `gPortCharSolid` | a client's player whose death it holds collides with nothing, as the server's corpse |
 | `Explosion.cpp` | `gPortBlastDebris` | a large blast's burning debris, seen or not; on a client none from a blast it didn't predict |
 | `Car.cpp` | `Car::TryHonkHorn` | a train's lead without a driver (a player got out of a carriage that stood still) doesn't read it |
 | `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`), `gPortChatChar` | the chat types the keyboard layout's characters; a server, those its clients typed |

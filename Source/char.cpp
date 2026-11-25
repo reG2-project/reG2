@@ -6392,6 +6392,14 @@ bool Char::ShouldCollideWithSprite(Sprite* pSprite) const
 {
     Ped* pPed;
 
+#if defined(GTA2_PORT)
+    // Port: a network client's player whose death it holds collides as the server's corpse does: not at all
+    if (gPortCharSolid && !gPortCharSolid(this))
+    {
+        return false;
+    }
+#endif
+
     if (pSprite)
     {
         switch (pSprite->GetType())
