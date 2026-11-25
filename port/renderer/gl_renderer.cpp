@@ -120,6 +120,8 @@ const char* kSceneFS =
     "uniform int uNumLights;\n"
     "uniform vec3 uAmbient;\n"
     "vec3 gHaze;\n"
+    "vec3 gSpots;\n"
+    "float gWet = 0.0;\n"
     "uniform float uUnlitAmbient;\n"
     "uniform int uShadow;\n"
     "layout(std140) uniform Lights\n"
@@ -173,7 +175,111 @@ const char* kSceneFS =
     "            else if (att > 0.0) acc += uLightCol[i].rgb * att * below;\n"
     "        }\n"
     "    }\n"
+    "    gSpots = min(spots, vec3(0.6));\n"
     "    return acc + min(spots, vec3(0.6));\n" // kSpotCap in gbh_api.cpp
+    "}\n"
+    // RAIN PoC: wet tiles (lit 1.25) facing up are a little darker and take a sheen from the lights: a soft pool
+    // under each lamp, a streak along each headlight's beam, only from lights just above the surface. gWet tells
+    // the screen space reflections how much the pixel mirrors.
+    "uniform int uRain;\n"
+    "uniform vec4 uRainCam;\n" // eye xyz in blocks, seconds
+    "uniform vec4 uRainParams;\n" // ground z under the eye, glow scale, puddle cover
+    // Dave Hoskins' hash without sine: the same on every GPU at the map's coordinates.
+    "float RainHash(vec2 p)\n"
+    "{\n"
+    "    vec3 q = fract(vec3(p.xyx) * 0.1031);\n"
+    "    q += dot(q, q.yzx + 33.33);\n"
+    "    return fract((q.x + q.y) * q.z);\n"
+    "}\n"
+    "float RainNoise(vec2 p)\n"
+    "{\n"
+    "    vec2 i = floor(p), f = fract(p);\n"
+    "    f = f * f * (3.0 - 2.0 * f);\n"
+    "    return mix(mix(RainHash(i), RainHash(i + vec2(1.0, 0.0)), f.x), mix(RainHash(i + vec2(0.0, 1.0)), RainHash(i + vec2(1.0, 1.0)), f.x), f.y);\n"
+    "}\n"
+        // The wet glow round the lamps and neons at vWorld: a soft pool round the point under each, a little longer up
+    // and down the screen, only from lights just above. The ground and the sprites standing in it both take it.
+    "vec3 RainPools()\n"
+    "{\n"
+    "    vec3 g = vec3(0.0);\n"
+    "    for (int i = 0; i < uNumLights; i++)\n"
+    "    {\n"
+    "        vec3 L = uLightPos[i].xyz;\n"
+    "        float r = uLightPos[i].w;\n"
+    "        vec3 dl = vWorld - L;\n"
+    "        float dist = length(dl);\n"
+    "        if (dist >= r || uLightDir[i].w > 0.0) continue;\n"
+    "        float above = L.z - vWorld.z;\n"
+    "        float near = smoothstep(-0.3, 0.2, above) * (1.0 - smoothstep(1.2, 2.2, above));\n"
+    "        float rr = 0.6 + 0.1 * max(above, 0.0);\n"
+    "        float k = exp(-(dl.x * dl.x + dl.y * dl.y * 0.45) / (2.0 * rr * rr));\n"
+    "        g += uLightCol[i].rgb * near * ((r - dist) / r * 0.025 + k * 0.07);\n"
+    "    }\n"
+    "    return mix(g, vec3(dot(g, vec3(0.3, 0.5, 0.2))), 0.4) * uRainParams.y;\n"
+    "}\n"
+        // Puddles: a still mask in world space (two octaves of value noise, block coordinates), edges as wide as a
+    // pixel; and in them rings from the drops, each cell of a quarter block having one at its own place and time.
+    "float RainPuddle(vec2 w, float bias)\n"
+    "{\n"
+    "    vec2 warp = vec2(RainNoise(w * 2.3 + 3.0), RainNoise(w * 2.3 + 41.0)) - 0.5;\n"
+    "    float n = RainNoise(w * 1.35 + warp * 0.9) * 0.7 + RainNoise(w * 4.1 + 17.0) * 0.3;\n"
+    "    float th = 0.86 - 0.5 * clamp(uRainParams.z, 0.0, 1.0) + bias;\n"
+    "    float fw = max(fwidth(n), 1e-4);\n"
+    "    return uRainParams.z > 0.0 ? smoothstep(th - fw, th + fw, n) : 0.0;\n"
+    "}\n"
+    "float RainRings(vec2 w)\n"
+    "{\n"
+    "    vec2 g = w * 4.0;\n"
+    "    vec2 base = floor(g - 0.5);\n"
+    "    float ring = 0.0;\n"
+    "    for (int j = 0; j < 4; j++)\n"
+    "    {\n"
+    "        vec2 c = base + vec2(float(j & 1), float(j >> 1));\n"
+    "        vec2 at = c + 0.25 + 0.5 * vec2(RainHash(c), RainHash(c + 71.0));\n"
+    "        float life = fract(uRainCam.w * 0.9 + RainHash(c + 13.0));\n"
+    "        float d = length(g - at);\n"
+    "        float rad = 0.05 + 0.4 * life;\n"
+    "        ring += exp(-(d - rad) * (d - rad) / 0.0025) * (1.0 - life) * (1.0 - life);\n"
+    "    }\n"
+    "    return ring;\n"
+    "}\n"
+    "vec3 RainShade(vec3 col, vec3 tex, vec3 worldDx, vec3 worldDy, float alpha)\n"
+    "{\n"
+    "    vec3 n = cross(worldDx, worldDy);\n"
+    "    if (dot(n, n) < 1e-24) return col;\n"
+    "    float up = smoothstep(0.8, 0.98, abs(normalize(n).z));\n"
+    "    if (up <= 0.0) return col;\n"
+    // Grass and other green ground soaks the rain up: it does not mirror nor hold puddles; nor do the roofs.
+    "    float soak = smoothstep(0.015, 0.07, tex.g - max(tex.r, tex.b));\n"
+    "    float street = 1.0 - smoothstep(0.4, 0.9, vWorld.z - uRainParams.x);\n"
+    // Fewer on the light pavements than on the dark asphalt.
+    "    float puddle = RainPuddle(vWorld.xy, 0.12 * smoothstep(0.25, 0.5, dot(tex, vec3(0.3, 0.5, 0.2)))) * up * (1.0 - soak) * street;\n"
+    "    gWet = up * (0.6 + 0.4 * puddle) * (1.0 - 0.85 * soak);\n"
+    "    col *= 1.0 - up * (0.24 + 0.06 * puddle);\n"
+    "    float t = uRainCam.w;\n"
+    "    vec3 sheen = gSpots * 0.25 * uRainParams.y + RainPools();\n"
+    "    for (int i = 0; i < uNumLights; i++)\n"
+    "    {\n"
+    "        vec4 s = uLightDir[i];\n"
+    "        if (s.w <= 0.0) continue;\n"
+    "        vec3 L = uLightPos[i].xyz;\n"
+    "        float r = uLightPos[i].w;\n"
+    "        vec3 dl = vWorld - L;\n"
+    "        float above = L.z - vWorld.z;\n"
+    "        float near = smoothstep(-0.3, 0.2, above) * (1.0 - smoothstep(1.2, 2.2, above));\n"
+    // A headlight: a glossy streak on the road ahead along its beam, widening and fading out, rippled lengthways.
+    "        float along = dot(dl.xy, s.xy);\n"
+    "        float across = dot(dl.xy, vec2(-s.y, s.x));\n"
+    "        float wid = 0.05 + 0.16 * max(along, 0.0);\n"
+    "        float k = exp(-across * across / (2.0 * wid * wid)) * smoothstep(-0.05, 0.12, along) * (1.0 - smoothstep(0.25 * r, 0.75 * r, along));\n"
+    "        float wave = 0.75 + 0.5 * RainNoise(vec2(along * 6.0, across * 3.0 + float(i) * 7.3));\n"
+    "        sheen += uLightCol[i].rgb * near * k * wave * 0.7 * uRainParams.y;\n"
+    "    }\n"
+    "    if ((uRain & 8) != 0) return vec3(puddle, gWet * 0.5, 0.0);\n"
+    "    float gloss = 1.0 + puddle * (1.6 + 0.8 * RainRings(vWorld.xy));\n"
+    // Water mirrors the sky: a faint cool sheen even far from the lights.
+    "    vec3 sky = (vec3(0.009, 0.012, 0.018) + uAmbient / 255.0 * 0.04) * uRainParams.y;\n"
+    "    return col + (sheen * gloss + sky * puddle) * up * alpha;\n"
     "}\n"
     // The texture's alpha averaged over a square of that radius in texels; outside the texture is transparent.
     "float SoftAlpha(vec2 uv, float radius)\n"
@@ -254,6 +360,9 @@ const char* kSceneFS =
     "        c.rgb *= 1.0 - (1.0 - ao) * vAo;\n"
     "    }\n"
     "    oColor = t * c;\n"
+    "    if (uRain != 0 && uPerPixel != 0 && vLit > 1.1 && vLit < 1.4) oColor.rgb = RainShade(oColor.rgb, t.rgb, worldDx, worldDy, t.a);\n"
+    // A sprite standing in a lamp's wet glow is lit by it as the ground round it is.
+    "    else if ((uRain & 18) == 2 && uPerPixel != 0 && vLit > 0.9 && vLit < 1.1) oColor.rgb += RainPools() * t.rgb * vUnlit.rgb * 3.0 * t.a;\n"
     "    if (uAoDebug != 0 && vAo > 0.0) oColor.rgb = vec3(ao) * t.a;\n"
     "    if (uPerPixel != 0 && vLit > 0.5) oColor.rgb += min(gHaze, vec3(0.3)) * t.a;\n"
     "    oShadow = vec4(0.0, 0.0, 0.0, oColor.a);\n"
@@ -265,6 +374,7 @@ const char* kSceneFS =
     "        oColor.a = 0.0;\n"
     "    }\n"
     "    oBloom = uAdditive != 0 ? oColor : vec4(0.0, 0.0, 0.0, oColor.a);\n"
+    "    if ((uRain & 4) != 0 && uPerPixel != 0 && vLit > 1.1 && vLit < 1.4) oBloom.a = oColor.a * (1.0 - gWet);\n"
     "}\n";
 
 // Fullscreen triangle; also composites the CPU surface (alpha 0 where the game did not write).
@@ -569,6 +679,9 @@ bool GLRenderer::Init(GLFuncs::Loader loader, const char** ppError)
     mUniAoGrid = gl.glGetUniformLocation(mProgram, "uAoGrid");
     mUniAo = gl.glGetUniformLocation(mProgram, "uAo");
     mUniAoDebug = gl.glGetUniformLocation(mProgram, "uAoDebug");
+    mUniRain = gl.glGetUniformLocation(mProgram, "uRain");
+    mUniRainCam = gl.glGetUniformLocation(mProgram, "uRainCam");
+    mUniRainParams = gl.glGetUniformLocation(mProgram, "uRainParams");
     GLuint posts[4] = {mPresentProgram, mDownProgram, mBlurProgram, mComposeProgram};
     for (int i = 0; i < 4; i++)
     {
@@ -1213,6 +1326,19 @@ void GLRenderer::SetOcclusion(const u8* pCells, s32 width, s32 height, s32 depth
     BindTarget();
 }
 
+void GLRenderer::SetRain(u32 bits, f32 eyeX, f32 eyeY, f32 eyeZ, f32 time, f32 ground, f32 glow, f32 puddles)
+{
+    if (!mReady)
+    {
+        return;
+    }
+    Flush();
+    mRainBits = bits;
+    mRainCam[0] = eyeX, mRainCam[1] = eyeY, mRainCam[2] = eyeZ, mRainCam[3] = time;
+    mRainParams[0] = ground, mRainParams[1] = glow, mRainParams[2] = puddles;
+    mStateValid = false;
+}
+
 void GLRenderer::ApplyState(u32 state)
 {
     if (mStateValid && state == mAppliedState)
@@ -1250,6 +1376,9 @@ void GLRenderer::ApplyState(u32 state)
         gl.glUniform1f(mUniAo, mAoStrength);
         gl.glUniform1i(mUniAoDebug, sAoDebug && atoi(sAoDebug) ? 1 : 0);
         gl.glUniform3f(mUniAoGrid, (f32)mAoGrid[0], (f32)mAoGrid[1], (f32)mAoGrid[2]);
+        gl.glUniform1i(mUniRain, (GLint)mRainBits);
+        gl.glUniform4f(mUniRainCam, mRainCam[0], mRainCam[1], mRainCam[2], mRainCam[3]);
+        gl.glUniform4f(mUniRainParams, mRainParams[0], mRainParams[1], mRainParams[2], mRainParams[3]);
     }
     gl.glBindSampler(0, (state & kStateMipmap) ? mSamplerMip : (state & RS_FILTER_LINEAR) ? mSamplerLinear : mSamplerNearest);
     if (state & RS_PIXEL_EXACT)

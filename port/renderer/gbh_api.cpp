@@ -76,6 +76,9 @@ struct LightInternal
 IRenderer* gRenderer;
 // The heat of the quads being drawn (port_HeatLevel): above 0, flames that go into HEAT HAZE's heat mask.
 f32 gHeatLevel;
+// RAIN PoC: the draw is a map tile, and the wet ground is on.
+bool gTileDraw;
+bool gRainWet;
 SGlobals gGlobals;
 PalEntry* gPals[16384];
 std::vector<ImageEntry> gImages;
@@ -757,7 +760,7 @@ void RenderVerts(u32 flags, STexture* pTexture, Vert* pVerts, s32 count, u32 bas
         {
             rv[i].unlit = ArgbToRgba(unlit[i]);
             rv[i].shade = shade / 255.0f;
-            rv[i].lit = (flags & FLAG_TINTED) ? 2.0f : 1.0f;
+            rv[i].lit = (flags & FLAG_TINTED) ? 2.0f : gTileDraw && gRainWet ? 1.25f : 1.0f;
         }
         else
         {
@@ -1245,6 +1248,24 @@ void port_Haze(f32 texel, f32 worldX, f32 worldY, f32 time, f32 amplitude, f32 r
     }
 }
 
+// RAIN PoC (port/src/rain.cpp): bit 2 wet ground, bit 4 reflections; the camera's eye in blocks.
+void port_RainScene(u32 bits, f32 eyeX, f32 eyeY, f32 eyeZ, f32 time, f32 ground, f32 glow, f32 puddles)
+{
+    gRainWet = (bits & 2) != 0;
+    if (gRenderer)
+    {
+        gRenderer->SetRain(bits, eyeX, eyeY, eyeZ, time, ground, glow, puddles);
+    }
+}
+
+void port_RainReflect(f32 time)
+{
+    if (gRenderer)
+    {
+        gRenderer->DrawRainReflect(time);
+    }
+}
+
 // TWIN STICK's reticle (port/src/twin_stick.cpp): an aged bronze ring round a red lamp, shaded as the HUD's sprites
 // (lit from the top left), size pixels wide at (x, y).
 void port_DrawReticle(f32 x, f32 y, f32 size, f32 alpha)
@@ -1356,7 +1377,7 @@ void port_FreePictures()
 namespace
 {
 // The port's particle textures (port/src/fire_smoke.cpp), by slot.
-const s32 kNumParticleTextures = 2;
+const s32 kNumParticleTextures = 4;
 RTexture* gParticleTextures[kNumParticleTextures];
 u32 gParticleVersions[kNumParticleTextures];
 IRenderer* gParticleTexturesOwner;
@@ -1508,7 +1529,9 @@ static s32 DrawTileImpl(u32 flags, STexture* pTexture, Vert* pData, s32 diffuseC
         }
     }
 
+    gTileDraw = true;
     RenderVerts(drawFlags, pTexture, pData, 4, (u32)diffuseColour & 0xFF);
+    gTileDraw = false;
     return 0;
 }
 

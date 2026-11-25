@@ -44,3 +44,19 @@ void ScreenToGround(f32 x, f32 y, f32 z, f32* pX, f32* pY)
     *pY = sProj.mY + (y - sProj.mCy) * d / sProj.mScale;
 }
 } // namespace PortView
+
+namespace PortView
+{
+void Eye(f32* pX, f32* pY, f32* pZ)
+{
+    *pX = sProj.mX;
+    *pY = sProj.mY;
+    *pZ = sProj.mZ + 8.0f;
+}
+
+void ScreenSize(f32* pW, f32* pH)
+{
+    *pW = 2.0f * sProj.mCx;
+    *pH = 2.0f * sProj.mCy;
+}
+} // namespace PortView
