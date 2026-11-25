@@ -68,6 +68,31 @@ std::string ListenerCamera()
     }
     return c ? "another camera" : "no camera";
 }
+// The audio entities in the order the sound processes them, by kind; muted (their object's mbStatus: skipped) and
+// broken ones (unused, no object, an unknown kind) can't ask for anything
+std::string Entities()
+{
+    const sound_obj& s = gSound_obj;
+    u32 spr = 0, wpn = 0, other = 0, muted = 0, broken = 0;
+    for (u32 j = 0; j < s.m444CNAudioEntitiesCount && j < 1020; j++)
+    {
+        const u32 idx = s.mAudioEntityOrderList[j];
+        const SoundObject* o = idx < 1020 && s.mAudioEntities[idx].mbUsed ? s.mAudioEntities[idx].mpObj : NULL;
+        const s32 t = o ? o->mObjectType : 0;
+        if (!o || t < SoundObjectTypeEnum::Sprite_1 || t > SoundObjectTypeEnum::Hud_Pager_C_11)
+        {
+            broken++;
+            continue;
+        }
+        muted += o->mbStatus;
+        spr += t == SoundObjectTypeEnum::Sprite_1;
+        wpn += t == SoundObjectTypeEnum::Weapon_30_7;
+        other += t != SoundObjectTypeEnum::Sprite_1 && t != SoundObjectTypeEnum::Weapon_30_7;
+    }
+    char buf[128];
+    snprintf(buf, sizeof(buf), "%u (spr %u wpn %u oth %u, muted %u, broken %u)", s.m444CNAudioEntitiesCount, spr, wpn, other, muted, broken);
+    return buf;
+}
 } // namespace
 
 void net::engine::PrintSoundDiag(const char* when)
@@ -109,7 +134,7 @@ void net::engine::PrintSoundDiag(const char* when)
     PortMixerStats m;
     port_MixerStats(&m);
     printf("net: %s, sound: asked %s live, %s resim; unheard full %u/%u far %u/%u vol0 %u/%u; started %u (refused %u bad %u rate0 %u), "
-           "busy <=%u of %u; %u frames (paused %u, no listener %u); entities %u (+%u -%u, full %u, 2nd camera %u); on %d svc %d 3d %d "
+           "busy <=%u of %u; %u frames (paused %u, no listener %u); entities %s (+%u -%u, full %u, 2nd camera %u); on %d svc %d 3d %d "
            "vol %u, bank %s %s %d; listener %.1f,%.1f player %.1f,%.1f (%.1f) camera %s (local p%d); mixer %s %s%s: %u callbacks, "
            "%u starts (%u empty), voices <=%u, streams %u, peak %.2f\n",
            when,
@@ -130,7 +155,7 @@ void net::engine::PrintSoundDiag(const char* when)
            st.frames,
            st.pausedFrames,
            st.noListenerFrames,
-           s.m444CNAudioEntitiesCount,
+           Entities().c_str(),
            st.entityAdds,
            st.entityFrees,
            st.addFails,
