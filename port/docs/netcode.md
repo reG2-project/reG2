@@ -829,6 +829,17 @@ under 5 s apart, and the rammer, which doesn't fight on foot, got out to shoot a
 12 seeds on downtown and Tiny Town, frags went from 11.9 to 17.9 a match. Over 20 seeds on the three maps: frags 594 to
 754, fistfight time 61, 27, 12 to 18, 17, 14 s per 5 minutes (simple, hunter, soldier), the hunter armed 112 to 208 s and
 in a car near someone on foot 35 to 2 s; against rammers the simple bot's dodge took their frags from 265 to 162.
+A fighter fires only with a clear shot: no car between it and the target along the shot's line (the target's own car
+aside; with rockets, a car by the target counts as clear, its blast reaches it), and no wall (walkable in a straight
+line). With a car in the way it steps 1 to 3 blocks aside, round the car's nearer end, to a spot it can walk to and
+shoot clear from, else walks on at the target, the walker going round the car. A car on fire from `Car::mDamage` 25000
+(the game's big fire, `mDamageLevel` 4, where its own drivers get out; its small fire from 16000 burns 1 a tick and
+lasts minutes) makes the rammer, the hunter and the soldier get out before anything else, the 10 s commitment
+included, and walk 2 s away from it until 4 blocks off; cars on fire and wrecks are not chosen to get into. The meter's
+line `shots blocked by a car C s by a wall W s of A s aimed deaths in a car D in a burning car B s` counts fire held on
+foot at the nearest player within 30 degrees and 12 blocks of where it faces, and of that with a car or a wall in the
+way. Over 32 seeds on mp1 and downtown, with and without `--kit smg`: aimed fire blocked by a car 14..31% to 0, deaths
+in a car 529 to 98, frags 2869 to 3099.
 A bot client still takes the keyboard's key events (Escape and the pause menu, the chat), so `GTA2_INPUT` can press
 them in a test.
 
