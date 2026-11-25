@@ -133,6 +133,11 @@ void net::engine::GuardPhases(Ped* ped)
     {
         c->mTimer = 99;
     }
+    // A player lying at 0 health dies as it gets up (Char::UpdateImmobilized): down until the server's death, not up ahead of it
+    if (InPhase(ped, ped_state_2::lying_on_floor_22) && c->mLyingOnFloorTimer < 2 && PlayerDyingThere(ped))
+    {
+        c->mLyingOnFloorTimer = 2;
+    }
 }
 
 void net::engine::ApplyPhases(Ped* ped, const EntityState& e, int base, bool deadThere, Car* seat)

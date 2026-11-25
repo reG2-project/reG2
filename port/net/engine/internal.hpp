@@ -333,7 +333,7 @@ int32_t PhaseTimer(const int32_t* f); // a phase record's timer, at most its pha
 void CapturePhases(const Ped* ped, EntityState& e, int base);
 void ApplyPhases(Ped* ped, const EntityState& e, int base, bool deadThere, Car* seat);
 void CancelPhase(Ped* ped); // on its feet, walking
-// Before each tick on a client, every ped: thrown, sinking or electrocuted to death only by KillNow
+// Before each tick on a client, every ped: thrown, sinking, electrocuted or lying to death only by KillNow
 void GuardPhases(Ped* ped);
 // Its throw's object while thrown (NULL: not thrown), moved across by as much as the ped's shown place (the blend; not in
 // height: below its floor it would fall through)
@@ -345,6 +345,7 @@ void GuardThrow(Ped* ped);
 // gPortPedMayDie on a client: only the server's death (KillNow), or one in a car; another is held, the ped knocked down
 // (an ambient ped shown dead, ShowDeath)
 bool ClientPedMayDie(Ped* ped);
+bool PlayerDyingThere(const Ped* ped); // a player the newest snapshot has at 0 health: dying or dead there
 bool ClientPedMayFire(Ped* ped);
 int ShownDeathAge(const Ped* ped); // ticks since an ambient ped was shown dead here, -1: not shown dead
 void ForgetShownDeath(const Ped* ped);

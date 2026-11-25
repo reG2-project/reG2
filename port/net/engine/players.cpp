@@ -48,6 +48,7 @@ uint8_t gDeaths[MAX_PLAYERS];
 uint8_t gDeathEvents[MAX_PLAYERS];
 uint8_t gKiller[MAX_PLAYERS];
 bool gWasDead[MAX_PLAYERS];
+bool gDyingThere[MAX_PLAYERS]; // the newest snapshot's health is 0: dying (as it gets up, if lying) or dead there
 // A client's: the deaths it has carried out, by the server's game count, and whether it has seen the player yet (it
 // takes the count as it finds it the first time: a joiner doesn't carry out the deaths before it came), in the
 // rollback set
@@ -609,6 +610,7 @@ bool net::engine::ApplyPlayer(const EntityState& e)
             gBonusSeen = count;
         }
     }
+    gDyingThere[i] = e.f[kPlayerHealth] <= 0;
     // First: a death carried out on a thrown ped takes at its landing, as the server's
     ApplyPhases(ped, e, kPlayerPhase, (e.f[kPlayerState] & kPlayerDead) != 0, e.f[kPlayerInCar] ? RefCar(e.f[kPlayerCar]) : NULL);
     if (CarryOutDeath(i, p, ped, e))
@@ -1008,12 +1010,19 @@ std::string net::engine::PlayerName(int slot)
     return p ? NarrowName(p) : std::string();
 }
 
+bool net::engine::PlayerDyingThere(const Ped* ped)
+{
+    const int i = ped->mPlayer ? ped->mPlayer->mPlayerIdx : -1;
+    return i >= 0 && i < MAX_PLAYERS && gDyingThere[i];
+}
+
 void net::engine::ResetDeaths(int slot)
 {
     if (slot >= 0 && slot < MAX_PLAYERS)
     {
         gDeaths[slot] = 0;
         gKiller[slot] = 0;
+        gDyingThere[slot] = false;
     }
 }
 
