@@ -26,7 +26,7 @@ Uint64 sResizedAt; // the canvas changed size; its new resolution applies once i
 } // namespace
 
 // The page mounts the game's data and the player's files at /reG2 before main.
-bool port_PrepareGameFolder(bool)
+bool port_PrepareGameFolder(bool, bool, const char*)
 {
     // SDL's own yields (in SDL_Delay and the swap) would need Asyncify on every stack that reaches them.
     SDL_SetHint(SDL_HINT_EMSCRIPTEN_ASYNCIFY, "0");
