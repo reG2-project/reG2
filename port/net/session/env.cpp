@@ -53,6 +53,7 @@ const net::SessionEnv& net::Env()
         e.replayOn = getenv("GTA2_NET_REPLAYON") ? atoi(getenv("GTA2_NET_REPLAYON")) : 0;
         e.say = getenv("GTA2_NET_SAY");
         e.botVoteMap2 = getenv("GTA2_NET_BOTMAP2") != NULL;
+        e.botVoteMap = e.botVoteMap2 && atoi(getenv("GTA2_NET_BOTMAP2")) > 2 ? atoi(getenv("GTA2_NET_BOTMAP2")) : 2;
         e.scoreboard = getenv("GTA2_NET_SCOREBOARD") && !strcmp(getenv("GTA2_NET_SCOREBOARD"), "1");
         e.testWanted = getenv("GTA2_NET_TESTWANTED");
         e.fuzz = 0, e.fuzzRate = 20;

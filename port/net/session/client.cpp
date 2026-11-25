@@ -1986,7 +1986,7 @@ void net::Client::BotRound()
     }
     else if (Env().botVoteMap2 && r.phase == kPhaseResults && !mMaps.empty() && mSlot < kRoundSlots && !r.mapChoice[mSlot])
     {
-        SendCommand("/map " + std::to_string(mMaps.size() > 1 ? 2 : 1));
+        SendCommand("/map " + std::to_string((int)mMaps.size() >= Env().botVoteMap ? Env().botVoteMap : 1));
     }
     else if (Env().botVoteMap2 && r.voteKind != kVoteNone && mSlot < kRoundSlots && !((r.voteYes | r.voteNo) >> mSlot & 1))
     {
