@@ -70,6 +70,8 @@ class Arena
         uint32_t idleTicks = 0, idleRun = 0, longestIdle = 0, firingInWindow = 0, retreatTicks = 0, lastRetreat = 0;
         int turnbacks = 0, fleeFrom = -1, retreatFrom = -1;
         float fleeX = 0, fleeY = 0, fleeOx = 0, fleeOy = 0;
+        int windowRot = 0;
+        bool windowTurned = false;
     };
     void Meter(Bot& bot, const Bot::Body& me, float carDist);
     void MeterRetreat(Bot& bot, const Bot::Body& me, const std::vector<Bot::Body>& bodies, int self);

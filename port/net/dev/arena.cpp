@@ -373,9 +373,11 @@ void net::Arena::Meter(Bot& bot, const Bot::Body& me, float carDist)
     {
         bot.windowOpen = true;
         bot.windowFrom = mTicks, bot.pushing = 0, bot.firingInWindow = 0, bot.windowInCar = inCar, bot.windowX = me.x, bot.windowY = me.y;
+        bot.windowRot = me.rot, bot.windowTurned = false;
     }
     bot.pushing += (bot.buttons & (inCar ? kBtnForward | kBtnBack : kBtnForward)) != 0;
     bot.firingInWindow += (bot.buttons & kBtnAttack) != 0;
+    bot.windowTurned |= (bot.buttons & (kBtnLeft | kBtnRight)) != 0;
     const uint32_t length = inCar ? 60 : 45;
     if (mTicks - bot.windowFrom + 1 < length)
     {
@@ -387,7 +389,9 @@ void net::Arena::Meter(Bot& bot, const Bot::Body& me, float carDist)
     bot.carStuckFootTicks += stuck && !inCar && carDist < 1.5f ? length : 0;
     bot.stuckRun = stuck ? bot.stuckRun + length : 0;
     bot.longestStuck = bot.stuckRun > bot.longestStuck ? bot.stuckRun : bot.longestStuck;
-    const bool idle = bot.pushing * 2 < length && bot.firingInWindow * 2 < length &&
+    // Turning without the body turning or moving at all: the game holds it (a player just respawned)
+    const bool held = bot.windowTurned && me.rot == bot.windowRot && me.x == bot.windowX && me.y == bot.windowY;
+    const bool idle = bot.pushing * 2 < length && bot.firingInWindow * 2 < length && !held &&
                       hypotf(me.x - bot.windowX, me.y - bot.windowY) < (inCar ? 0.5f : 0.3f);
     bot.idleTicks += idle ? length : 0;
     bot.idleRun = idle ? bot.idleRun + length : 0;
