@@ -1006,10 +1006,13 @@ off by default:
 | `GTA2_NET_SFXLOG=1` (client), `=<slot>` (server) | both | every sample the mixer starts, by tick, what made it and where; a server with it opens its audio device and listens at that slot's player (to count what a client misses or plays twice) |
 | `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death (and the cars around its view, its camera) and the server's hits on players, the sound's channels and the car radio |
 | `GTA2_NET_CARDIFF=1` | client | where the prediction of the local player's car differs from the snapshot |
+| `GTA2_NET_HITLOG=1` | both | every tick, each player in a car: its place (`DRIVE`); on a client also each impact of the local player's car on a ped as it happens (`CARHIT`, live ticks only) |
+| `GTA2_NET_FWDLOG=1` | client | at each snapshot, every other player's controls the server forwarded for the ticks after it (`FWD`): what it pressed, for the ticks the client guessed |
+| `GTA2_NET_FRAMELOG=1` | client | each frame: the time since the last one, its step's, its reconciliation's and the ticks resimulated (`FRAME`) |
 | `GTA2_NET_GANGLOG=1` | both | player 0's group every 15 ticks, by the server's ids |
 | `GTA2_NET_STACKLOG=1` | both | two cars in one place (under 0.4 blocks apart), once per pair: a car the client kept that the server dropped |
 | `GTA2_NET_PICKUPLOG=1` | client | pickups made and removed |
-| `GTA2_NET_THROWLOG=1` | both | every tick, the players thrown, knocked down, dead or on fire (their states, the throw's object and motion) and the explosions just made |
+| `GTA2_NET_THROWLOG=1` | both | every tick, the players thrown, knocked down, dead or on fire (their states, the throw's object and motion, the player the game blames: `by p<slot>`) and the explosions just made |
 | `GTA2_NET_SHOTLOG=1` | both | every tick, the shots by key (model, blast type and timer, owner, place); on a client each shot made, removed or beyond the reach at a snapshot, and each other player's shot slid or flashed (`SHOTVIS`, by the frame GTA2GL_CAPTURE numbers) |
 | `GTA2_NET_PEDLOG=<player>` | both | the peds within 12 blocks of that player, their states and phase: every tick, and on a client also as each snapshot's apply left them |
 | `GTA2_NET_FIRELOG=1` | both | every fire at every 30th tick of the game's cycle: a car's (its id, wrecked or not, its fire's explosion types), the ones on nothing by place, the peds on fire |

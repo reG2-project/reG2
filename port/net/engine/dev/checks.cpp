@@ -1163,6 +1163,28 @@ void net::engine::PoseLog(bool server)
     }
 }
 
+void net::engine::DriveLog(bool server)
+{
+    static const bool on = getenv("GTA2_NET_HITLOG") != NULL;
+    static uint32_t sLast;
+    const uint32_t tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+    if (!on || tick == sLast)
+    {
+        return;
+    }
+    sLast = tick;
+    for (int i = 0; i < PlayerCount(); i++)
+    {
+        Ped* ped = InGamePed(i);
+        Sprite* s = ped && ped->mCar ? PedSprite(ped) : NULL;
+        if (s)
+        {
+            printf("net: DRIVE %s tick %u: p%d at (%.3f, %.3f) rot %d\n", server ? "server" : "client", tick, i, s->mXy.x.ToFloat(),
+                   s->mXy.y.ToFloat(), (int)s->mRotation.rValue);
+        }
+    }
+}
+
 void net::engine::ThrowLog(bool server, uint32_t snap)
 {
     static const bool on = getenv("GTA2_NET_THROWLOG") != NULL;
@@ -1184,15 +1206,20 @@ void net::engine::ThrowLog(bool server, uint32_t snap)
             continue;
         }
         const Object* o = ped->mpObj2C;
+        int killer = -1;
+        for (int j = 0; j < PlayerCount() && ped->mKillerIdTimer > 0; j++)
+        {
+            killer = InGamePed(j) && InGamePed(j)->mId == ped->mKillerId ? j : killer;
+        }
         printf("net: THROW %s tick %u: p%d at (%.2f, %.2f, %.2f) ped %d/%d stored %d/%d char %d/%d anim %d health %d inv %d fire %d "
-               "cause %d obj %s(%.2f, %.2f, %.2f) speed %.3f z %.3f timeout %d snap %u\n",
+               "cause %d obj %s(%.2f, %.2f, %.2f) speed %.3f z %.3f timeout %d snap %u by p%d\n",
                end, tick, i, s->mXy.x.ToFloat(), s->mXy.y.ToFloat(), s->mZpos.ToFloat(), (int)ped->mPedState1, (int)ped->mPedState2,
                (int)ped->mStoredPedState1, (int)ped->mStoredPedState2, c ? (int)c->mPedState1 : -1, c ? (int)c->mPedState2 : -1,
                c ? (int)c->mAnimationState : -1, (int)ped->mHealth, (int)ped->mInvulnerability, (int)ped->mBf21C.bOnFire,
                (int)ped->mDeathCause, o ? "" : "none ", o && o->mSprite ? o->mSprite->mXy.x.ToFloat() : 0.0f,
                o && o->mSprite ? o->mSprite->mXy.y.ToFloat() : 0.0f, o && o->mSprite ? o->mSprite->mZpos.ToFloat() : 0.0f,
                o && o->mObj3c ? o->mObj3c->mSpeed.ToFloat() : 0.0f, o && o->mObj3c ? o->mObj3c->mZSpeed.ToFloat() : 0.0f,
-               c ? (int)c->mTimeout : -1, server ? tick : snap);
+               c ? (int)c->mTimeout : -1, server ? tick : snap, killer);
     }
     for (int pool = 0; pool < 2; pool++)
     {

@@ -514,6 +514,15 @@ void net::Client::TakePlayerStates(const Snapshot& snap)
         const uint32_t last = n ? mKnown.controls[player][n - 1] : buttons;
         const uint32_t before = n > 1 ? mKnown.controls[player][n - 2] : n ? buttons & 0xFFF : mRemoteSeen[player];
         mRemote[player] = (last & ~turn) | (last & before & turn);
+        if (Env().fwdLog && player != mSlot)
+        {
+            printf("net: FWD snap %u at %u p%d buttons 0x%x n %d:", snap.tick, mTick, player, buttons, n);
+            for (int i = 0; i < n; i++)
+            {
+                printf(" 0x%x", mKnown.controls[player][i]);
+            }
+            printf("\n");
+        }
         mRemoteSeen[player] = buttons;
         if (player == mSlot)
         {
@@ -1491,7 +1500,22 @@ void net::Client::LeaveToMenu(const char* why)
 
 void net::Client::Frame()
 {
+    using Clock = std::chrono::steady_clock;
+    static Clock::time_point sLast;
+    const Clock::time_point start = Clock::now();
+    const double reconcileUs = mStats.restoreUs + mStats.resimUs + mStats.saveUs;
+    const uint32_t resimTicks = mStats.resimTicks;
     Step();
+    if (Env().frameLog)
+    {
+        const auto us = [](Clock::time_point a, Clock::time_point b) {
+            return (long)std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
+        };
+        printf("net: FRAME %u tick %u cycle %u: since the last %ld us, step %ld us, reconcile %.0f us, %u ticks resimulated\n", mFrame, mTick,
+               engine::GameCycle(), us(sLast, start), us(start, Clock::now()), mStats.restoreUs + mStats.resimUs + mStats.saveUs - reconcileUs,
+               mStats.resimTicks - resimTicks);
+        sLast = start;
+    }
     engine::GuardPeds(); // again: the snapshot this frame applied comes before the next tick
     engine::GuardFatalPhases(); // a fatal throw of the frame's last tick is drawn knocked down
     engine::AnchorAttachments(); // the frame is drawn next

@@ -12,6 +12,8 @@ struct SessionEnv
     const char* dumpWorld; // GTA2_NET_DUMPWORLD=<tick>[,<tick>...]: a server prints its world's entities at those ticks
     bool marker; // the server's position of the local player drawn
     bool corrLog, animLog, inputLog;
+    bool fwdLog; // GTA2_NET_FWDLOG: at each snapshot, the other players' controls the server forwarded
+    bool frameLog; // GTA2_NET_FRAMELOG: each frame's time, its step's and its reconciliation's
     bool compare; // the comparison check: the prediction against each snapshot, field by field
     bool stats; // GTA2_NET_STATS: a client shows its loss, snapshot rate, lead and resimulation with the ping
     bool snapCheck; // GTA2_NET_SNAPCHECK: the server adds each entity's hash to its snapshots, a client checks them

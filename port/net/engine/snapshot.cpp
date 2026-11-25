@@ -169,6 +169,11 @@ bool net::engine::GameRunning()
     return gGame_0x40 && gGame_0x40->mNumPlayers > 0;
 }
 
+uint32_t net::engine::GameCycle()
+{
+    return gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+}
+
 int net::engine::PlayerCount()
 {
     return gGame_0x40 ? gGame_0x40->mNumPlayers : 0;

@@ -190,6 +190,7 @@ void net::ClientProbe::FrameEnd()
     engine::FireLog(false);
     engine::PoseLog(false);
     engine::ThrowLog(false, mLastSnap);
+    engine::DriveLog(false);
     engine::ShotLog(false);
     engine::PedLog("client");
     engine::InstallSpriteCheck();

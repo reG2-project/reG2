@@ -141,6 +141,7 @@ void net::ServerProbe::Captured(uint32_t tick, const Snapshot& world)
     engine::FireLog(true);
     engine::PoseLog(true);
     engine::ThrowLog(true, 0);
+    engine::DriveLog(true);
     engine::ShotLog(true);
     engine::PedLog("server");
     if (Env().snapCheck)

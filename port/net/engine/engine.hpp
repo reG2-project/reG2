@@ -32,6 +32,7 @@ typedef void (*FrameHook)(void* user);
 void SetFrameHook(FrameHook hook, void* user);
 bool GameRunning(); // a game with its players exists
 int PlayerCount();
+uint32_t GameCycle(); // the game's tick count (Rng::get_cur_rng), which each map starts anew
 uint32_t LocalInput(); // what this machine's controls give for the next tick
 void SetPlayerInput(int player, uint32_t buttons); // for the next tick
 // A client's: whether another player's fire in the next tick is our guess (its pose shows, its weapon is not used)

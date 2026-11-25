@@ -10,6 +10,7 @@
 #include "Source/Game.hpp"
 #include "Source/Object_5C.hpp"
 #include "Source/Ped.hpp"
+#include "Source/Player.hpp"
 #include "Source/SoundObject.hpp"
 #include "Source/char.hpp"
 #include "Source/rng.hpp"
@@ -252,6 +253,14 @@ bool ImpactHeard(Sprite* a, Sprite* b)
         return true;
     }
     const Player* self = gGame_0x40->mLocalPlayer;
+    static const bool sHitLog = getenv("GTA2_NET_HITLOG") != NULL;
+    if (sHitLog && car->mDriver && car->mDriver->mPlayer == self)
+    {
+        const Sprite* s = c->mSpritePtr;
+        printf("net: CARHIT tick %u: ped %d player %d state %d/%d health %d at (%.2f, %.2f)\n", Tick(), (int)c->mpPed->mId,
+               c->mpPed->mPlayer ? (int)c->mpPed->mPlayer->mPlayerIdx : -1, (int)c->mpPed->mPedState1, (int)c->mpPed->mPedState2,
+               (int)c->mpPed->mHealth, s ? s->mXy.x.ToFloat() : 0.0f, s ? s->mXy.y.ToFloat() : 0.0f);
+    }
     auto other = [self](const Ped* p) { return p && p->mPlayer && p->mPlayer != self; };
     return !other(c->mpPed) && !other(car->mDriver);
 }
