@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 namespace
 {
@@ -1041,6 +1042,22 @@ std::unique_ptr<net::BotBrain> net::CreateBotBrain(const std::string& kind)
     return nullptr;
 }
 
+int net::CarDamage(const EntityState& e)
+{
+    static const int sField = [] {
+        const std::vector<FieldDesc>& fields = engine::NetSchema().types[engine::kEntityCar].fields;
+        for (size_t i = 0; i < fields.size(); i++)
+        {
+            if (!strcmp(fields[i].name, "damage"))
+            {
+                return (int)i;
+            }
+        }
+        return -1;
+    }();
+    return e.type == engine::kEntityCar && sField >= 0 && sField < kMaxFields ? e.f[sField] : 0;
+}
+
 void net::FillBotView(BotView& view, const Snapshot& snap, int self, uint32_t frame, const engine::NavMap* map)
 {
     view.frame = frame;
@@ -1065,6 +1082,7 @@ void net::FillBotView(BotView& view, const Snapshot& snap, int self, uint32_t fr
         s.health = 0;
         s.inCar = false;
         s.held = -1;
+        s.damage = CarDamage(e);
         s.model = e.type == engine::kEntityObject ? engine::PickupModel(e) : engine::CarModel(e);
         if (e.type != engine::kEntityCar || !engine::CarSize(s.model, &s.width, &s.length))
         {

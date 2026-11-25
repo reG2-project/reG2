@@ -65,6 +65,7 @@ struct BotView
         int model; // for kCar: its model (car_model_enum: 11 a bus, 54 the tank, 59..61 and 6 a train's); for kPickup: its object model (a weapon: 200 + weapon)
         int held; // for kPlayer: the weapon in hand, -1 fists
         float width, length; // for kCar: its size in blocks, across and along where it faces
+        int damage; // for kCar: Car::mDamage (kCarOnFire and up: on fire, over 32000: a wreck)
     };
     std::vector<Seen> seen; // what the client's snapshot has, others only
     const engine::NavMap* map = nullptr;
@@ -180,6 +181,11 @@ const int kBotGroupSize[kBotGroups] = {3, 3, 2, 2, 2, 2};
 const int kBotLogits = 14;
 uint32_t BotButtons(const int* choice);
 
+// Car::mDamage of a car on fire, about to blow up (Car::AccumulateDamage's big fire, mDamageLevel 4: the game's drivers
+// get out from there; its small fire from 16000 burns 1 a tick)
+const int kCarOnFire = 25000;
+int CarDamage(const EntityState& e); // a car entity's Car::mDamage, 0 for others (bot.cpp)
+
 // The view a client gives its bot (bot.cpp)
 void FillBotView(BotView& view, const Snapshot& snap, int self, uint32_t frame, const engine::NavMap* map);
 
@@ -194,4 +200,6 @@ void LabelNavParts(engine::NavMap& map);
 int NavCell(const engine::NavMap& map, float x, float y, float z);
 // Walkable in a straight line from (x0, y0) to (x1, y1), with room for a body on either side
 bool NavClear(const engine::NavMap& map, float x0, float y0, float x1, float y1);
+// The first car a shot from (x, y) at the bot's level to <target> would hit (the target's own car aside); NULL if none
+const BotView::Seen* ShotBlocker(const BotView& v, float x, float y, const BotView::Seen& target);
 } // namespace net

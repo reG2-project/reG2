@@ -168,6 +168,7 @@ void net::Arena::Think(const Snapshot& world, uint32_t tick)
         if (bot.brain)
         {
             bot.buttons = bot.brain->Think(mView);
+            MeterFire(bot);
         }
         else if (tick % kBotDecisionTicks == 0)
         {
@@ -243,11 +244,13 @@ void net::Arena::Score(const Snapshot& world)
 {
     std::vector<Bot::Body> bodies(mBots.size());
     std::vector<float> cars;
+    std::vector<std::pair<uint32_t, int>> damage; // each car's id and Car::mDamage
     for (const EntityState& e : world.entities)
     {
         if (e.type == engine::kEntityCar)
         {
             cars.push_back(engine::Blocks(e.f[0])), cars.push_back(engine::Blocks(e.f[1]));
+            damage.push_back(std::make_pair(e.id, CarDamage(e)));
         }
         int p = 0;
         uint32_t b = 0;
@@ -321,6 +324,7 @@ void net::Arena::Score(const Snapshot& world)
             bot.reward += kFragReward * frags + kDeathReward * deaths;
             bot.reward += me.car || bot.last.car ? kCarFragReward * frags : 0;
             bot.frags += frags, bot.deaths += deaths;
+            bot.carDeaths += deaths > 0 && (me.car || bot.last.car) ? deaths : 0;
             bot.droveThisLife &= deaths == 0;
             if (me.car && !bot.droveThisLife)
             {
@@ -357,6 +361,10 @@ void net::Arena::Score(const Snapshot& world)
             const bool unarmedOnFoot = !me.guns && !me.car;
             bot.carPunchTicks += unarmedOnFoot && (bot.buttons & kBtnAttack) && carDist < 1.2f;
             bot.fistAtCarTicks += unarmedOnFoot && nearestInCar < 1.5f;
+            for (const std::pair<uint32_t, int>& c : damage)
+            {
+                bot.burningCarTicks += me.car && c.first == me.car && c.second >= kCarOnFire;
+            }
         }
         Meter(bot, me, carDist);
         MeterRetreat(bot, me, bodies, (int)i);
@@ -364,6 +372,42 @@ void net::Arena::Score(const Snapshot& world)
         bot.last.nearest = nearest;
     }
     mTicks++;
+}
+
+// Fire held on foot with a gun at the nearest player within 30 degrees of its facing and 12 blocks: blocked by a car,
+// or by a wall (not walkable in a straight line)
+void net::Arena::MeterFire(Bot& bot)
+{
+    const BotView& v = mView;
+    if (!(bot.buttons & kBtnAttack) || !v.hasBody || v.health <= 0 || v.car || v.weapon < 0 || v.weapon == 4 || v.weapon == 5 || mTicks == 0)
+    {
+        return;
+    }
+    const BotView::Seen* target = NULL;
+    float nearest = 12;
+    for (const BotView::Seen& s : v.seen)
+    {
+        const float dx = s.x - v.x, dy = s.y - v.y, d = hypotf(dx, dy);
+        int err = (int)(atan2f(dx, dy) * 720.0f / 3.14159265f) - v.rot;
+        err = ((err % 1440) + 2160) % 1440 - 720;
+        if (s.kind == BotView::Seen::kPlayer && s.health > 0 && d < nearest && abs(err) < 120)
+        {
+            nearest = d, target = &s;
+        }
+    }
+    if (!target)
+    {
+        return;
+    }
+    bot.aimedFireTicks++;
+    if (ShotBlocker(v, v.x, v.y, *target))
+    {
+        bot.carBlockedTicks++;
+    }
+    else if (v.map && !NavClear(*v.map, v.x, v.y, target->x, target->y))
+    {
+        bot.wallBlockedTicks++;
+    }
 }
 
 // Stuck: alive through a window, pressing on (forward, or back in a car) for most of it, and under 0.3 blocks (on foot)
@@ -472,6 +516,9 @@ void net::Arena::Finish(const Snapshot& world)
                    bot.farThrows);
             printf("net: arena %d %s car switches under 5 s %d fire presses %d held %.1f s\n", p, bot.kind.c_str(), bot.quickSwitches,
                    bot.firePresses, bot.fireTicks / 30.0);
+            printf("net: arena %d %s shots blocked by a car %.1f s by a wall %.1f s of %.1f s aimed deaths in a car %d in a burning car %.1f s\n", p,
+                   bot.kind.c_str(), bot.carBlockedTicks / 30.0, bot.wallBlockedTicks / 30.0, bot.aimedFireTicks / 30.0, bot.carDeaths,
+                   bot.burningCarTicks / 30.0);
             printf("net: arena %d %s idle %.1f s longest %.1f s retreats %.1f s turnbacks %d\n", p, bot.kind.c_str(), bot.idleTicks / 30.0,
                    bot.longestIdle / 30.0, bot.retreatTicks / 30.0, bot.turnbacks);
         }

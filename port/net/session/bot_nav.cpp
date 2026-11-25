@@ -274,6 +274,27 @@ bool net::NavClear(const engine::NavMap& map, float x0, float y0, float x1, floa
     return true;
 }
 
+const net::BotView::Seen* net::ShotBlocker(const BotView& v, float x, float y, const BotView::Seen& target)
+{
+    const BotView::Seen* first = NULL;
+    float firstT = 1;
+    const float reach = hypotf(target.x - x, target.y - y);
+    for (const BotView::Seen& s : v.seen)
+    {
+        if (s.kind != BotView::Seen::kCar || fabsf(s.z - v.z) > 1.0f || hypotf(s.x - x, s.y - y) > reach + s.length)
+        {
+            continue;
+        }
+        const CarBox box(s, 0.1f);
+        const float t = box.Enters(x, y, target.x, target.y);
+        if (t >= 0 && t < firstT && box.Enters(target.x, target.y, target.x, target.y) < 0)
+        {
+            firstT = t, first = &s;
+        }
+    }
+    return first;
+}
+
 void net::BotRoute::Next(const BotView& v, float goalX, float goalY, float* pX, float* pY, float goalZ)
 {
     *pX = goalX, *pY = goalY;

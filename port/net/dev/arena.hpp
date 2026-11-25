@@ -72,7 +72,12 @@ class Arena
         float fleeX = 0, fleeY = 0, fleeOx = 0, fleeOy = 0;
         int windowRot = 0;
         bool windowTurned = false;
+        // Fire held on foot at someone in front within 12 blocks, and of that with a car or a wall in the way
+        uint32_t aimedFireTicks = 0, carBlockedTicks = 0, wallBlockedTicks = 0;
+        uint32_t burningCarTicks = 0; // in a car on fire (kCarOnFire)
+        int carDeaths = 0; // deaths in a car
     };
+    void MeterFire(Bot& bot);
     void Meter(Bot& bot, const Bot::Body& me, float carDist);
     void MeterRetreat(Bot& bot, const Bot::Body& me, const std::vector<Bot::Body>& bodies, int self);
     void Score(const Snapshot& world);
