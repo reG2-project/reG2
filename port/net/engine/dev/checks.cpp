@@ -1072,6 +1072,11 @@ void net::engine::InstallSfxLog(bool server)
         p->mSoundObj = user->mSoundObj;
         user->mSoundObj = NULL;
     }
+    // Player::Service points it at the view camera only while the slot is in the game; else it is still player 0's
+    if (p && p->mSoundObj && p->mSoundObj->mpAny.pCamera_0xBC != &p->mViewCamera)
+    {
+        p->mSoundObj->mpAny.pCamera_0xBC = &p->mGameCamera;
+    }
 }
 
 // GTA2_NET_FIRELOG: every fire at every 30th tick of the game's cycle (the same tick on both ends): a car's (its net id,
