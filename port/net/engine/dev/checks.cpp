@@ -261,6 +261,21 @@ bool net::engine::DebugCheckPlayerCars(const char* where)
             }
             return false;
         }
+        // Player::GetPlayerCar, the car radio's car: its corpse's in camera modes 2 and 3
+        Player* pl = GetPlayer(i);
+        Car* shown = pl && pl->mInUse ? pl->GetPlayerCar() : NULL;
+        if (shown && (!liveCars.count(shown) || !shown->mCarSprite))
+        {
+            if (sReported++ < 5)
+            {
+                Ped* q = pl->mCameraMode == 2 || pl->mCameraMode == 3 ? pl->mAuxPed : pl->mPlayerPed;
+                printf("net: CHECK %s: player %d's car (camera mode %d, %s ped, state %d/%d, in it %d) is gone (live %d, despawn status %d)\n",
+                       where, i, (int)pl->mCameraMode, q == pl->mAuxPed ? "aux" : "own", q ? (int)q->mPedState1 : -1,
+                       q ? (int)q->mPedState2 : -1, q && q->mCar == shown, (int)liveCars.count(shown),
+                       liveCars.count(shown) ? (int)shown->mDespawnStatus : -1);
+            }
+            return false;
+        }
         // Driving a car that doesn't have it as its driver (Car::ClearDriver reads the driver when it gets out). Not a
         // train's: reversing one hands its driver to the new lead and leaves the ped in its carriage (Train::ReassignTrainHead)
         if (car && ped->mPedState2 == ped_state_2::ped2_driving_10 && !ped->mEnterCarAsPassenger && car->mDriver != ped &&
@@ -621,6 +636,9 @@ void net::engine::DebugOnCrash()
     Player* p = g->mLocalPlayer;
     Ped* ped = p->mPlayerPed;
     CrashPed("the local player's", ped);
+    CrashPed("the local player's corpse (aux)", p->mAuxPed);
+    fprintf(stderr, "net: crash state: camera mode %d, the player's car (Player::GetPlayerCar) %p\n", (int)p->mCameraMode,
+            (void*)p->GetPlayerCar());
     Ped* camPed = p->mGameCamera.mTargetPed;
     Car* camCar = p->mGameCamera.mTargetCar;
     fprintf(stderr, "net: crash state: local player %d in use %d, ped %p (live %d) car %p, camera ped %p (live %d, the player's %d) car %p (live %d)\n",

@@ -1146,7 +1146,7 @@ off by default:
 | `GTA2_NET_TESTGHOSTSHOT=<tick>` | client | a rocket beside the local player at that tick of the game's cycle, in every run of it: one the server never has |
 | `GTA2_NET_SHOTVIS=0` | client | other players' late shots drawn where they are, their muzzle flashes only while the world still has them ("Other players' shots shown") |
 | `GTA2_NET_SHOTSKEW=1` | client | its shots' keys none of the server's (the shots step's red run) |
-| `GTA2_NET_TESTPHASE=<tick>:<player>[:<what>],...` | server | the player on foot drowned (0) or electrocuted (1), seated in a car beside it (2), pulled out of its car (3); 10 to 13: the ambient ped nearest it drowned, electrocuted, knocked down, or blown up |
+| `GTA2_NET_TESTPHASE=<tick>:<player>[:<what>],...` | server | the player on foot drowned (0) or electrocuted (1), seated in a car beside it (2), pulled out of its car (3), its car moved into mp1's water at (54.5, 160.5) to sink (5); 10 to 13: the ambient ped nearest it drowned, electrocuted, knocked down, or blown up |
 | `GTA2_NET_TESTLOCALPHASE=<tick>:<what>,...` | client | its own player drowned (0), electrocuted (1) or knocked down (2) before each run of that tick, live and resimulated (the server never has it) |
 | `GTA2_NET_TESTPATIENTS=<tick>:<player>:<n>[:<blocks>],...` | server | the n ambient peds nearest the player (at least that many blocks away) set on fire: the ambulance comes for their corpses |
 | `GTA2_NET_TESTSTREAK=<tick>:<player>,...` | server | a kill streak's bonus, as the 20th kill in a row gives it |

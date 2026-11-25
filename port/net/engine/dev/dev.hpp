@@ -48,7 +48,8 @@ void DebugKill(int victim, int killer);
 void DebugArm(int player, int weapon, int ammo); // Player::AddWeaponWithAmmo
 void DebugFire(int player); // the player's ped set on fire (Ped::SetOnFire)
 // On foot, the player's ped drowned (Char::DrownPed, 0) or electrocuted (1); seated in a car beside it (2), pulled out of the
-// car it sits in (3, StartPulledOut), jacking another player seated in a car beside it, from where that one stood (4);
+// car it sits in (3, StartPulledOut), jacking another player seated in a car beside it, from where that one stood (4),
+// its car moved into mp1's water to sink (5);
 // 10 + 0..4: the nearest ambient ped on foot drowned, electrocuted, knocked down, thrown by a blast at its feet, or killed
 void DebugPhase(int player, int what);
 // GTA2_NET_TESTLOCALPHASE=<tick>:<what>[,...] on a client, before each run of that tick (live and resimulated): its own
