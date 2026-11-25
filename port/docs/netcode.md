@@ -55,10 +55,10 @@ zone in the map's order (the restart zones' turn stays the script's), in the fir
 players don't have. A ped starting at a restart zone (those, a join, a respawn: `Ped::SpawnCharInZone`) takes the
 block its slot picks: of the zone's blocks in turn from its centre, at the level of its first block with ground, slot
 N takes the N-th, counting on into the next zones once a zone has fewer, and round again past the last
-(`core/spawn_spots.cpp`). Slot 0 starts at the centre, the game's own spot. The zone is the game's turn's (the round
-robin) unless another living player is within 12 blocks of it: then the next one in turn with nobody that near, else the
-one whose nearest player is farthest (`SafeZone`). A client predicting a respawn sees the others where it predicts them,
-so near that 12 blocks it can pick another zone than the server, which the next snapshot corrects (a jump).
+(`core/spawn_spots.cpp`). Slot 0 starts at the centre, the game's own spot. The zone is the one whose nearest other living player
+is farthest, a wasted one counting where it waits for its respawn, the first from the game's turn (the round robin)
+among equals (`SafeZone`). A client predicting a respawn sees the others where it predicts them, so with two zones
+about as far it can pick another one than the server, which the next snapshot corrects (a jump).
 
 A map without a restart zone isn't playable (the game ends at its start with "No Restart Zone"): the server leaves
 it out of its rotation and votes with a warning, refuses to start if no map is left, checks a map again before it

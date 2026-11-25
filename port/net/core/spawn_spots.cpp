@@ -125,10 +125,6 @@ int net::SafeZone(const std::vector<SpawnZone>& zones, int first, const std::vec
             const float d = ZoneDistance(zones[i], p);
             nearest = d < nearest ? d : nearest;
         }
-        if (nearest >= kSafeStart)
-        {
-            return i;
-        }
         if (nearest > bestNearest)
         {
             best = i;
