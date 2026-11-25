@@ -374,7 +374,7 @@ class sound_obj
     EXPORT void ProcessPed(Sound_Params* pParams);
     EXPORT void HandlePedVoiceEvent(Sound_Params* pParams);
 #if defined(GTA2_PORT)
-    void PortPlayerDeathCry(Sound_Params* pParams, u8 sample_index);
+    void PortPlayerDeathCry(Sound_Params* pParams);
 #endif
 
     EXPORT void ResetRadioMessageState();

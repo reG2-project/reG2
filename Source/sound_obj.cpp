@@ -35,8 +35,9 @@
 #include <stdio.h>
 #include "Char_Pool.hpp"
 
-// A car's own sounds take the sample indices 0 to 15 and 100 to 199
-static const u8 kCarDeathCrySampleIndex = 16;
+// A car's own sounds take the sample indices 0 to 15 and 100 to 199, a char's 0 to 5: a player's death cry has its own,
+// apart from the voice's (2), so that a client's sound log never takes it for another line of the same ped (sound_log.cpp)
+static const u8 kDeathCrySampleIndex = 16;
 #endif
 
 // Forward declarations: the functions below are in address order
@@ -572,7 +573,7 @@ void sound_obj::ProcessCar(Sound_Params* pParams)
             if (pPed->mCar == pCar && !pPed->mGameObject && pPed->is_player() && pPed->mVoiceEvent == 4)
             {
                 pPed->TakeVoiceEvent();
-                PortPlayerDeathCry(pParams, kCarDeathCrySampleIndex);
+                PortPlayerDeathCry(pParams);
                 break;
             }
         }
@@ -6071,7 +6072,7 @@ void sound_obj::HandlePedVoiceEvent(Sound_Params* pParams)
     // Port: a network game's player cries out at its death as the other peds do
     else if (voice == 4 && gPortPlayersDeathCry)
     {
-        PortPlayerDeathCry(pParams, 2);
+        PortPlayerDeathCry(pParams);
         return;
     }
 #endif
@@ -6161,7 +6162,7 @@ void sound_obj::HandlePedVoiceEvent(Sound_Params* pParams)
 #if defined(GTA2_PORT)
 // Port: a network game's players cry out at their death (gPortPlayersDeathCry) as the other peds do in HandlePedVoiceEvent,
 // first in the mixer's queue (a priority of 0) so that the shots and impacts around a kill never push it out
-void sound_obj::PortPlayerDeathCry(Sound_Params* pParams, u8 sample_index)
+void sound_obj::PortPlayerDeathCry(Sound_Params* pParams)
 {
     if (!CalculateDistance(Fix16(81)) || !VolCalc(35, Fix16(9), pParams->mbHasSolidAbove))
     {
@@ -6175,7 +6176,7 @@ void sound_obj::PortPlayerDeathCry(Sound_Params* pParams, u8 sample_index)
         gSampManager.GetPlayBackRate(msQueueSample.mSampIdx) + RandomDisplacement(msQueueSample.mSampIdx);
     msQueueSample.mType = 20;
     msQueueSample.mSpeedMultiplier = 0;
-    msQueueSample.mSampleIndex = sample_index;
+    msQueueSample.mSampleIndex = kDeathCrySampleIndex;
     msQueueSample.mReleasingSoundFlag = 1;
     msQueueSample.mReleasingVolumeModificator = 0;
     msQueueSample.mbIs2D = false;
