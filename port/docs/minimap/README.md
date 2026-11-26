@@ -1,7 +1,9 @@
 # A minimap for the port
 
-Status: design study, nothing in the game yet. This note records the frame designs, the map
-treatments, where every map layer comes from, and how it would be built.
+Status: in the game as DISPLAY > MINIMAP in a slim frame E (`port/src/minimap*.cpp`), and as the pause
+menu's MAP (`port/src/city_map.cpp`): see [In the game](#in-the-game). The rest of this note is the design
+study it came from: the frame designs, the map treatments, where every map layer comes from, and how it
+would be built.
 
 The goal is a minimap that looks like part of GTA2's own HUD rather than a modern overlay.
 
@@ -168,6 +170,57 @@ Differences with this study: the map here is built from the level's `.gmp` and `
 time instead of prebuilt tiles, so custom levels work without extra files, and the frame follows
 GTA2's HUD rather than GTA3's. Their code derives from re3, so it is a reference for features
 and blip rules, not code to copy.
+
+## In the game
+
+DISPLAY > MINIMAP, off by default and in both styles: it adds what the original never showed, so players turn it on.
+
+- **Place and look:** frame E, slim (`tools/designs.py` `tube_frame_slim`: frame E's tubes, caps and N with
+  half its border, 92x80 HUD pixels at 1x, the map in its 78x66 hole, the glass over it; written by
+  `tools/export_frame.py tube_frame_slim <dir>`) in the bottom left corner, 6 from the safe area's edges,
+  scaled by HUD SCALE. Where a brief's face reaches it
+  (4:3), it fades while the brief shows.
+- **Map:** built for each level (`PortMinimap::Reset` from `Hud::Init`) from `gMap_0x370` and the style's
+  tiles, 4 texels per block: each texel the average colour of 16x16 texels of the top lid, turned and flipped
+  as its face word says. A lid more than 60% see-through above the ground is skipped (tree tops, wires), and
+  so is a lid tile past the style's 992 (1023 marks a diagonal block's three-sided lid). Roofs lighten as they
+  rise, with a cast shadow to the bottom right (`render_map.py`'s shading). Custom levels work as they are.
+- **View:** north up, the player's arrow (or the car's) facing as it does (a heading of 0 faces south); 22
+  blocks across on foot to 36 as the camera rises with speed.
+- **Pins:** the design study's badges (`assets/pins`): the church (the `THREAD_DECLARE5` trigger whose
+  thread starts with `DO_SAVE_GAME`), the garages (`car_shop_130` objects the level's script declares or the
+  object pool holds; a garage's row of bays, one pin), the train stations (platform zones within 8 blocks
+  grouped) and the cranes (`gCranePool_D9C`, at their rotors). As on GTA3's radar, a pin up to twice the
+  map's size away already shows on its edge, fading. The hospitals and police stations (`Restart_16` and
+  `Arrest_Restart_20` zones), which the game takes the player to by itself, are on the MAP only.
+- **Phones and targets** (`Hud_Arrow` targets): off a job, the phones as badges in the pins' style (a receiver
+  on the game's phone colours: the job phones' green, yellow and red, the gangs' blue information phones;
+  `tools/fullmap.py` `badge`), where the game shows their arrow or within twice the map's size, see-through while
+  the gang's respect is too low for the job (`Hud_Arrow::CheckVisibility`'s rule). A job's targets as a pink
+  blip, apart from the red phones as on GTA3's radar, or a triangle when more than half a block above or
+  below, held at the edge and fading beyond it.
+- **Gangs:** each gang of the respect meters as its icon on the frame's tubes toward its information phone
+  (`Gang::mInfoPhoneX/Y`), as the game's gang arrows lead there, off the corner caps and the N cap, and above
+  the phone once it is on the map; a gang without one toward the nearest part of its territory (`Gang_14`
+  zones), in the top left corner while the player is in it.
+- **MINIMAP ONLY** (DISPLAY, with MINIMAP, off by default): the game's arrows round the player hidden, phones
+  and targets on the minimap alone.
+- **MAP (M)** in the pause menu, or at once with M (unless a control uses it or the player is typing a chat
+  message; M or Esc then resumes the game); SDL builds only. The whole city on the left of a column with the
+  key, the buttons and the controls, opened fitted to where the level is played (its zones' bounds: a bonus
+  level's arena). The map's own colours, each gang's territory tinted and edged with the gang's colour (its
+  respect meter's pip, user sprite 70 plus its arrow colour); the districts' names once each (the navigation
+  zones of a name, at their area-weighted middle) on black, under the pins, phones, targets and player. The
+  key lists what the level has. Arrows, WASD, the left stick or the d-pad move it while held, or the mouse
+  drags it; the wheel, Q and E, - and +, the right stick or the + and − buttons zoom (20 blocks across to the
+  whole city); Space, C, the pad's X or the arrow button go back to the player. Enter or a click sets the
+  waypoint, elsewhere moves it, on it clears it; both maps show it until the player reaches it, and while the
+  game's arrows show, the game's job arrow, recoloured in the waypoint's blue from the player's style, points
+  to it from beside the player. It works with MINIMAP off. On the web a tap is a click, so the buttons zoom.
+
+Behaviour (which blips, phones only off a job, the fade past the edge, the height markers) follows the
+radar mods below; none of their code or tiles is used. A pin that shows on the MAP only once the player has
+seen it, a map filled in as one plays, is a follow-up.
 
 ## Tools
 

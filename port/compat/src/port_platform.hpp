@@ -126,6 +126,7 @@ void port_MovieSoundClose();
 // Keyboard events for the game (dinput.cpp).
 DWORD port_DikFromScancode(SDL_Scancode sc);
 void port_PushKey(DWORD dik, bool down);
+bool port_DikHeld(DWORD dik);
 
 // Game state the gamepad needs (port/src/game_hooks.cpp).
 bool port_GameRunning();

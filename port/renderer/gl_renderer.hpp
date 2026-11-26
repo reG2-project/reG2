@@ -76,6 +76,8 @@ class GLRenderer : public IRenderer
     void EndScene();
     void DrawTriangles(const RVertex* pVerts, s32 count, RTexture* pTex, u32 state);
     void SetClipRect(f32 left, f32 top, f32 right, f32 bottom);
+    // The clip SetClipRect asked for, set again after Clear's own.
+    void ApplyClip();
     u32 GetDrawCallCount() const { return mDrawCalls; }
     u32 GetUploadCount() const { return mUploads; }
     u32 GetVertexCount() const { return mVertices; }
@@ -103,6 +105,8 @@ class GLRenderer : public IRenderer
 
     GLFuncs gl;
     bool mReady;
+    bool mClipping;
+    f32 mClip[4];
     s32 mLogicalW;
     s32 mLogicalH;
     s32 mTargetW;

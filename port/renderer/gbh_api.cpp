@@ -1355,6 +1355,77 @@ void port_FreePictures()
 
 namespace
 {
+// The MINIMAP's textures (port/src/minimap.cpp), by slot: the level's map and the frame's pictures.
+const s32 kNumMinimapTextures = 40;
+RTexture* gMinimapTextures[kNumMinimapTextures];
+u32 gMinimapVersions[kNumMinimapTextures];
+IRenderer* gMinimapOwner;
+} // namespace
+
+// Triangles of a minimap texture uploaded from pRgba (RGBA8, top row first) the first time and again when its
+// version changes, or with no texture for slot -1: x, y, u, v from pXyuv and a colour (bytes r, g, b, a) per vertex.
+// Nearest: the map's blocks stay sharp when magnified.
+void port_DrawMinimap(s32 slot, s32 width, s32 height, const u32* pRgba, u32 version, const f32* pXyuv, const u32* pColours, s32 count,
+                      bool nearest)
+{
+    if (!gRenderer || slot >= kNumMinimapTextures || count <= 0)
+    {
+        return;
+    }
+    if (gMinimapOwner != gRenderer)
+    {
+        memset(gMinimapTextures, 0, sizeof(gMinimapTextures));
+        gMinimapOwner = gRenderer;
+    }
+    if (slot >= 0 && pRgba && (!gMinimapTextures[slot] || gMinimapVersions[slot] != version))
+    {
+        if (!gMinimapTextures[slot])
+        {
+            gMinimapTextures[slot] = gRenderer->CreateTexture();
+        }
+        gRenderer->UploadTexture(gMinimapTextures[slot], width, height, pRgba, RMIP_ALPHA);
+        gMinimapVersions[slot] = version;
+    }
+    RTexture* pTex = slot >= 0 ? gMinimapTextures[slot] : NULL;
+    if (slot >= 0 && !pTex)
+    {
+        return;
+    }
+    const u32 state = RS_BLEND_ALPHA | (slot < 0 ? RS_NO_TEXTURE : 0) | (nearest ? RS_TEXELS : RS_FILTER_LINEAR);
+    // In batches of whole triangles.
+    const s32 kBatch = 96;
+    RVertex v[kBatch];
+    for (s32 start = 0; start < count; start += kBatch)
+    {
+        const s32 n = count - start < kBatch ? count - start : kBatch;
+        memset(v, 0, sizeof(v));
+        for (s32 i = 0; i < n; i++)
+        {
+            const f32* p = &pXyuv[(start + i) * 4];
+            v[i].x = p[0];
+            v[i].y = p[1];
+            v[i].u = p[2];
+            v[i].v = p[3];
+            v[i].rhw = 1.0f;
+            v[i].rgba = pColours[start + i];
+        }
+        gRenderer->DrawTriangles(v, n, pTex, state);
+    }
+}
+
+// What the minimap draws next is clipped to that rectangle (left, top, right, bottom), or with NULL to the game's
+// window again (gbh_SetWindow).
+void port_ClipMinimap(const f32* pRect)
+{
+    if (gRenderer)
+    {
+        const f32* r = pRect ? pRect : gWindow;
+        gRenderer->SetClipRect(r[0], r[1], r[2], r[3]);
+    }
+}
+
+namespace
+{
 // The port's particle textures (port/src/fire_smoke.cpp), by slot.
 const s32 kNumParticleTextures = 2;
 RTexture* gParticleTextures[kNumParticleTextures];

@@ -52,6 +52,7 @@ enum Page
     kControlsPage,
     kStatsPage,
     kTranscriptPage,
+    kMapPage,
     kSavesPage,
     kLoadPage,
     kQuitPage,
@@ -84,7 +85,13 @@ struct Item
 
 const s32 kMaxItems = 20;
 const wchar_t* const kTitles[kNumPages] = {L"OPTIONS", L"GAME", L"GRAPHICS", L"DISPLAY", L"SOUND", L"CONTROLS", L"STATISTICS",
-                                           L"MISSION TRANSCRIPT", L"LOAD GAME", L"LOAD GAME", L"QUIT GAME"};
+                                           L"MISSION TRANSCRIPT",
+#if defined(__EMSCRIPTEN__)
+                                           L"MAP",
+#else
+                                           L"MAP (M)", // its key in game
+#endif
+                                           L"LOAD GAME", L"LOAD GAME", L"QUIT GAME"};
 
 const s32 kNumControls = 12;
 // SPECIAL 3, the last control, does nothing in the game: it keeps its bindings but is not shown.
@@ -149,6 +156,7 @@ long long sRetryTime;
 PortSaves::JobName sRetryJob;
 s32 sStatRows;
 f32 sTranscript = -1; // MISSION TRANSCRIPT's height, -1 if not offered
+bool sMap;             // MAP offered
 // The station RADIO shows, NULL without the line.
 const wchar_t* sRadio;
 // QUIT GAME's choices offered, and why SAVE AND QUIT is greyed, NULL if it is not.
@@ -207,6 +215,10 @@ s32 Items(Page page, Item* pItems)
             {
                 pItems[n++] = Item{kRadio, 0, false};
             }
+            if (inGame && sMap)
+            {
+                pItems[n++] = Item{kGoTo, kMapPage, false};
+            }
             if (inGame && sStatRows)
             {
                 pItems[n++] = Item{kGoTo, kStatsPage, false};
@@ -235,6 +247,7 @@ s32 Items(Page page, Item* pItems)
             return SettingsPage(pItems, PortSettings::kSoundSettings, PortSettings::kNumSoundSettings);
         case kStatsPage:
         case kTranscriptPage:
+        case kMapPage:
             pItems[n++] = Item{kBack, 0, false};
             break;
         case kSavesPage:
@@ -1429,6 +1442,7 @@ void Open()
     sRetry = PortSaves::kNoCheckpoint;
     sStatRows = 0;
     sTranscript = -1;
+    sMap = false;
     sNumSaves = 0;
     sQuitChoices = false;
     sQuitBlocked = NULL;
@@ -1454,6 +1468,34 @@ void OfferRetry(PortSaves::Checkpoint kind, s32 money, long long time, const Por
 void OfferStatistics(s32 rows)
 {
     sStatRows = rows;
+}
+
+void OfferMap()
+{
+    sMap = true;
+}
+
+bool OnMap()
+{
+    return sPage == kMapPage;
+}
+
+void ShowMap()
+{
+    GoTo(kMapPage);
+}
+
+f32 ScreenText(const wchar_t* pEnglish, f32 x, f32 y, f32 scale, bool small, bool dim, bool draw)
+{
+    const f32 left = sLeft, top = sTop, oldScale = sScale;
+    sLeft = x;
+    sTop = y;
+    sScale = scale;
+    const f32 width = TextAt(Translate(pEnglish), 0, 0, small ? gFrontendFont6 : MenuFont(), false, dim, draw);
+    sLeft = left;
+    sTop = top;
+    sScale = oldScale;
+    return width * scale;
 }
 
 void OfferTranscript(f32 height)

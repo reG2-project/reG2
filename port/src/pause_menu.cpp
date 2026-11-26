@@ -19,6 +19,7 @@
 #include "gbh_graphics.hpp"
 #include "gtx_0x106C.hpp"
 #include "menu.hpp"
+#include "minimap.hpp"
 #include "options_menu.hpp"
 #include "registry.hpp"
 #include "root_sound.hpp"
@@ -32,7 +33,7 @@ EXTERN_GLOBAL(s16, word_7064D8);
 EXTERN_GLOBAL(u16, gBriefFont);
 EXTERN_GLOBAL(u8, gSoundSwitchRadioCoolDown);
 
-#if defined(__EMSCRIPTEN__)
+#if defined(GTA2_PORT_SDL)
 int port_GetAltBinding(int control);
 #endif
 
@@ -339,6 +340,25 @@ void Release()
 
 static f32 Transcript(f32 top, f32 room, f32 scale = 0, f32 left = 0, f32 menuTop = 0);
 
+// A key one of the game's controls is bound to, first or second binding.
+static bool KeyBound(s32 dik)
+{
+    for (s32 i = 0; i < 12; i++)
+    {
+        if (InputDevices::sControlDeviceType[i] == 0 && InputDevices::sPlayerControlsBinding[i] == dik)
+        {
+            return true;
+        }
+#if defined(GTA2_PORT_SDL)
+        if (port_GetAltBinding(i) == dik)
+        {
+            return true;
+        }
+#endif
+    }
+    return false;
+}
+
 #if defined(__EMSCRIPTEN__)
 // In a browser, which takes Escape to leave pointer lock or full screen, Pause and P (unless a control uses it) act as
 // Escape does here.
@@ -348,21 +368,25 @@ s32 WebEscape(s32 action)
     {
         return DIK_ESCAPE;
     }
-    if (action != DIK_P)
-    {
-        return action;
-    }
-    for (s32 i = 0; i < 12; i++)
-    {
-        if ((InputDevices::sControlDeviceType[i] == 0 && InputDevices::sPlayerControlsBinding[i] == DIK_P) ||
-            port_GetAltBinding(i) == DIK_P)
-        {
-            return action;
-        }
-    }
-    return DIK_ESCAPE;
+    return action == DIK_P && !KeyBound(DIK_P) ? DIK_ESCAPE : action;
 }
 #endif
+
+// The MAP opened with its key, M: going back from it resumes the game.
+static bool sMapDirect;
+
+static void LeaveMap()
+{
+    if (sMapDirect)
+    {
+        PlaySound(PortMenu::kWentBack);
+        Close();
+    }
+    else
+    {
+        Apply(PortMenu::HandleInput(PortMenu::kCancel));
+    }
+}
 
 bool HandleKey(s32 action, Player* pPlayer)
 {
@@ -374,11 +398,19 @@ bool HandleKey(s32 action, Player* pPlayer)
 #endif
     if (!sOpen)
     {
-        if (action != DIK_ESCAPE || pPlayer->mShowQuitMessage || bSkip_quit_confirm || !pPlayer->IsUser())
+        // M opens the MAP at once, unless a control uses it or the player is typing a chat message. The MAP needs the SDL
+        // renderer.
+#if defined(GTA2_PORT_SDL)
+        const bool map = action == DIK_M && !KeyBound(DIK_M) && !pPlayer->mIsChatting;
+#else
+        const bool map = false;
+#endif
+        if ((action != DIK_ESCAPE && !map) || pPlayer->mShowQuitMessage || bSkip_quit_confirm || !pPlayer->IsUser())
         {
             return false;
         }
         sOpen = true;
+        sMapDirect = map;
         if (!sStyle)
         {
             LoadStyle();
@@ -394,6 +426,9 @@ bool HandleKey(s32 action, Player* pPlayer)
             PortMenu::OfferRetry(kind, money, time, job, PortRetry::JustFailed(), PortRetry::Running());
         }
         PortMenu::OfferRadio(StationName());
+#if defined(GTA2_PORT_SDL)
+        PortMenu::OfferMap();
+#endif
         u8 sections[7];
         PortMenu::OfferStatistics(StatSections(sections));
         f32 top;
@@ -414,10 +449,49 @@ bool HandleKey(s32 action, Player* pPlayer)
         {
             gGame_0x40->Pause();
         }
+        if (map)
+        {
+            PortMenu::ShowMap();
+        }
         return true;
     }
     if (PortMenu::IsCapturing())
     {
+        return true;
+    }
+    // On the MAP the arrows, WASD and the sticks move it while held (PortMinimap::DrawCityBase); Page Up and Down, Q and E,
+    // - and + zoom; Enter (the pad's A) sets or clears the waypoint at its middle; Space, C or Delete (X) goes back to the
+    // player.
+    if (PortMenu::OnMap())
+    {
+        switch (action)
+        {
+            case DIK_ESCAPE:
+            case DIK_BACK:
+            case DIK_M:
+                LeaveMap();
+                break;
+            case DIK_RETURN:
+                PortMinimap::ToggleCityWaypoint();
+                break;
+            case DIK_SPACE:
+            case DIK_C:
+            case DIK_DELETE:
+                PortMinimap::CentreCityMap();
+                break;
+            case DIK_PRIOR:
+            case DIK_Q:
+            case DIK_MINUS:
+            case DIK_SUBTRACT:
+                PortMinimap::ZoomCityMap(-1);
+                break;
+            case DIK_NEXT:
+            case DIK_E:
+            case DIK_EQUALS:
+            case DIK_ADD:
+                PortMinimap::ZoomCityMap(1);
+                break;
+        }
         return true;
     }
     // W, A, S and D by position too, whatever the controls: the game's own bindings are off while the menu is open.
@@ -575,11 +649,110 @@ static void DrawPosition(f32 scale, f32 briefRight, f32 briefTop)
     DrawString(text, Fx(x), Fx(y), gFrontendFont7, Fx(scale), palette_types_enum::sprites_2, 0, 0, 0);
 }
 
+// The MAP page: the city on the left, and a column on the right with the title, the key, the buttons (for touch) and the
+// controls, so that nothing covers the map.
+static bool sOnMap;
+
+static void DrawMapPage(f32 scale)
+{
+    const f32 width = static_cast<f32>(gViewCamera->mScreenPxWidth), height = static_cast<f32>(gViewCamera->mScreenPxHeight);
+    const f32 margin = PortSettings::SafeArea();
+    const f32 pad = 6 * scale, iconColumn = 27 * scale, lineHeight = 14 * scale, buttonHeight = 22 * scale;
+    // Every name the key may show, for a column as wide whatever the level has.
+    static const wchar_t* const kKeyNames[] = {L"YOU",           L"WAYPOINT",          L"JOB TARGET", L"EASY JOB",
+                                               L"MEDIUM JOB",    L"HARD JOB",          L"NEEDS MORE RESPECT",
+                                               L"GANG INFORMATION", L"CHURCH - SAVE",  L"GARAGE",     L"CRANE",
+                                               L"HOSPITAL",      L"POLICE STATION",    L"TRAIN STATION", L"TERRITORY"};
+    const bool padMode = PortMenu::PadMode();
+    const s32 kNumHints = 5;
+    const wchar_t* const kHints[2][kNumHints] = {
+        {L"ARROWS OR DRAG - MOVE", L"WHEEL OR Q AND E - ZOOM", L"ENTER OR CLICK - WAYPOINT", L"SPACE - BACK TO YOU", L"ESC OR M - BACK"},
+        {L"LEFT STICK - MOVE", L"RIGHT STICK - ZOOM", L"A - WAYPOINT", L"X - BACK TO YOU", L"B - BACK"},
+    };
+    UseFrontendStyle(false);
+    f32 inner = PortMenu::ScreenText(L"MAP", 0, 0, scale, false, false, false);
+    for (const wchar_t* pName : kKeyNames)
+    {
+        const f32 w = iconColumn + PortMenu::ScreenText(pName, 0, 0, scale, true, false, false);
+        inner = w > inner ? w : inner;
+    }
+    for (const wchar_t* pHint : kHints[padMode])
+    {
+        const f32 w = PortMenu::ScreenText(pHint, 0, 0, scale, true, false, false);
+        inner = w > inner ? w : inner;
+    }
+    UseGameStyle();
+    const f32 keyRight = width * (1 - margin) - 8 * scale, keyLeft = keyRight - inner;
+    const f32 columnLeft = keyLeft - pad - 4 * scale;
+    const f32 columnTop = height * margin + 8 * scale, columnBottom = height * (1 - margin) - 8 * scale;
+    const f32 hintsTop = columnBottom - kNumHints * lineHeight;
+    const f32 buttons[4] = {keyLeft, hintsTop - pad - buttonHeight, keyRight, hintsTop - pad};
+    const f32 keyTop = columnTop + 24 * scale;
+
+    if (PortMinimap::DrawCityBase(0, 0, columnLeft, height, scale * 1.5f, buttons))
+    {
+        LeaveMap();
+        return;
+    }
+    PortMinimap::DrawShade(columnLeft, 0, width, height, 1.0f);
+
+    // The districts' names on black, as the printed maps have them, under the pins and the player.
+    const s32 numLabels = PortMinimap::CityMapLabels();
+    f32 labelWidth[64];
+    UseFrontendStyle(false);
+    for (s32 i = 0; i < numLabels && i < 64; i++)
+    {
+        f32 x, y;
+        labelWidth[i] = PortMenu::ScreenText(PortMinimap::CityMapLabel(i, &x, &y), 0, 0, scale * 0.85f, true, false, false);
+    }
+    UseGameStyle();
+    for (s32 i = 0; i < numLabels && i < 64; i++)
+    {
+        f32 x, y;
+        PortMinimap::CityMapLabel(i, &x, &y);
+        PortMinimap::DrawShade(x - labelWidth[i] / 2 - 4 * scale, y - 7 * scale, x + labelWidth[i] / 2 + 4 * scale, y + 6 * scale, 0.85f);
+    }
+    UseFrontendStyle(false);
+    for (s32 i = 0; i < numLabels && i < 64; i++)
+    {
+        f32 x, y;
+        const wchar_t* pText = PortMinimap::CityMapLabel(i, &x, &y);
+        PortMenu::ScreenText(pText, x - labelWidth[i] / 2, y - 5 * scale, scale * 0.85f, true);
+    }
+    UseGameStyle();
+    PortMinimap::DrawCityMarkers();
+
+    // The key, its rows closer together where they would reach the buttons.
+    s32 rows = 0;
+    while (PortMinimap::LegendName(rows))
+    {
+        rows++;
+    }
+    const f32 room = buttons[1] - pad - keyTop;
+    const f32 row = rows && room / rows < 16 * scale ? room / rows : 16 * scale;
+    for (s32 i = 0; i < rows; i++)
+    {
+        PortMinimap::DrawLegendIcon(i, keyLeft + iconColumn / 2, keyTop + i * row + row / 2, scale * 1.25f);
+    }
+    UseFrontendStyle(false);
+    PortMenu::ScreenText(L"MAP", keyLeft, columnTop, scale, false);
+    for (s32 i = 0; i < rows; i++)
+    {
+        PortMenu::ScreenText(PortMinimap::LegendName(i), keyLeft + iconColumn, keyTop + i * row + row / 2 - 5 * scale, scale, true);
+    }
+    for (s32 i = 0; i < kNumHints; i++)
+    {
+        PortMenu::ScreenText(kHints[padMode][i], keyLeft, hintsTop + i * lineHeight, scale, true, true);
+    }
+    UseGameStyle();
+}
+
 void Draw()
 {
     if (!sOpen)
     {
         ReleaseSounds();
+        sOnMap = false;
         return;
     }
     PlaySound(PortMenu::UpdateCapture());
@@ -590,6 +763,17 @@ void Draw()
     const f32 top = (gViewCamera->mScreenPxHeight - 480.0f * scale) / 2;
     const f32 menuTop = top + 10 * scale;
     PortMenu::OfferRadio(StationName());
+    if (PortMenu::OnMap())
+    {
+        if (!sOnMap)
+        {
+            PortMinimap::OpenCityMap();
+        }
+        sOnMap = true;
+        DrawMapPage(scale);
+        return;
+    }
+    sOnMap = false;
     f32 briefRight;
     f32 briefTop;
     BriefPlace(&briefRight, &briefTop);

@@ -323,6 +323,56 @@ def tube_frame(tube_rgb=hexrgb('#8a4a12')):
     return d
 
 
+def tube_frame_slim(tube_rgb=hexrgb('#8a4a12')):
+    """E, slim: frame E's tubes, caps and N with half its border, round the same 78x66 map. The one in the game."""
+    W, H = 92, 80
+    B = 7.0  # the border: housing, tube and lip
+    c = Canvas(W, H)
+    bronze = hexrgb('#86704c'); bronze_dk = hexrgb('#4a3a26')
+    house = sd_rrect(c, 0.5, 0.5, W - 0.5, H - 0.5, 4)
+    c.paint(house < 0, bronze, spec=0.35, shin=16, height=profile_bevel(-house, 1.2, 1.6))
+    inner = sd_rrect(c, B, B, W - B, H - B, 2)
+    lip = (inner >= 0) & (inner < 1.0)
+    c.paint(lip, bronze, spec=0.35, shin=16, height=1.8 + profile_round(inner, 1.0, 0.5))
+    T, Bt, L, R, rad = 3.6, H - 3.6, 3.6, W - 3.6, 2.7
+    groove = (house < 0) & (((np.abs(c.y - T) < rad + 0.6) | (np.abs(c.y - Bt) < rad + 0.6)) & (c.x > L) & (c.x < R) |
+                            ((np.abs(c.x - L) < rad + 0.6) | (np.abs(c.x - R) < rad + 0.6)) & (c.y > T) & (c.y < Bt))
+    c.paint(groove, bronze_dk, height=0.5)
+    for yc in (T, Bt):
+        m = (np.abs(c.y - yc) < rad) & (c.x > L) & (c.x < R)
+        _tube(c, m, np.abs(c.y - yc), c.x, rad, tube_rgb, period=2.6)
+    for xc in (L, R):
+        m = (np.abs(c.x - xc) < rad) & (c.y > T) & (c.y < Bt)
+        _tube(c, m, np.abs(c.x - xc), c.y, rad, tube_rgb, period=2.6)
+    # N cap in the top tube, brighter, its N engraved
+    cx = W / 2
+    cap = (np.abs(c.y - T) < rad + 0.4) & (np.abs(c.x - cx) < 5.5)
+    c.paint(cap, tuple(min(255, v * 2.1) for v in tube_rgb), spec=0.9, shin=30,
+            height=1.1 + profile_round(rad + 0.4 - np.abs(c.y - T), 2 * rad + 0.8, rad * 0.9))
+    c.emit[cap] *= 0
+    c.paint(cap & (np.abs(np.abs(c.x - cx) - 5.5) < 0.4), bronze_dk, height=0.9)
+    g = glyph_mask(c, GLYPHS['N'], cx - 2.5, T - 2.5, 1.0) * cap
+    c.paint(g, hexrgb('#1a0c04'), add=-1.3)
+    # rubber corner caps with a bronze rivet
+    for x0, y0 in ((L, T), (R, T), (L, Bt), (R, Bt)):
+        k = sd_rrect(c, x0 - 4, y0 - 4, x0 + 4, y0 + 4, 2.5)
+        c.paint(k < 0, hexrgb('#3a332c'), spec=0.45, shin=14, height=profile_round(np.minimum(-k, 2.2), 4.4, 3.8) + np.where(-k > 2.2, 3.8, 0))
+        rv = sd_circle(c, x0, y0, 1.2)
+        c.paint(rv < 0, bronze, spec=0.8, shin=30, height=4.0 + profile_round(-rv, 1.2, 0.6))
+    c.alpha[house < 0] = 1
+    screen = sd_rrect(c, B, B, W - B, H - B, 2)
+    c.alpha[screen < 0] = 0
+    d = Design()
+    d.name = 'E_tube_frame_slim'; d.title = 'E  Tube frame, slim'
+    d.canvas = c; d.W, d.H = W, H
+    d.rgb = _falloff(c, shade(c)[0])
+    d.screen_sd = screen; d.screen_box = (B, B, W - B, H - B); d.center = (W / 2, H / 2)
+    c.sw, c.sh = W - 2 * B, H - 2 * B
+    d.glass = _glass(c, screen, W / 2, H / 2, 'rect')
+    d.map_style = 'schematic'; d.rotates = False
+    return d
+
+
 def police_scanner():
     """F: a police radar scanner: navy plastic housing, red and blue light bar, curved CRT with a phosphor sweep."""
     W, H = 104, 100
@@ -443,3 +493,5 @@ def gps_handheld():
 
 BUILDERS = [respect_ring, pager_handset, steel_plate, compass_dial]
 BUILDERS2 = [tube_frame, police_scanner, dash_gauge, gps_handheld]
+# Variants not in the study's sheets.
+VARIANTS = [tube_frame_slim]

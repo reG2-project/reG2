@@ -97,13 +97,30 @@ G5 = {
     'T': ["#####", "..#..", "..#..", "..#..", "..#.."],
     'P': ["####.", "#...#", "####.", "#....", "#...."],
     'G': [".###.", "#....", "#.###", "#...#", ".###."],
+    'crane': ["#####", ".#..#", ".#..#", ".#.##", "###.."],
 }
+
+
+def receiver_mask(c):
+    """A telephone receiver from the bottom left to the top right: a handle bowed toward the top left and a cup at each
+    end, drawn smooth rather than as a glyph."""
+    cx, cy, r, w = 8.4, 8.4, 4.4, 1.0
+    d = np.hypot(c.x - cx, c.y - cy)
+    handle = (np.abs(d - r) < w) & (c.x <= cx + 0.2) & (c.y <= cy + 0.2)
+    ear = sd_rrect(c, 7.0, 2.4, 11.0, 5.5, 1.1) < 0
+    mouth = sd_rrect(c, 2.4, 7.0, 5.5, 11.0, 1.1) < 0
+    return (handle | ear | mouth).astype(np.float32)
 
 
 def badge(kind, scale):
     spec = {'save': ('disc', '#d8c8a0', 'cross', '#5a2010'), 'restart': ('disc', '#f0f0e8', 'plus', '#d02018'),
             'arrest': ('disc', '#2848a8', 'bars', '#e8e8f0'), 'garage': ('square', '#e8b414', 'G', '#141414'),
-            'station': ('square', '#40464c', 'T', '#f0f0f0'), 'police': ('shield', '#2848a8', 'P', '#f0f0f0')}[kind]
+            'station': ('square', '#40464c', 'T', '#f0f0f0'), 'police': ('shield', '#2848a8', 'P', '#f0f0f0'),
+            'crane': ('square', '#c84010', 'crane', '#f0f0f0'),
+            # The phones: a receiver on the game's phone colours (the job phones' green, yellow and red, the gangs'
+            # blue information phones).
+            'phone_green': ('disc', '#2c9c34', 'receiver', '#f0f0e8'), 'phone_yellow': ('disc', '#e8b414', 'receiver', '#141414'),
+            'phone_red': ('disc', '#c82018', 'receiver', '#f0f0e8'), 'phone_info': ('disc', '#2858c8', 'receiver', '#f0f0e8')}[kind]
     shape, col, gl, gcol = spec
     c = Canvas(13, 13)
     if shape == 'disc':
@@ -114,7 +131,7 @@ def badge(kind, scale):
         s = np.minimum(sd_rrect(c, 0.6, 0.4, 12.4, 9, 2), mm_lib.sd_poly(c, [(0.6, 7), (12.4, 7), (6.5, 12.8)]))
     c.paint(s < 0, hexrgb('#141008'), height=0.4)
     c.paint(s < -1.0, hexrgb(col), spec=0.6, shin=24, height=0.4 + profile_bevel(-s - 1.0, 1.8, 2.0))
-    g = glyph_mask(c, G5[gl], 4.0, 4.0, 1.0)
+    g = receiver_mask(c) if gl == 'receiver' else glyph_mask(c, G5[gl], 4.0, 4.0, 1.0)
     c.paint(g * (s < -1.0), hexrgb(gcol), add=-0.5)
     c.alpha[s < 0] = 1
     rgb, _ = shade(c, ambient=0.45, ao_r=1.0, ao_k=0.3)
@@ -147,7 +164,7 @@ def icons(k):
         I['pickup_%d' % oid] = spr(CODE + s, scale=0.45 * k)
     for g in range(1, 8):
         I['gang_%d' % g] = spr(USER + 64 + g - 1, scale=1.0 * k)
-    for b in ('save', 'restart', 'arrest', 'garage', 'station', 'police'):
+    for b in ('save', 'restart', 'arrest', 'garage', 'station', 'police', 'crane', 'phone_green', 'phone_yellow', 'phone_red', 'phone_info'):
         I[b] = badge(b, k)
     I['start'] = player_badge(k)
     return I
@@ -280,7 +297,7 @@ def main(out):
     os.makedirs(out, exist_ok=True)
     pins = os.path.join(out, 'pins'); os.makedirs(pins, exist_ok=True)
     for k in (1, 2):
-        for b in ('save', 'restart', 'arrest', 'garage', 'station', 'police'):
+        for b in ('save', 'restart', 'arrest', 'garage', 'station', 'police', 'crane', 'phone_green', 'phone_yellow', 'phone_red', 'phone_info'):
             badge(b, k).save(os.path.join(pins, '%s_%dx.png' % (b, k)))
     d = parse()
     full = render(d, 4, 1.0)

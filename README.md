@@ -74,6 +74,11 @@ the gamepad.
 
 ![Twin stick](docs/images/pc_twin_stick.gif)
 
+**Minimap.** DISPLAY > MINIMAP (off by default): a small map in the bottom left corner, built from the level itself,
+with the church, garages, cranes, train stations, phones, the job's targets and each gang's icon toward its
+information phone. MINIMAP ONLY hides the game's arrows round the player. MAP (M) in the pause menu shows the whole
+city with the gangs' territories, to move, zoom and set a waypoint on.
+
 **And also** 3D sound, camera zoom, HUD scale, a frame rate counter. The new menus follow the game's language, as far as your
 copy of the game has it.
 

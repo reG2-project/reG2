@@ -1,4 +1,5 @@
 #include "prompts.hpp"
+#include "png.hpp"
 #include <math.h>
 #include <string.h>
 #include <vector>
@@ -44,20 +45,11 @@ bool Load()
     if (!sLoaded)
     {
         sLoaded = true;
-        SDL_Surface* pLoaded = SDL_LoadPNG_IO(SDL_IOFromConstMem(kColourPng, sizeof(kColourPng)), true);
-        SDL_Surface* pSurface = pLoaded ? SDL_ConvertSurface(pLoaded, SDL_PIXELFORMAT_RGBA32) : NULL;
-        SDL_DestroySurface(pLoaded);
-        if (pSurface && pSurface->h == 16)
+        s32 height = 0;
+        if (!PortPng::Decode(kColourPng, sizeof(kColourPng), &sPixels, &sWidth, &height) || height != 16)
         {
-            sWidth = pSurface->w;
-            sPixels.resize(static_cast<size_t>(sWidth) * 16);
-            for (s32 y = 0; y < 16; y++)
-            {
-                memcpy(&sPixels[static_cast<size_t>(y) * sWidth], static_cast<const u8*>(pSurface->pixels) + y * pSurface->pitch,
-                       static_cast<size_t>(sWidth) * 4);
-            }
+            sPixels.clear();
         }
-        SDL_DestroySurface(pSurface);
     }
     return !sPixels.empty();
 }

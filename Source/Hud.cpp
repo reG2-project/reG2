@@ -1,13 +1,16 @@
 #define FIX16_POINT_ZERO kFpZero_7064C0
 #include "Hud.hpp"
 #if defined(GTA2_PORT)
-// Port: AUTOSAVE, RETRY JOBS, the pause menu, the day and night cycle, the frame loop and TWIN STICK on the HUD.
+// Port: AUTOSAVE, RETRY JOBS, the pause menu, the day and night cycle, the frame loop, TWIN STICK, the MINIMAP and
+// MINIMAP ONLY on the HUD.
 #include "../port/src/autosave.hpp"
 #include "../port/src/retry.hpp"
 #include "../port/src/pause_menu.hpp"
 #include "../port/src/day_night.hpp"
 #include "../port/src/frame_loop.hpp"
 #include "../port/src/twin_stick.hpp"
+#include "../port/src/minimap.hpp"
+#include "../port/src/settings.hpp"
 #endif
 #include "hud_message_priority.hpp"
 #include "hud_brief_priority.hpp"
@@ -3392,7 +3395,10 @@ void Hud::DrawGui()
         SetFullAmbient();
         mPlayerStats.DrawPlayerStats();
 #if defined(GTA2_PORT)
-        // Port: the CLOCK, SHOW FPS, SAVING, the RETRY hint and the TWIN STICK reticle with the HUD.
+        // Port: the MINIMAP and the waypoint's arrow, the CLOCK, SHOW FPS, SAVING, the RETRY hint and the TWIN STICK
+        // reticle with the HUD.
+        PortMinimap::Draw();
+        PortMinimap::DrawWaypointArrow();
         PortDayNight::DrawClock();
         PortFrameLoop::DrawFps();
         PortAutosave::Draw();
@@ -3410,6 +3416,11 @@ void Hud::DrawGui()
         mBrief.DrawBrief();
         mPagers.DrawPagers();
         mTexts.Service();
+#if defined(GTA2_PORT)
+        // Port: with MINIMAP ONLY, phones and targets on the minimap alone (not in a network game, whose arrows point at
+        // the other players).
+        if (PortSettings::GuideArrows() || IsNetworkGame())
+#endif
         mArrows.DrawArrows();
         mMpMessage.Draw();
         mMessage.DrawMessage();
@@ -3518,8 +3529,10 @@ void Hud::Init()
     mWantedLevel.Init();
     mArrows.CreatePlayerArrows();
 #if defined(GTA2_PORT)
-    // Port: the pause menu's style and sounds loaded with the city, so that opening the menu does not stall a frame.
+    // Port: the pause menu's style and sounds loaded with the city, so that opening the menu does not stall a frame; the
+    // MINIMAP's map and pins built again for it.
     PortPauseMenu::Preload();
+    PortMinimap::Reset();
 #endif
 }
 

@@ -447,6 +447,19 @@ int port_KeyLetter(int dik)
     return 0;
 }
 
+// The key held now on a keyboard, for what moves while it is (the pause menu's MAP).
+bool port_DikHeld(DWORD dik)
+{
+    for (Device* pDev : sDevices)
+    {
+        if (dik < 256 && pDev->mKeys[dik])
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 void port_PushKey(DWORD dik, bool down)
 {
     for (Device* pDev : sDevices)

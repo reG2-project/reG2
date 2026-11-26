@@ -5,6 +5,7 @@
 #include "SoundObject.hpp"
 #include "gbh_graphics.hpp"
 #include "menu.hpp"
+#include "png.hpp"
 #include "prompts.hpp"
 #include "registry.hpp"
 #include "settings.hpp"
@@ -74,24 +75,8 @@ Picture sPictures[kNumSlots];
 
 bool Load(const unsigned char* pPng, size_t size, f32 playerU, Picture* pPicture)
 {
-    SDL_Surface* pLoaded = SDL_LoadPNG_IO(SDL_IOFromConstMem(pPng, size), true);
-    SDL_Surface* pSurface = pLoaded ? SDL_ConvertSurface(pLoaded, SDL_PIXELFORMAT_RGBA32) : NULL;
-    SDL_DestroySurface(pLoaded);
-    if (!pSurface)
-    {
-        return false;
-    }
-    pPicture->mWidth = pSurface->w;
-    pPicture->mHeight = pSurface->h;
     pPicture->mPlayerU = playerU;
-    pPicture->mPixels.resize(static_cast<size_t>(pSurface->w) * pSurface->h);
-    for (s32 y = 0; y < pSurface->h; y++)
-    {
-        memcpy(&pPicture->mPixels[static_cast<size_t>(y) * pSurface->w], static_cast<const u8*>(pSurface->pixels) + y * pSurface->pitch,
-               static_cast<size_t>(pSurface->w) * 4);
-    }
-    SDL_DestroySurface(pSurface);
-    return true;
+    return PortPng::Decode(pPng, size, &pPicture->mPixels, &pPicture->mWidth, &pPicture->mHeight);
 }
 
 // The logo as a badge: its corners rounded off.

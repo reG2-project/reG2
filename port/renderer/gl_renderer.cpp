@@ -461,6 +461,7 @@ GLRenderer::GLRenderer()
       mAoBakeProgram(0), mUniBakeOccScale(-1), mUniBakeZ(-1), mUniAoGrid(-1), mUniAo(-1), mUniAoDebug(-1), mDrawCalls(0), mUploads(0), mVertices(0)
 {
     memset(mScene, 0, sizeof(mScene));
+    mClipping = false;
     mActiveScene = 0;
     memset(&gl, 0, sizeof(gl));
     mGamma[0] = mGamma[1] = mGamma[2] = 1.0f;
@@ -1013,7 +1014,7 @@ void GLRenderer::Clear(u8 r, u8 g, u8 b, s32 left, s32 top, s32 right, s32 botto
     {
         gl.glClearBufferfv(GL_COLOR, 2, zero);
     }
-    gl.glDisable(GL_SCISSOR_TEST);
+    ApplyClip();
 }
 
 RTexture* GLRenderer::CreateTexture()
@@ -1105,8 +1106,35 @@ void GLRenderer::EndScene()
     Flush();
 }
 
-void GLRenderer::SetClipRect(f32, f32, f32, f32)
+// Draws after this only inside the rectangle (logical pixels, top left origin, as Clear's), the whole frame again for
+// one that covers it.
+void GLRenderer::SetClipRect(f32 left, f32 top, f32 right, f32 bottom)
 {
+    if (!mReady)
+    {
+        return;
+    }
+    Flush();
+    mClipping = left > 0 || top > 0 || right < mLogicalW || bottom < mLogicalH;
+    mClip[0] = left;
+    mClip[1] = top;
+    mClip[2] = right;
+    mClip[3] = bottom;
+    ApplyClip();
+}
+
+void GLRenderer::ApplyClip()
+{
+    if (!mClipping)
+    {
+        gl.glDisable(GL_SCISSOR_TEST);
+        return;
+    }
+    const f32 sx = (f32)mTargetW / mLogicalW;
+    const f32 sy = (f32)mTargetH / mLogicalH;
+    gl.glEnable(GL_SCISSOR_TEST);
+    gl.glScissor((GLint)(mClip[0] * sx), (GLint)(mClip[1] * sy), (GLsizei)((mClip[2] - mClip[0]) * sx),
+                 (GLsizei)((mClip[3] - mClip[1]) * sy));
 }
 
 void GLRenderer::SetLights(const RLight* pLights, s32 count, const f32* pAmbient, f32 unlitAmbient)
@@ -1407,6 +1435,10 @@ void GLRenderer::FinishFrame()
     {
         return;
     }
+    // A clip left set must not cut the frame's own passes.
+    Flush();
+    mClipping = false;
+    ApplyClip();
     Flush();
     ResolveMultisample();
     ApplyShadows();

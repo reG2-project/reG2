@@ -49,6 +49,14 @@ void OfferRetry(PortSaves::Checkpoint kind, s32 money, long long time, const Por
 void OfferStatistics(s32 rows);
 // On that page: true, with the layout's top of its first row and the distance between rows.
 bool OnStatistics(f32* pTop, f32* pStep);
+// After Open in game: MAP above STATISTICS, the whole city (minimap.hpp), which the pause menu draws and moves.
+void OfferMap();
+bool OnMap();
+// After Open in game and OfferMap: straight to the MAP (its key, M).
+void ShowMap();
+// A text in the pages' font (small: the frontend's smaller one), translated from its English, its top left at a screen
+// position, at that scale; its width on the screen. Needs the frontend's style.
+f32 ScreenText(const wchar_t* pEnglish, f32 x, f32 y, f32 scale, bool small, bool dim = false, bool draw = true);
 // After Open in game: MISSION TRANSCRIPT under STATISTICS, a page with briefs of that height (0: NO MESSAGES YET).
 void OfferTranscript(f32 height);
 // On that page: true; either way the layout's top of the briefs and the height they may take.
