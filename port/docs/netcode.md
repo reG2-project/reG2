@@ -345,7 +345,13 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   restores S, applies the server's state, and runs the ticks up to its own with its own inputs; other players take
   the controls the snapshot forwards for the ticks after it (the next tick's as the server runs it, then the commands
   it holds, up to 4), then the last of them repeated, a turn only once two in a row have it (a tap repeated turns far
-  past the server's). A repeated fire is a guess: the shooter's pose shows (`Ped::mBf21C.bAttacking`, the gun raised),
+  past the server's). The repeat is what rollback games do (GGPO's fighting games, Rocket League's cars). On
+  recordings (`GTA2_NET_FWDLOG`) it had the movement wrong in 12% of the first guessed ticks and 23% of the fourth;
+  letting go was wrong in 80% and drew more run-overs the server never had. Those come from what the victim does in the
+  guessed ticks, which no repeat knows: a jump (a jumping ped doesn't collide with cars), a step aside or back; 5% of a
+  client's run-overs of players at 50 ms of lag, 15% at 100. An arena bot is guessed longer (only its next tick is
+  forwarded: 4 ticks at 50 ms against 2 or 3 for a client's player), but deciding its controls ahead doesn't help: its
+  reaction to a car then comes as much later as it is known earlier. A repeated fire is a guess: the shooter's pose shows (`Ped::mBf21C.bAttacking`, the gun raised),
   but its weapon is not used (`SetFireGuessed`, `gPortPedMayFire` in `Ped::ManageWeapon`): another player's shots come
   only from the ticks the server forwarded, never drawn for a burst it didn't fire (`GTA2_NET_HOLDFIRE=1` fires the
   repeated fire too, to compare). As a guess doesn't count its weapon's reload down, the player entity carries the
