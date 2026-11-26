@@ -30,7 +30,7 @@ struct ServerConfig
     uint16_t port = kDefaultPort;
     engine::NetworkGame game; // game.players: <slots>
     int slots = 10; // the players on every map (--players, else NET_MAX_PLAYERS)
-    float interestRadius = 24.0f; // blocks around a client's player and its view that its snapshots cover (players: always)
+    float interestRadius = 24.0f; // at zoom 0 (ParseOptions scales it), blocks around a client's player and its view that its snapshots cover (players: always)
     int packets = 4; // a snapshot's packets at most (--packets, 1..8): a busy area's goes in parts
     LinkShape link; // the link conditioner (tests)
     std::vector<std::string> arena; // bot brains playing the first slots on the server itself (--arena)

@@ -4,6 +4,7 @@
 #include <vector>
 #include "bitstream.hpp"
 #include "player_limit.hpp"
+#include <math.h>
 #include <stdint.h>
 #include <string>
 
@@ -72,6 +73,7 @@ struct Welcome
     uint16_t tickMs = 33;
     uint8_t police = 0;
     uint8_t kit = 0; // what each player gets at every start and respawn: 0 nothing, 1 a machine gun (50) and armour
+    int8_t zoom = -1; // every player's camera zoom step (-5 to 5, the CAMERA ZOOM setting's; 0 the original's)
     uint32_t session = 0; // the server's run, drawn at its start: a client back after a drop finds another one if it restarted
     std::string name; // the player's name, as the server has it (another than the hello's if that was taken)
     std::string map; // the map's name (data/<map>.mmp)
@@ -82,6 +84,12 @@ struct Welcome
     uint32_t token = 0; // this slot's: a reconnect's hello shows it to have the slot back with its score
     uint16_t game = 0; // the server's game to take snapshots of (its snapshots' world.game): the next one during a map change
 };
+
+// How much more a zoom step (Welcome::zoom) shows than the original's view, each way
+inline float ViewScale(int zoom)
+{
+    return powf(1.125f, (float)-zoom);
+}
 
 struct Reject
 {

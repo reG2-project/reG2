@@ -36,7 +36,7 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 
 | | Options |
 |---|---|
-| Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players N` (1-10, 10: every map's slots), `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
+| Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players N` (1-10, 10: every map's slots), `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24 at zoom 0, scaled with `--zoom`: 27), `--zoom N` (every player's camera zoom, -5 to 5 as CAMERA ZOOM, -1) |
 | Round flow | `--minplayers N` (2), `--warmup s` (60), `--results s` (15), `--votes start,map,kick` (or `none`), `--rounds on\|off` |
 | Arena | `--arena brain,...` (bots on the server itself), `--ticks N` (the result printed and the server ended at tick N), `--seed N` |
 | Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, pulse, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` (a client's recording, or a server's: that server again, "Recordings") |
@@ -318,19 +318,19 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   ticks late are caught up by running the missing ticks at once, saved, and only more than 8 late or 20 early make it
   jump (its saves lost until snapshots of the new ticks come).
 - **Snapshots**, per client, every tick (`Server::SendSnapshot`): every player and the car each sits in, gets into or is pulled out of, wherever they
-  are, and everything within the client's interest area (24 blocks around its player's foci; a camera sees 6 to 8). Each
+  are, and everything within the client's interest area (27 blocks around its player's foci at zoom -1; on foot a 16:9 view is 11.8 by 6.7 blocks, in a fast car up to 34 by 19). Each
   entity is a delta against the state that client acknowledged for it (per-entity baselines, so a snapshot can carry
   part of the world and nothing waits for a lost packet). What doesn't fit the budget goes with the state the client
   already has and its age, a few bits. New state goes by priority: the age plus one over one plus a sixth of the
-  distance; an entity new to the client counts as 8 ticks old. Beyond 12 blocks (off screen with a margin), an entity
+  distance; an entity new to the client counts as 8 ticks old. Beyond 13.5 blocks (12 at zoom 0: off screen with a margin), an entity
   whose new state costs more than its age gets it only every third tick. A busy area's snapshot goes in up to
   `--packets` parts of the link's largest unfragmented packet (`--mtu` less 56 bytes: 1224 at the default 1280).
 - **Spawning** (`engine/spawn.cpp`): the game's limits on ambient traffic (16 cars) and peds (50) are for the whole
   game, and the first players' cameras took them all. A server allows the limits times its players, up to 3 players'
   worth (its traffic has drivers of its own: more ran the ped pool out). Before anything spawns, each client's camera
   bounds grow ahead along its motion by that client's lead, so nothing appears inside what it already shows.
-- **One view for everyone**: every player sees the same, 16:9 at the game's own zoom. CAMERA ZOOM doesn't apply in a
-  network game (`PortCameraZoom`), a wider screen shows bars at its sides (`ReadScreenSettings` keeps the game's screen
+- **One view for everyone**: every player sees the same, 16:9 at the server's zoom step (`--zoom`, in the Welcome; -1,
+  one step wider than the original's). The player's CAMERA ZOOM doesn't apply in a network game (`PortCameraZoom`), a wider screen shows bars at its sides (`ReadScreenSettings` keeps the game's screen
   16:9 at most, the renderer its aspect) and a narrower one sees less width. The server gives every player's cameras
   that view, so peds and cars spawn and go out of everyone's sight, and a traffic car, which the game spawns 5 blocks
   beyond one camera's edge, isn't spawned where another player's view is (`TrafficSpawner::SpawnTrafficCar`).
@@ -469,7 +469,7 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   on foot and not leaving is put on foot at once, so that whatever the server's does next (a jack) starts here as well.
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
   server's world. It carries every player, the car each sits in, gets into or is pulled out of, and every train wherever they are, and everything
-  within the reach (the interest area, 24 blocks around the client's player's foci as the server has them), each entity the
+  within the reach (the interest area, 27 blocks around the client's player's foci as the server has them), each entity the
   client has acknowledged at least as its last state and its age when the budget is short: so nothing the client has
   inside the reach is ever left out, and what a snapshot lacks is gone on the server or out of the client's area,
   where nothing more will come for it. Hence:

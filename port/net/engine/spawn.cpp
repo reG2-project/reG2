@@ -30,7 +30,7 @@ namespace
 {
 int gSpawnLead[MAX_PLAYERS];
 
-// The network view (16:9 at the game's zoom, ReadScreenSettings, PortCameraZoom) of a camera of another size: a
+// The network view (16:9 at the server's zoom step, ReadScreenSettings, PortCameraZoom) of a camera of another size: a
 // client's own (its window), the others' (640x480). Only the bounds: a client's own still draws at its window's size
 void NetworkBounds(Camera* c)
 {

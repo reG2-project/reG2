@@ -7,6 +7,7 @@
 #include "internal.hpp"
 #include "Source/NetPlay.hpp"
 #include "Source/NetUi.hpp"
+#include "Source/Camera.hpp"
 #include "Source/Game.hpp"
 #include "Source/GameSession.hpp"
 #include "Source/debug.hpp"
@@ -99,6 +100,7 @@ void net::engine::StartNetworkGame(const NetworkGame& game)
     gPortScoreBonusHook = net::engine::ScoreBonus;
     gPortKillCamTicks = KillCamTicks;
     gPortSpawnKit = gNetGame.kit ? SpawnKit : NULL;
+    PortSetNetworkCameraZoom(gNetGame.zoom);
     gPortDeathViewPed = DeathCamera;
     gPortCorpseKept = CorpseKept;
     InstallStarts(true);

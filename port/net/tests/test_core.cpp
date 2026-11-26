@@ -261,6 +261,7 @@ void TestMessages()
     w.maps = {"mp1-6p", "mp2-6p", "downtown-6p"};
     w.token = 0xC0FFEE11;
     w.game = 513;
+    w.zoom = -5;
     net::BitWriter bw;
     net::WriteWelcome(bw, w);
     net::BitReader br(bw.Data().data(), bw.ByteCount());
@@ -270,7 +271,7 @@ void TestMessages()
     CHECK(got.slot == 2 && got.players == 6 && got.gameType == 3 && got.fragLimit == 25 && got.gmp == w.gmp &&
           got.scr == w.scr && got.serverTick == 123456 && got.maps == w.maps && got.session == w.session && got.name == w.name &&
           got.map == w.map && got.print.gmp == w.print.gmp && got.print.sty == 7 && got.print.scr == 9 && got.token == w.token &&
-          got.game == 513);
+          got.game == 513 && got.zoom == -5);
 
     // The most player slots, the last one this client's; one more is refused
     for (int players : {net::kMaxPlayers, net::kMaxPlayers + 1})

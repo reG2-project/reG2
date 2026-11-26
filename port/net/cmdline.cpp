@@ -31,9 +31,10 @@ const char kUsage[] =
     "  --tickms N            the simulation step, 33\n"
     "  --police [stars]      police on (off by default), up to 1 star or 1-6\n"
     "  --kit smg             every start and respawn: a machine gun with 50 shots and armour\n"
+    "  --zoom N              every player's camera zoom, -5 (wider) to 5 (closer), the CAMERA ZOOM setting's steps; -1\n"
     "  --traffic N           ambient traffic cars per player, 16\n"
     "  --packets N           a snapshot's packets at most, 1-8, 4\n"
-    "  --interest blocks     how far around a client its snapshots reach, 24\n"
+    "  --interest blocks     how far around a client its snapshots reach, 24 at zoom 0 (27 at -1)\n"
     "  --window              show the server in a window\n"
     "  The round flow: --minplayers N (2), --warmup s (60), --results s (15), --votes start,map,kick,\n"
     "  --rounds on|off (on, off with --arena)\n"
@@ -66,10 +67,10 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
     // A server's options: an error without --server, so a single-player game never takes one (--traffic) or drops it
     static const char* const kServerOnly[] = {"--window", "--port", "--map", "--maps", "--minplayers", "--warmup", "--results",
                                               "--votes", "--rounds", "--players", "--gametype", "--fraglimit", "--timelimit",
-                                              "--tickms", "--interest", "--traffic", "--police", "--kit", "--packets", "--arena", "--seed",
+                                              "--tickms", "--interest", "--traffic", "--police", "--kit", "--zoom", "--packets", "--arena", "--seed",
                                               "--ticks"};
     std::string serverOption;
-    bool fragLimitGiven = false;
+    bool fragLimitGiven = false, interestGiven = false;
     for (size_t i = 0; i < args.size(); i++)
     {
         const std::string& a = args[i];
@@ -160,6 +161,7 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
         else if (a == "--interest" && more)
         {
             sc.interestRadius = (float)atof(args[++i].c_str());
+            interestGiven = true;
         }
         else if (a == "--traffic" && more)
         {
@@ -176,6 +178,10 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
         else if (a == "--kit" && more)
         {
             sc.game.kit = args[++i] == "smg" ? 1 : 0;
+        }
+        else if (a == "--zoom" && more)
+        {
+            sc.game.zoom = std::max(-5, std::min(5, atoi(args[++i].c_str())));
         }
         else if (a == "--packets" && more)
         {
@@ -253,6 +259,10 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
     if (sc.game.gameType == 2 && !fragLimitGiven)
     {
         sc.game.fragLimit = 10000; // a points game's limit is money: the original lobby's default (NetUi, "s_limit")
+    }
+    if (!interestGiven)
+    {
+        sc.interestRadius *= ViewScale(sc.game.zoom); // the same margin around a wider view
     }
     args = rest;
     return true;

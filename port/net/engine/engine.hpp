@@ -24,6 +24,7 @@ struct NetworkGame
     int timeLimitMin = 10;
     int police = 0;
     int kit = 0; // Welcome::kit
+    int zoom = -1; // Welcome::zoom
     int tickMs = 33;
 };
 // Before WinMain: the game boots this network game (with -N on its command line)

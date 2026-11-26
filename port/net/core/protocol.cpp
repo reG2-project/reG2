@@ -188,6 +188,7 @@ void net::WriteWelcome(BitWriter& w, const Welcome& m)
     w.VarU(m.tickMs);
     w.Bits(m.police, 8);
     w.Bits(m.kit, 8);
+    w.Bits((uint32_t)(m.zoom + 5), 4);
     w.Bits(m.session, 32);
     WriteString(w, m.name);
     WriteString(w, m.map);
@@ -216,6 +217,7 @@ bool net::ReadWelcome(BitReader& r, Welcome& m)
     m.tickMs = (uint16_t)r.VarU();
     m.police = (uint8_t)r.Bits(8);
     m.kit = (uint8_t)r.Bits(8);
+    m.zoom = (int8_t)((int)r.Bits(4) - 5);
     m.session = r.Bits(32);
     bool ok = ReadString(r, m.name) && ReadString(r, m.map) && ReadString(r, m.gmp) && ReadString(r, m.sty) && ReadString(r, m.scr);
     ReadPrint(r, m.print);
@@ -227,7 +229,7 @@ bool net::ReadWelcome(BitReader& r, Welcome& m)
     }
     m.token = r.Bits(32);
     m.game = (uint16_t)r.Bits(16);
-    return ok && !r.Overflow() && m.slot < m.players && m.players <= kMaxPlayers;
+    return ok && !r.Overflow() && m.slot < m.players && m.players <= kMaxPlayers && m.zoom <= 5;
 }
 
 void net::WriteReject(BitWriter& w, const Reject& m)

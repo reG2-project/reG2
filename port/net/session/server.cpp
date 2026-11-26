@@ -455,6 +455,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
             welcome.tickMs = (uint16_t)mConfig.game.tickMs;
             welcome.police = (uint8_t)mConfig.game.police;
             welcome.kit = (uint8_t)mConfig.game.kit;
+            welcome.zoom = (int8_t)mConfig.game.zoom;
             welcome.session = mSession;
             welcome.name = name;
             welcome.map = mMap < mConfig.voteMaps.size() ? mConfig.voteMaps[mMap].name : "";
@@ -605,7 +606,7 @@ void net::Server::OnReceive(const TransportEvent& e)
 
 namespace
 {
-const float kFullRateRadius = 12.0f; // blocks: beyond, an entity the client has gets new state every kFarAgeTicks
+const float kFullRateRadius = 12.0f; // blocks at the original's zoom: beyond, an entity the client has gets new state every kFarAgeTicks
 const int kFarAgeTicks = 3;
 } // namespace
 
@@ -614,6 +615,7 @@ const int kFarAgeTicks = 3;
 std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::vector<const EntityState*>& area, const Snapshot* base, const engine::Foci& foci) const
 {
     const Schema& schema = engine::NetSchema();
+    const float fullRate = kFullRateRadius * ViewScale(mConfig.game.zoom);
     std::vector<Item> items(area.size());
     for (size_t i = 0; i < area.size(); i++)
     {
@@ -636,11 +638,11 @@ std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::
             }
             it.agedBits = EntryBits(schema, it.had, it.aged);
             it.priority = (float)(age + 1) / (1.0f + Distance(*it.now, foci) / 6.0f);
-            // Off screen with a margin (a view is 8 to 11 blocks centre to corner), new state every third tick when it
+            // Off screen with a margin (a view at zoom 0 is 8 to 11 blocks centre to corner), new state every third tick when it
             // costs more than its age: the client's own simulation keeps it within a pixel meanwhile (netcode.md, "Drift")
             const auto last = s.lastFresh.find(it.now->id);
             it.hold = last != s.lastFresh.end() && mTick - last->second < (uint32_t)kFarAgeTicks &&
-                      Distance(*it.now, foci) > kFullRateRadius && it.freshBits > it.agedBits;
+                      Distance(*it.now, foci) > fullRate && it.freshBits > it.agedBits;
         }
         else
         {
