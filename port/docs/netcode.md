@@ -776,7 +776,9 @@ then the goal given up for 30 s). A goal its route gets no shorter to for 10 s (
 30 s, except a player it has a route to (a player chased keeps moving). Going round a car, a corner it stands at counts
 as passed. A car it stands beside without getting in for 4 s is given up too. With nobody on its ways (Tiny Town's
 second arena slot starts on a raised spot), a fighter walks at the nearest player anyway. A car that stays within 2
-blocks of a spot for 5 s with nobody within 6 is wedged: the bot gets out and leaves it 30 s. After a fight on foot
+blocks of a spot for 5 s with nobody within 6 is wedged: the bot gets out and leaves it 30 s. A car still for a
+second backs out for one, the wheel turned the other way, then this way; still again after two back-outs within 2
+blocks, the bot gets out whoever is near (car stuck time: rammer 8.9 to 6.6 s per 5 minutes, hunter 7.0 to 5.8). After a fight on foot
 (the hunter: someone within 8 blocks), the hunter and the soldier stay on foot 5 s before going for a car. These brains draw no random numbers (only `human` and `nn` do) and their searches are bounded in cells, so an
 arena match of them repeats for a seed.
 
