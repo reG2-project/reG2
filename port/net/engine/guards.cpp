@@ -12,12 +12,15 @@
 #include "Source/Object_3C.hpp"
 #include "Source/Object_5C.hpp"
 #include "Source/sprite.hpp"
+#include "Source/SpriteGrid.hpp"
+#include "Source/collide.hpp"
 #include "Source/map_0x370.hpp"
 #include "Source/debug.hpp"
 #include "Source/Police.hpp"
 #include "Source/Hud.hpp"
 #include "Source/GameSession.hpp"
 #include "port/src/net_hooks.hpp"
+#include <algorithm>
 #include <set>
 
 // Pulling someone out of a car is done on foot (Ped::PullDriverOutOfCarStateMachine moves its char). A cop
@@ -262,6 +265,20 @@ void net::engine::KeepPlayerArrows()
 // only, so it was drawn where that had been
 namespace
 {
+// Whether grid 3 links <s> in the cell of its place, where SpriteGrid::Remove looks for it
+bool LinkedInItsCell(const Sprite* s)
+{
+    const s32 x = std::min(255, std::max(0, s->mXy.x.ToInt())), y = std::min(255, std::max(0, s->mXy.y.ToInt()));
+    for (const GridSpriteLink* l = gSpriteGrid_3->GetCollideListAt(x, y); l; l = l->mpNext)
+    {
+        if (l->mpSprite == s)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Anchor(const Sprite* owner, AttachedSprite* first)
 {
     for (AttachedSprite* a = first; a; a = a->mpNext)
@@ -282,8 +299,18 @@ void Anchor(const Sprite* owner, AttachedSprite* first)
             x += owner->mXy.x;
             y += owner->mXy.y;
         }
+        // Its grid 3 link (Object::OnAttachedToSprite) moves with it, or the next Remove misses it: a freed sprite left linked
+        const bool linked = LinkedInItsCell(o->mSprite);
+        if (linked)
+        {
+            gSpriteGrid_3->Remove(o->mSprite);
+        }
         o->mSprite->set_xyz_lazy(x, y, owner->mZpos);
         o->mSprite->set_ang_lazy(owner->mRotation + a->mOffsetRot);
+        if (linked)
+        {
+            gSpriteGrid_3->AddToSingleBucket(o->mSprite);
+        }
     }
 }
 } // namespace
