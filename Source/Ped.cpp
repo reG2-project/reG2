@@ -1502,6 +1502,14 @@ void Ped::EnterCarAsPassenger(Car* pCar)
 MATCH_FUNC(0x45c830)
 bool Ped::AllocCharB4(Fix16 xpos, Fix16 ypos, Fix16 zpos)
 {
+#if defined(GTA2_PORT)
+    if (!gSpriteShapePool->mPool.PortRoom(2))
+    {
+        PortPool::Skipped("a char"); // its sprite's shapes (Char::InitSprite)
+        mGameObject = NULL;
+        return false;
+    }
+#endif
     Char* pChar = gChar_B4_Pool->mPool.Allocate();
 
     mGameObject = pChar;

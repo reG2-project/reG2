@@ -3412,7 +3412,8 @@ Object* Object_5C::CreateObject(s32 object_type, Fix16 xpos, Fix16 ypos, Fix16 z
 #if defined(GTA2_PORT)
     // Shots, debris and effects leave a reserve for the scripts' objects and the peds' bodies (knocked down)
     const bool essential = PortPool::gEssential || object_type == objects::ped_pushed_110;
-    if (!gObject_2C_Pool->PortRoom(essential ? 1 : 33) || !PortRoomForBehavior(pDefinition->mBehaviorType, false, false, essential ? 0 : 16))
+    if (!gObject_2C_Pool->PortRoom(essential ? 1 : 33) || !PortRoomForBehavior(pDefinition->mBehaviorType, false, false, essential ? 0 : 16) ||
+        !gSpriteShapePool->mPool.PortRoom(essential ? 2 : 66)) // its sprite's collision and visual shapes
     {
         PortPool::Skipped("an object");
         mPendingDamageOwner = 0;

@@ -5,6 +5,7 @@
 #include "Pool.hpp"
 #include "char.hpp"
 #if defined(GTA2_PORT)
+#include "sprite.hpp"
 #include <stdlib.h>
 #endif
 
@@ -242,7 +243,8 @@ const s32 kPortAmbientPedReserve = 8;
 // Room for n peds, each with a char if withChars (port/src/pool/guard.hpp); false logs <what> as skipped
 inline bool PortRoomForPeds(s32 n, bool withChars, const char* what)
 {
-    if (gPedPool->mPool.PortRoom(n) && (!withChars || gChar_B4_Pool->mPool.PortRoom(n)))
+    // A char's sprite takes a collision shape and, drawn, a visual one
+    if (gPedPool->mPool.PortRoom(n) && (!withChars || (gChar_B4_Pool->mPool.PortRoom(n) && gSpriteShapePool->mPool.PortRoom(2 * n))))
     {
         return true;
     }

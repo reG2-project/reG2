@@ -1403,7 +1403,7 @@ Car* CarManager::SpawnCarAt(Fix16 xpos, Fix16 ypos, Fix16 zpos, Ang16 rotation, 
     car_info* pCarInfo = gGtx_0x106C->get_car_info_5AA3B0(car_info_idx);
 
 #if defined(GTA2_PORT)
-    if (!gCar_BC_Pool->mPool.PortRoom())
+    if (!gCar_BC_Pool->mPool.PortRoom() || !gSpriteShapePool->mPool.PortRoom(2))
     {
         PortPool::Skipped("a car");
         return NULL;
