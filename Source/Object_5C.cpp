@@ -31,6 +31,31 @@
 #include "block_face.hpp"
 #if defined(GTA2_PORT)
 #include "../port/src/net_hooks.hpp" // gPortObjectMade
+
+// Room for the Object_3C and Object_8 that an object of this behaviour needs, besides those it has, and <reserve> more
+static bool PortRoomForBehavior(s32 behavior, bool has3C, bool has8, s32 reserve = 0)
+{
+    bool needs3C = false;
+    bool needs8 = false;
+    switch (behavior)
+    {
+        case object_behavior_type::physics_3:
+        case object_behavior_type::pickup_physics_7:
+            needs3C = true;
+            break;
+        case object_behavior_type::animated_2:
+        case object_behavior_type::pickup_animated_8:
+            needs8 = true;
+            break;
+        case object_behavior_type::physics_animated_4:
+        case object_behavior_type::pickup_physics_animated_9:
+            needs3C = needs8 = true;
+            break;
+        default:
+            break;
+    }
+    return (!needs3C || has3C || gObject_3C_Pool->PortRoom(1 + reserve)) && (!needs8 || has8 || gObject_8_Pool->PortRoom(1 + reserve));
+}
 #endif
 
 DEFINE_GLOBAL(Object_5C*, gObject_5C, 0x6F8F84);
@@ -349,6 +374,12 @@ MATCH_FUNC(0x522640)
 void Object::SetMovementVectorWithRandomState(PORT_CONST Fix16_Point& point)
 {
     SetMovementVector(point);
+#if defined(GTA2_PORT)
+    if (!mObj3c)
+    {
+        return; // the Object_3C pool was full (NewObj3C)
+    }
+#endif
 
     if (mDefinition->mCollisionResponse == 3 && mObj3c->mSpriteCollideMode == 2)
     {
@@ -374,6 +405,12 @@ void Object::SetConveyorPush(char_type conveyor_speed)
     if (!mObj3c)
     {
         NewObj3C(gZeroVector);
+#if defined(GTA2_PORT)
+        if (!mObj3c)
+        {
+            return; // a full Object_3C pool: no push
+        }
+#endif
     }
     mObj3c->mConveyorSpeed = conveyor_speed;
 }
@@ -2269,6 +2306,13 @@ MATCH_FUNC(0x528130)
 void Object::NewObj3C(PORT_CONST Fix16_Point& speed)
 {
     Object_3C* pNewObj = gObject_3C_Pool->Allocate();
+#if defined(GTA2_PORT)
+    if (!pNewObj)
+    {
+        PortPool::Skipped("an object's movement"); // it stays at rest
+        return;
+    }
+#endif
 
     this->mObj3c = pNewObj;
     pNewObj->mObj2cId = mId;
@@ -2381,6 +2425,13 @@ void Object::TickObject(s32 obj_type)
             else
             {
                 ObjectDefinition* pDefinition = gObjectDefinitions->GetObjectDefinition(obj_type);
+#if defined(GTA2_PORT)
+                if (!PortRoomForBehavior(pDefinition->mBehaviorType, mObj3c != NULL, mpAny.o8 != NULL))
+                {
+                    PortPool::Skipped("an object's next form"); // it keeps this one, tried again later
+                    return;
+                }
+#endif
                 if (mDefinition->mInstanceLimitKind == pDefinition->mInstanceLimitKind ||
                     !Object::ChangeInstanceLimitKind(mDefinition->mInstanceLimitKind, pDefinition->mInstanceLimitKind))
                 {
@@ -3358,6 +3409,16 @@ Object* Object_5C::CreateObject(s32 object_type, Fix16 xpos, Fix16 ypos, Fix16 z
     }
 
     ObjectDefinition* pDefinition = gObjectDefinitions->GetObjectDefinition(object_type);
+#if defined(GTA2_PORT)
+    // Shots, debris and effects leave a reserve for the scripts' objects and the peds' bodies (knocked down)
+    const bool essential = PortPool::gEssential || object_type == objects::ped_pushed_110;
+    if (!gObject_2C_Pool->PortRoom(essential ? 1 : 33) || !PortRoomForBehavior(pDefinition->mBehaviorType, false, false, essential ? 0 : 16))
+    {
+        PortPool::Skipped("an object");
+        mPendingDamageOwner = 0;
+        return NULL;
+    }
+#endif
     if (pDefinition->mInstanceLimitKind == instance_limit_kind::limited_count_2)
     {
         if (mLimitedObjectCount == 360)
@@ -3581,6 +3642,14 @@ Object* Object_5C::CreateMovingObj(s32 object_type,
                                  Fix16 z_speed,
                                  bool fail_if_blocked)
 {
+#if defined(GTA2_PORT)
+    // Its Object_3C below: the original's own check would leave an untracked object behind, never freed
+    if (!gObject_3C_Pool->PortRoom(PortPool::gEssential || object_type == objects::ped_pushed_110 ? 1 : 17))
+    {
+        PortPool::Skipped("a moving object");
+        return NULL;
+    }
+#endif
     Object* pNewObj = Object_5C::CreateObject(object_type, xpos, ypos, zpos, rotation, fail_if_blocked);
 
     if (pNewObj)
@@ -3616,6 +3685,13 @@ Object* Object_5C::CreateMovingObj(s32 object_type,
 MATCH_FUNC(0x52a3d0)
 Object* Object_5C::CreateExplosion(Fix16 x, Fix16 y, Fix16 z, Ang16 rot, s32 kind, s32 ped_id)
 {
+#if defined(GTA2_PORT)
+    if (!gObject_3C_Pool->PortRoom(PortPool::gEssential ? 1 : 17))
+    {
+        PortPool::Skipped("an explosion");
+        return NULL;
+    }
+#endif
     Object* pNewObject = NewPhysicsObj(objects::explosion_113, x, y, z, rot);
     if (pNewObject)
     {
@@ -3707,6 +3783,12 @@ void Object_5C::RestoreObjects(SavedObjectData* pData)
                                             pData->mObjX[1][i].mValue,
                                             pData->mObjX[2][i].mValue,
                                             kZeroAng_6F8F68);
+#if defined(GTA2_PORT)
+            if (!pNewObj)
+            {
+                continue; // a full pool (CreateObject)
+            }
+#endif
             pNewObj->SetParam(pData->mPickupAmmo[i]);
         }
     }
@@ -3730,6 +3812,13 @@ void Object::EnsureObject3C()
     if (!mObj3c)
     {
         Object_3C* pObject3C = gObject_3C_Pool->Allocate();
+#if defined(GTA2_PORT)
+        if (!pObject3C)
+        {
+            PortPool::Skipped("an object's Object_3C");
+            return;
+        }
+#endif
         mObj3c = pObject3C;
         pObject3C->mObj2cId = mId;
         mObj3c->mSpeed = kFpZero_6F8E10;

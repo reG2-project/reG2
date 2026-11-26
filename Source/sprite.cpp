@@ -32,6 +32,7 @@
 // Port: SHADOWS SOFT, the day and night cycle, TWIN STICK's strafe legs and HEAT HAZE's flames.
 #include "../port/src/heat_haze.hpp"
 #include "../port/src/shadows.hpp"
+#include "Object_3C_Pool.hpp"
 #include "../port/src/day_night.hpp"
 #include "../port/src/twin_stick.hpp"
 #include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
@@ -2383,6 +2384,16 @@ MATCH_FUNC(0x5a3100)
 void Sprite::AttachSprite(Sprite* pSprite, Fix16 x, Fix16 y, Ang16 ang)
 {
     Object* pObject;
+#if defined(GTA2_PORT)
+    // A full pool: the sprite stays where it is, unattached, as its own object
+    const bool parentIsObject = mSpriteTypeEnum == sprite_types_enum::object_1 || mSpriteTypeEnum == sprite_types_enum::code_obj1_4 ||
+                                mSpriteTypeEnum == sprite_types_enum::map_obj_5;
+    if (!gAttachedSpritePool->mPool.PortRoom() || (parentIsObject && !mObject2CPtr->mObj3c && !gObject_3C_Pool->PortRoom()))
+    {
+        PortPool::Skipped("an attachment");
+        return;
+    }
+#endif
 
     switch (mSpriteTypeEnum)
     {

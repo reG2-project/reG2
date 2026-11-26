@@ -2737,6 +2737,20 @@ bool PoliceRoadblock::CreateRoadblock(u8 x, u8 y, u8 z, s32 orientation)
                                                                   Fix16(y_start + lane) + kFpHalf_6FEBF4,
                                                                   z,
                                                                   kAng90_6FEB74);
+#if defined(GTA2_PORT)
+                    if (!pBarrier1 || !pBarrier2) // a full object pool: no barriers in this lane
+                    {
+                        if (pBarrier1)
+                        {
+                            pBarrier1->RequestRemoval();
+                        }
+                        if (pBarrier2)
+                        {
+                            pBarrier2->RequestRemoval();
+                        }
+                    }
+                    else
+#endif
                     if (!mBarrier1)
                     {
                         mBarrier1 = pBarrier1;
@@ -3047,6 +3061,20 @@ bool PoliceRoadblock::CreateRoadblock(u8 x, u8 y, u8 z, s32 orientation)
                                                                   Fix16(y_start) + kFpPoint8_6FEB68,
                                                                   z,
                                                                   kAng0_6FEE30);
+#if defined(GTA2_PORT)
+                    if (!pBarrier1 || !pBarrier2) // a full object pool: no barriers in this lane
+                    {
+                        if (pBarrier1)
+                        {
+                            pBarrier1->RequestRemoval();
+                        }
+                        if (pBarrier2)
+                        {
+                            pBarrier2->RequestRemoval();
+                        }
+                    }
+                    else
+#endif
                     if (!mBarrier1)
                     {
                         mBarrier1 = pBarrier1;

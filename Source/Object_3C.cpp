@@ -292,6 +292,13 @@ MATCH_FUNC(0x5a6cd0)
 void SpriteList::AddSprite(Sprite* pSprite)
 {
     AttachedSprite* pAttached = gAttachedSpritePool->Allocate();
+#if defined(GTA2_PORT)
+    if (!pAttached)
+    {
+        PortPool::Skipped("a sprite list entry");
+        return;
+    }
+#endif
     pAttached->mpSprite = pSprite;
     pAttached->mpNext = this->mP18;
     pAttached->mOffsetX = 0;
@@ -303,6 +310,13 @@ MATCH_FUNC(0x5a6d00)
 void SpriteList::PushAttachedSprite(Sprite* pSprite, Fix16 x, Fix16 y, Ang16 angle)
 {
     AttachedSprite* pAttached = gAttachedSpritePool->Allocate();
+#if defined(GTA2_PORT)
+    if (!pAttached)
+    {
+        PortPool::Skipped("an attached sprite");
+        return;
+    }
+#endif
     pAttached->mpSprite = pSprite;
     pAttached->mpNext = mP18;
     pAttached->mOffsetX = x;
@@ -325,6 +339,13 @@ void SpriteList::PushSprite(Sprite* pSprite)
     }
 
     AttachedSprite* pNew = gAttachedSpritePool->Allocate();
+#if defined(GTA2_PORT)
+    if (!pNew)
+    {
+        PortPool::Skipped("a sprite list entry");
+        return;
+    }
+#endif
     pNew->mpSprite = pSprite;
 
     pNew->mpNext = this->mP18;

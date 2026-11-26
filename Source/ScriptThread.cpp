@@ -1545,6 +1545,9 @@ void ScriptThread::RegisterBasicKf(u16* pKfValue)
 MATCH_FUNC(0x5061c0)
 void ScriptThread::ExecOpCode()
 {
+#if defined(GTA2_PORT)
+    PortPool::Essential essential; // the scripts' creations may use the pools' reserves
+#endif
     for (u16 i = 1; i < 6000u; ++i)
     {
         SCR_CMD_HEADER* pBasePtr = gScriptManager->GetBasePointer(i);
@@ -6919,6 +6922,9 @@ void ScriptThread::SCRCMD_SAVE_RESTORE_RESPECT()
 MATCH_FUNC(0x5108d0)
 void ScriptThread::PreExecOpCode()
 {
+#if defined(GTA2_PORT)
+    PortPool::Essential essential;
+#endif
     if (mStopped != 1)
     {
         SCR_CMD_HEADER* pCmd = gScriptManager->GetBasePointer(mNextCmd);

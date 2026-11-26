@@ -4292,6 +4292,12 @@ void Car::AttachGangIcon(u8 arrow_colour)
 {
     Object* pIcon =
         gObject_5C->NewPhysicsObj(arrow_colour + 286, kFpZero_6777CC, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
+#if defined(GTA2_PORT)
+    if (!pIcon)
+    {
+        return; // a full object pool
+    }
+#endif
     mCarSprite->AttachSprite(pIcon->mSprite, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
 }
 
@@ -4400,6 +4406,12 @@ void Car::PutWaterCannonOnRoof()
 {
     Object* pObject =
         gObject_5C->NewPhysicsObj(objects::water_cannon_114, kFpZero_6777CC, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
+#if defined(GTA2_PORT)
+    if (!pObject)
+    {
+        return; // a full object pool
+    }
+#endif
     mCarSprite->AttachSprite(pObject->mSprite, kFpZero_6777CC, kWaterCannonOffsetY, kAng180_677326);
 }
 
@@ -4408,6 +4420,12 @@ void Car::PutTankCannonOnRoof()
 {
     Object* pObject =
         gObject_5C->NewPhysicsObj(objects::tank_cannon_148, kFpZero_6777CC, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
+#if defined(GTA2_PORT)
+    if (!pObject)
+    {
+        return; // a full object pool
+    }
+#endif
     mCarSprite->AttachSprite(pObject->mSprite, kFpZero_6777CC, kTankCannonOffsetY, kAngZero_67791C);
 }
 
@@ -4415,6 +4433,12 @@ MATCH_FUNC(0x440b60)
 void Car::PutMachineGunOnRoof()
 {
     Object* pObj = gObject_5C->NewPhysicsObj(248, kFpZero_6777CC, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
+#if defined(GTA2_PORT)
+    if (!pObj)
+    {
+        return; // a full object pool
+    }
+#endif
     mCarSprite->AttachSprite(pObj->mSprite, kFpZero_6777CC, kMachineGunOffsetY, kAngZero_67791C);
 }
 
@@ -4423,6 +4447,12 @@ void Car::PutTV_Antenna()
 {
     Object* pNewObj =
         gObject_5C->NewPhysicsObj(objects::tv_antenna_149, kFpZero_6777CC, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
+#if defined(GTA2_PORT)
+    if (!pNewObj)
+    {
+        return; // a full object pool
+    }
+#endif
     mCarSprite->AttachSprite(pNewObj->mSprite, kFpZero_6777CC, kTvAntennaOffsetY, GetRadioTowerAngle());
 }
 
@@ -4589,6 +4619,12 @@ void Car::FireCarBomb(char_type instant_bomb)
                                                                     kFpZero_6777CC,
                                                                     kFpZero_6777CC,
                                                                     kAngZero_67791C);
+#if defined(GTA2_PORT)
+        if (!pNewObject)
+        {
+            return; // a full object pool
+        }
+#endif
         Ped* pDriver = this->mDriver;
         if (pDriver)
         {
@@ -6495,6 +6531,12 @@ MATCH_FUNC(0x443f30)
 void Car::AttachLight(s32 object_type, s32 argb, s32 x_offset, s32 y_offset)
 {
     Object* pObj = gObject_5C->NewLightOfType(object_type, 0, 0, 0, argb, kFpOneAndHalf_6772AC, 200);
+#if defined(GTA2_PORT)
+    if (!pObj)
+    {
+        return; // a full object pool
+    }
+#endif
     pObj->TurnOffLight();
     mCarSprite->AttachSprite(pObj->mSprite, (kFpOne64th_677888 * x_offset), (kFpOne64th_677888 * y_offset), kAngZero_67791C);
 }
