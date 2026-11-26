@@ -603,21 +603,35 @@ s32 Screen(Id id)
 
 const s32 kMaxBloom = 5;
 
-// Steps of the camera zoom: 0 is the original's, each step closer magnifies by kZoomStep.
+// Steps of the camera zoom: 0 is the original's, each step closer magnifies by 9/8.
 const s32 kMinZoom = -5;
 const s32 kMaxZoom = 5;
-const f32 kZoomStep = 1.125f;
 // Cached: the camera and the map renderer read it several times a frame.
 bool sZoomRead;
 s32 sZoom;
 Fix16 sZoomFactor;
 
+// 9/8 to the power of <step>, rounded, in integers: a network game's ends must agree on its view
+Fix16 ZoomFactor(s32 step)
+{
+    step = Clamp(step, kMinZoom, kMaxZoom);
+    int64_t num = 16384, den = 1;
+    for (s32 i = 0; i < (step < 0 ? -step : step); i++)
+    {
+        num *= step < 0 ? 8 : 9;
+        den *= step < 0 ? 9 : 8;
+    }
+    return Fix16(static_cast<s32>((2 * num + den) / (2 * den)), 0);
+}
+
 void SetZoom(s32 zoom)
 {
     sZoom = Clamp(zoom, kMinZoom, kMaxZoom);
-    sZoomFactor = Fix16(static_cast<s32>(powf(kZoomStep, static_cast<f32>(sZoom)) * 16384.0f + 0.5f), 0);
+    sZoomFactor = ZoomFactor(sZoom);
     sZoomRead = true;
 }
+
+Fix16 sNetworkZoomFactor = ZoomFactor(0);
 
 s32 Zoom()
 {
@@ -1535,8 +1549,13 @@ Fix16 PortCameraZoom(Fix16 zoom)
 {
     if (bStartNetworkGame)
     {
-        return zoom; // one view for every player (and for the server's spawning, port/docs/netcode.md)
+        return zoom * PortSettings::sNetworkZoomFactor; // the server's, for every player (port/docs/netcode.md)
     }
     PortSettings::Zoom();
     return zoom * PortSettings::sZoomFactor;
+}
+
+void PortSetNetworkCameraZoom(s32 step)
+{
+    PortSettings::sNetworkZoomFactor = PortSettings::ZoomFactor(step);
 }

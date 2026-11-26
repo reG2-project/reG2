@@ -226,8 +226,10 @@ struct PortUiCentred
 };
 // The screen's width over that of a 4:3 screen of the same height (1 when not wider).
 Fix16 PortViewWidthFactor();
-// A camera zoom with the player's zoom setting applied, for everything that depends on the view's size.
+// A camera zoom with the zoom setting (a network game: the server's step) applied, for everything that depends on the view's size.
 Fix16 PortCameraZoom(Fix16 zoom);
+// A network game's zoom step, the same for every player, instead of the setting.
+void PortSetNetworkCameraZoom(s32 step);
 // The HUD's scale on a screen of that size, with the HUD scale and safe area settings.
 Fix16 PortHudUiScale(u32 width, u32 height);
 // The 640x480 layout's scale that fits the screen, without the HUD settings.
