@@ -34,6 +34,7 @@
 #include <dlfcn.h>
 #include <execinfo.h>
 #endif
+#include "port/src/interpolation.hpp"
 #include "port/src/net_hooks.hpp"
 #include "port/src/rand/owner.hpp"
 #include "port/src/rand/state.hpp"
@@ -1521,6 +1522,11 @@ void net::engine::DebugDeathLog(bool server)
             continue;
         }
         float x = s->mXy.x.ToFloat(), y = s->mXy.y.ToFloat();
+        float gx, gy;
+        if (PortInterp::GlideOffset(s, &gx, &gy))
+        {
+            x += gx, y += gy;
+        }
         const bool corpse = s != ped->mGameObject->mSpritePtr;
         const float dx = x - last.mX, dy = y - last.mY, d = sqrtf(dx * dx + dy * dy);
         if (last.mpSprite && corpse && !last.mCorpse)

@@ -593,6 +593,7 @@ void net::Client::Reconcile(const Snapshot& snap)
     }
     std::vector<engine::Pose> before; // what this frame would have shown, to blend the correction in
     engine::Poses(before);
+    engine::NoteShownDead();
     const engine::LocalChat chat = engine::TakeLocalChat();
     using Clock = std::chrono::steady_clock;
     const auto us = [](Clock::time_point a, Clock::time_point b) {
@@ -631,6 +632,10 @@ void net::Client::Reconcile(const Snapshot& snap)
     mLink.reconciles++;
     engine::ApplyScores(snap);
     Blend(before);
+    if (Env().blend > 0 && Env().blend < 1)
+    {
+        engine::GlideDead();
+    }
 }
 
 // The ticks after <s> again, to ours, with the inputs we used (other players: their last known input)

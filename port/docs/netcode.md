@@ -449,6 +449,14 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   the corpse takes the player's hit side (`Char::mCharState`), or the fall it is in, and falls as a ped does, on both
   ends; a client's resimulation starts it from the frame the server is at. One knocked down when it dies keeps the
   original's pose. Single player keeps the original's.
+- **The dead glide** (`NoteShownDead`, `GlideDead`, `PortInterp::GlideFrom`): a client draws another player ahead of the
+  server's, so its corpse, made where the server's player died, appeared behind where the player was drawn: up to 0.45
+  of a block in bots' fights at 50 and 100 ms (`human:charge`, `GTA2_NET_DEATHLOG`). The corpse a reconcile makes of a
+  player shown alive is now drawn from where the player was shown, and any corpse a reconcile moves (a kept one adopted
+  by the server's) from where it was shown, gliding to its place over 10 ticks, eased out (over 2 blocks it jumps).
+  Only the drawing glides: the game has the server's place. With it the jump is at most 0.06 of a block, and a frame's
+  step of a corpse at most 0.11 (the fall's own slide included). Games commonly place a death where the client drew the
+  victim and blend it in, or leave a cosmetic body there; this does the former.
 - **A player's pull out of its car is predicted** (it can be undone, unlike a death): a jacker the client predicts, its own
   player or another, pulls the seated player out at the door as the game does. While the server's jacker is still on
   its way in, the pull stands (its victim stays where the pull put it, not in the server's seat); once the server's

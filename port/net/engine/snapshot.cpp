@@ -448,6 +448,74 @@ bool net::engine::PoseOf(const EntityState& e, Pose* out)
     return false;
 }
 
+namespace
+{
+// The dead as shown before a reconcile: every corpse's sprite, and each player's place and whether it was wasted
+struct ShownDead
+{
+    Sprite* mpSprite;
+    s16 mId;
+    int32_t mX, mY;
+};
+std::vector<ShownDead> gShownDead;
+int32_t gShownPlayer[MAX_PLAYERS][2];
+bool gShownAlive[MAX_PLAYERS];
+// A corpse the reconcile moved glides there this many ticks; further than kGlideFar it jumps
+const double kGlideTicks = 10;
+const int32_t kGlideFar = 2 << 14;
+
+void GlideFromShown(Sprite* s, int32_t x, int32_t y)
+{
+    const int32_t dx = x - s->mXy.x.mValue, dy = y - s->mXy.y.mValue;
+    if ((dx || dy) && abs(dx) <= kGlideFar && abs(dy) <= kGlideFar)
+    {
+        PortInterp::GlideFrom(s, dx / 16384.0f, dy / 16384.0f, kGlideTicks);
+    }
+}
+} // namespace
+
+void net::engine::NoteShownDead()
+{
+    gShownDead.clear();
+    for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
+    {
+        if (Sprite* s = p->isDead() ? CharSprite(p) : NULL)
+        {
+            gShownDead.push_back(ShownDead{s, s->mInstanceId, s->mXy.x.mValue, s->mXy.y.mValue});
+        }
+    }
+    for (int i = 0; i < PlayerCount() && i < MAX_PLAYERS; i++)
+    {
+        Player* p = GetPlayer(i);
+        Sprite* s = p && p->mInUse && p->mPlayerPed && !p->mWastedOrBusted ? CharSprite(p->mPlayerPed) : NULL;
+        gShownAlive[i] = s != NULL;
+        gShownPlayer[i][0] = s ? s->mXy.x.mValue : 0;
+        gShownPlayer[i][1] = s ? s->mXy.y.mValue : 0;
+    }
+}
+
+void net::engine::GlideDead()
+{
+    for (const ShownDead& d : gShownDead)
+    {
+        if (d.mpSprite->mInstanceId == d.mId)
+        {
+            GlideFromShown(d.mpSprite, d.mX, d.mY);
+        }
+    }
+    // A player wasted by the reconcile: its corpse from where the player was shown
+    for (int i = 0; i < PlayerCount() && i < MAX_PLAYERS; i++)
+    {
+        Player* p = GetPlayer(i);
+        Sprite* s = p && gShownAlive[i] && p->mWastedOrBusted && p->mAuxPed ? CharSprite(p->mAuxPed) : NULL;
+        if (s)
+        {
+            GlideFromShown(s, gShownPlayer[i][0], gShownPlayer[i][1]);
+        }
+    }
+    gShownDead.clear();
+}
+
 void net::engine::SetPose(const Pose& pose)
 {
     if (pose.id >= kCarIdBase)

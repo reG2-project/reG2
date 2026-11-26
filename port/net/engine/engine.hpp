@@ -294,6 +294,10 @@ struct Pose
 };
 void Poses(std::vector<Pose>& out);
 void SetPose(const Pose& p);
+// Around a reconcile: the dead it moved, and the corpses it made of players shown alive, drawn gliding from where they
+// were shown (PortInterp::GlideFrom); the game keeps the server's place
+void NoteShownDead();
+void GlideDead();
 bool PoseOf(const EntityState& e, Pose* out); // a snapshot entity's, as Poses has them (players on foot, cars, peds)
 
 // --- Bots (navmap.cpp): the static map as a bot may know it. For every cell the height a walker is at, and which of
