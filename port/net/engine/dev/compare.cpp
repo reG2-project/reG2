@@ -24,7 +24,7 @@
 #include "Source/sound_obj.hpp"
 #include "Source/sprite.hpp"
 #include <math.h>
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 #include <dlfcn.h>
 #include <execinfo.h>
 #endif
@@ -384,7 +384,7 @@ void LogRand(void* caller, bool owned)
         uintptr_t base = 0;
         // the caller, and two above it (past the rng wrappers: rng::get_int and the like)
         void* up[5] = {NULL, NULL, caller, NULL, NULL};
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
         Dl_info info;
         base = dladdr(caller, &info) ? (uintptr_t)info.dli_fbase : 0;
         backtrace(up, 5); // not __builtin_return_address(n > 0): it follows frame pointers the game's code leaves out
