@@ -10,6 +10,7 @@
 #include "Source/Char_Pool.hpp"
 #include "Source/Game.hpp"
 #include "Source/GameSession.hpp"
+#include "Source/Object_3C.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
 #include "Source/TrafficLights.hpp"
@@ -96,8 +97,9 @@ std::string net::engine::SpawnStats()
 {
     char line[160];
     const int dummies = gPedManager ? gPedManager->mMaxDummyChars * gPortSpawnPlayers : 0;
-    snprintf(line, sizeof(line), "traffic %d of %d, ambient peds %d of %d", gCarManager_6C->mRecycledCars + gCarManager_6C->mProtoRecycledCars,
-             PortTrafficLimit(), (int)gNumDummyChars, dummies < 80 ? dummies : 80);
+    snprintf(line, sizeof(line), "traffic %d of %d, ambient peds %d of %d, moving objects %u of 385",
+             gCarManager_6C->mRecycledCars + gCarManager_6C->mProtoRecycledCars, PortTrafficLimit(), (int)gNumDummyChars,
+             dummies < 80 ? dummies : 80, (unsigned)gObj3C_live_count);
     return line;
 }
 
