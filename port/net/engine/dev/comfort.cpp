@@ -376,7 +376,7 @@ void net::engine::ComfortServerTick(uint32_t tick)
             players.push_back(std::make_pair(s->mXy.x.ToFloat(), s->mXy.y.ToFloat()));
         }
     }
-    const auto near = [&](const Sprite* s) {
+    const auto nearby = [&](const Sprite* s) {
         for (const auto& p : players)
         {
             const float dx = s->mXy.x.ToFloat() - p.first, dy = s->mXy.y.ToFloat() - p.second;
@@ -395,7 +395,7 @@ void net::engine::ComfortServerTick(uint32_t tick)
         }
         gLives.See(PedNetId(p), LifeOf(p), 0);
         Sprite* s = !p->mCar ? CharSprite(p) : NULL;
-        if (s && (p->mPlayer || near(s)))
+        if (s && (p->mPlayer || nearby(s)))
         {
             gMoves.Feed(p->mPlayer ? kPlayers : kPeds, PedNetId(p), s->mXy.x.ToFloat(), s->mXy.y.ToFloat(), tick);
         }
@@ -403,7 +403,7 @@ void net::engine::ComfortServerTick(uint32_t tick)
     gLives.EndFrame("S", tick);
     for (Car* c = gCar_BC_Pool->mPool.mpPrev; c; c = c->mpNext)
     {
-        if (c->mCarSprite && !c->IsTrainModel() && near(c->mCarSprite))
+        if (c->mCarSprite && !c->IsTrainModel() && nearby(c->mCarSprite))
         {
             gMoves.Feed(kCars, kCarIdBase + c->mCarId, c->mCarSprite->mXy.x.ToFloat(), c->mCarSprite->mXy.y.ToFloat(), tick);
         }
