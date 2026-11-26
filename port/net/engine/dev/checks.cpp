@@ -660,8 +660,9 @@ void net::engine::DebugCheckShown(const char* where)
         }
         // Sprite::Draw's reasons to leave it out, and a place inside a plain block, whose top is drawn over it: for a
         // frame it can be a slope's height carried onto a flat block, which the next tick rounds to its level. Not a
-        // thrown ped: its char follows the throw's object, which ends in a wall alike on every end
-        const bool thrown = PhaseOf(ped) == kPhaseThrown;
+        // thrown ped (its char follows the throw's object, which ends in a wall alike on every end), nor a drowning
+        // one, sinking to the map's bottom
+        const bool thrown = PhaseOf(ped) == kPhaseThrown || PhaseOf(ped) == kPhaseSinking;
         sInside[i] = !thrown && InsideBlock(s->mXy.x.mValue, s->mXy.y.mValue, s->mZpos.mValue) ? sInside[i] + 1 : 0;
         const bool waiting = p->IsWaitingToRespawn(ped);
         const bool invisible = ped->mBf21C.bInvisible && !p->mPowerUpTimers[power_up_indices::Invisibility_11] && !p->IsUser();
