@@ -313,9 +313,9 @@ void net::engine::SetTickMs(int ms)
     }
 }
 
-void net::engine::SetPaceMs(int ms)
+void net::engine::SetPaceUs(int us)
 {
-    gPortNetPaceMs = ms;
+    gPortNetPaceUs = us;
 }
 
 void net::engine::SeedRandom(uint32_t seed)

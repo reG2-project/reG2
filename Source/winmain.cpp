@@ -1507,8 +1507,8 @@ static bool PortRunGameFrame()
     bool exit_requested = false;
     bool drew_frame = false;
     bool updated_logic = false;
-    const s32 step_ms = bStartNetworkGame && gPortNetPaceMs >= 0 ? gPortNetPaceMs : gGame_0x40->GetFrameDurationMs();
-    switch (PortFrameLoop::Next(step_ms, sbForceGameUpdate, bSkip_draw))
+    const s32 step_us = bStartNetworkGame && gPortNetPaceUs >= 0 ? gPortNetPaceUs : gGame_0x40->GetFrameDurationMs() * 1000;
+    switch (PortFrameLoop::Next(step_us, sbForceGameUpdate, bSkip_draw))
     {
         case PortFrameLoop::kStep:
             if (bStartNetworkGame)
@@ -1580,7 +1580,7 @@ EXPORT bool RunGameFrame()
             do_network_and_local_inputs();
 #if defined(GTA2_PORT)
             // Port: the netcode's pacing apart from the step's game length (net_hooks.hpp)
-            sMatchStartTime = Time + (gPortNetPaceMs >= 0 ? gPortNetPaceMs : gGame_0x40->GetFrameDurationMs());
+            sMatchStartTime = Time + (gPortNetPaceUs >= 0 ? gPortNetPaceUs / 1000 : gGame_0x40->GetFrameDurationMs());
 #else
             sMatchStartTime = Time + gGame_0x40->GetFrameDurationMs();
 #endif

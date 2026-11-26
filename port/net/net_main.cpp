@@ -291,7 +291,7 @@ int LeaveNetworkGame()
     net::engine::SetStandings(std::vector<net::engine::PlayerRow>(), 0);
     gPortNetFrameLoop = false;
     gWatching = false;
-    net::engine::SetPaceMs(-1);
+    net::engine::SetPaceUs(-1);
     PortRand::SetSoundSeparate(false);
     PortRand::SetParticleSeparate(false);
     net::engine::StopNetworkGame();
@@ -441,7 +441,7 @@ int NetMain_Init(std::vector<std::string>& args)
         gTickMs = sc.game.tickMs;
         if (serverReplay)
         {
-            net::engine::SetPaceMs(0); // as fast as it runs, its ticks of the live server's length
+            net::engine::SetPaceUs(0); // as fast as it runs, its ticks of the live server's length
             net::engine::SetFrameHook(OnFrame, NULL);
             return 1;
         }
@@ -464,7 +464,7 @@ int NetMain_Init(std::vector<std::string>& args)
         }
         net::engine::StartNetworkGame(game);
         gTickMs = game.tickMs;
-        net::engine::SetPaceMs(0); // as fast as it runs
+        net::engine::SetPaceUs(0); // as fast as it runs
     }
     else
     {
