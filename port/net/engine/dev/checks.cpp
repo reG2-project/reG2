@@ -659,9 +659,10 @@ void net::engine::DebugCheckShown(const char* where)
             continue;
         }
         // Sprite::Draw's reasons to leave it out, and a place inside a plain block, whose top is drawn over it: for a
-        // frame it can be a slope's height carried onto a flat block, which the next tick rounds to its level
-        const gmp_block_info* block = gMap_0x370->GetBlock(s->mXy.x.ToInt(), s->mXy.y.ToInt(), s->mZpos.ToInt());
-        sInside[i] = block && GET_BLOCK_TYPE(block->mSlopeType) != AIR && GET_SLOPE_BITS(block->mSlopeType) == 0 ? sInside[i] + 1 : 0;
+        // frame it can be a slope's height carried onto a flat block, which the next tick rounds to its level. Not a
+        // thrown ped: its char follows the throw's object, which ends in a wall alike on every end
+        const bool thrown = PhaseOf(ped) == kPhaseThrown;
+        sInside[i] = !thrown && InsideBlock(s->mXy.x.mValue, s->mXy.y.mValue, s->mZpos.mValue) ? sInside[i] + 1 : 0;
         const bool waiting = p->IsWaitingToRespawn(ped);
         const bool invisible = ped->mBf21C.bInvisible && !p->mPowerUpTimers[power_up_indices::Invisibility_11] && !p->IsUser();
         const bool inside = sInside[i] >= 2;
