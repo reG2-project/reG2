@@ -1730,6 +1730,30 @@ static bool LastLifeKept()
 {
     return gDo_infinite_lives && gGameSession.IsBonusStage() != 1;
 }
+
+// Port: in a network game a wasted player's corpse (Player::Wasted's clone) stays at the respawn as a dead pedestrian,
+// freed off screen as theirs (Ped::StateMachineTick); one in a car (no char) goes as in the original
+static void FreeOrKeepCorpse(Ped* pCorpse)
+{
+    if (!gPortCorpseKept || !pCorpse->isDead() || !pCorpse->mGameObject || pCorpse->mCar)
+    {
+        pCorpse->Deallocate();
+        return;
+    }
+    // Nothing of the player's left: its group, weapons (an id makes Deallocate free them), wanted level and voice
+    pCorpse->mPlayer = NULL;
+    pCorpse->mPedType = ped_type::dummy_3;
+    pCorpse->mOccupation = ped_ocupation_enum::dummy;
+    pCorpse->mPedGroup = NULL;
+    pCorpse->mSelectedWeapon = NULL;
+    pCorpse->mpWeapon = NULL;
+    pCorpse->mCarWeapon = NULL;
+    pCorpse->mWantedPoints = cop_level_ped_enum::cop_0_stars;
+    pCorpse->mVoiceEvent = 0;
+    pCorpse->mOffscreenCounter = 0;
+    pCorpse->mId = gPedId++;
+    gPortCorpseKept(pCorpse);
+}
 #endif
 
 MATCH_FUNC(0x567130)
@@ -1847,7 +1871,11 @@ void Player::Wasted()
 
                 if (mAuxPed != NULL)
                 {
+#if defined(GTA2_PORT)
+                    FreeOrKeepCorpse(mAuxPed);
+#else
                     mAuxPed->Deallocate();
+#endif
                     mAuxPed = NULL;
                     mAuxCamActive = false;
                 }

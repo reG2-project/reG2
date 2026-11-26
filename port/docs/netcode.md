@@ -422,8 +422,15 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
 - **A server's ped goes by the snapshots only** (`ClientPedMayGo`, `gPortPedMayGo` in `Ped::Deallocate`): the client's
   own AI doesn't free a ped the snapshots carry (one boarding a train, a group's cleanup); a server's death and a ped
   in a car going with its car (`Car::KillContainedPeds`) do. A player's corpse (`Player::Wasted` clones the player's
-  ped, `mPlayer` included) is the client's own, freed by the game at the respawn: held as the server's, every death
-  left one for good, and a long game's ped pool filled up.
+  ped, `mPlayer` included) is the client's own until the respawn: held as the server's, every death left one for good,
+  and a long game's ped pool filled up.
+- **A player's corpse stays after the respawn** (`gPortCorpseKept` in `Player::Wasted`, `CorpseKept`): where the
+  original frees it, both ends turn it into a dead pedestrian (no player, camera, group, weapons, wanted level or
+  voice, an id of its own), which the game frees as any corpse, 40 ticks off every player's screen
+  (`gPedOffscreenDespawnTime`). The server sends it as any ped and the client adopts its own corpse for it (only a
+  corpse adopts a corpse). The two countdowns end a few ticks apart: a server's corpse waits while the client still has
+  the player's there (made, it would die again), and a client's own waits 30 ticks for the server's before it goes as
+  any of its own. A corpse in a car goes as in the original. Single player keeps the original's.
 - **A player's pull out of its car is predicted** (it can be undone, unlike a death): a jacker the client predicts, its own
   player or another, pulls the seated player out at the door as the game does. While the server's jacker is still on
   its way in, the pull stands (its victim stays where the pull put it, not in the server's seat); once the server's
@@ -983,6 +990,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Hud.cpp` | `PortHudTextPalette` (`port/src/player_looks.hpp`) | the names over the players and the tag times in the port's looks' colours (the fonts have 9 remaps) |
 | `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
 | `Player.cpp` | `gPortKillCamTicks`, `gPortDeathViewPed` | the kill cam: a player wasted by another has a longer death countdown (`Player::Wasted`), whose end its view spends on the killer (`Player::Service`, camera mode 2) |
+| `Player.cpp` | `gPortCorpseKept` | a wasted player's corpse stays at its respawn as a dead pedestrian (`Player::Wasted`), freed off screen as the others |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
 | `sound_obj.cpp`, `Player.cpp`, `char.cpp` | `gPortPlayersDeathCry` | a player cries out at its death as the other peds do (`HandlePedVoiceEvent`, voice event 4), from its corpse, or from its car when it died in one (`ProcessCar`); a fatal landing or lethal fall has the cry instead of the thud, on a client too, where its `Ped::Kill` is held; the cry has a sample index of its own (16), apart from the voice's; the cry is first in the mixer's queue (priority 0) to its end (`AddReleasingSounds` leaves its priority); the ped respawned elsewhere (`Player::Wasted`) drops the event |
 | `sound_obj.cpp` | `gPortFullQueueRanked` | a sample asked for when the mixer's request queue is full is ranked among all the others (`AddDetailsToRequestedOrderList`); the original's search stops at the slot it takes and loses the sample at that place |

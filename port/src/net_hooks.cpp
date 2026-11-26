@@ -56,4 +56,5 @@ bool gPortProtectsPlayers;
 bool (*gPortScoreBonusHook)(Player* pPlayer, s32 voice);
 s32 (*gPortKillCamTicks)(Player* pPlayer, Player* pKiller);
 Ped* (*gPortDeathViewPed)(Player* pPlayer, Ped* pAuxPed);
+void (*gPortCorpseKept)(Ped* pCorpse);
 int gPortNetRoundPad;
