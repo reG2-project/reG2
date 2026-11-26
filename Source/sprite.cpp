@@ -1353,6 +1353,13 @@ void Sprite::EnsureVisualShape()
 {
     if (this->mpVisualShape == NULL)
     {
+#if defined(GTA2_PORT)
+        // A freed sprite (id 0) still in a client's sprite grid gets none: its next PoolAllocate would drop it, a leak
+        if (mInstanceId == 0)
+        {
+            return;
+        }
+#endif
         this->mpVisualShape = gSpriteShapePool->Allocate();
 #if defined(GTA2_PORT)
         if (!mpVisualShape)
