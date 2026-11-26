@@ -421,7 +421,9 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   whose ped the server has alive (the paramedics revived it, `AmbulanceService`) is revived as they do it.
 - **A server's ped goes by the snapshots only** (`ClientPedMayGo`, `gPortPedMayGo` in `Ped::Deallocate`): the client's
   own AI doesn't free a ped the snapshots carry (one boarding a train, a group's cleanup); a server's death and a ped
-  in a car going with its car (`Car::KillContainedPeds`) do.
+  in a car going with its car (`Car::KillContainedPeds`) do. A player's corpse (`Player::Wasted` clones the player's
+  ped, `mPlayer` included) is the client's own, freed by the game at the respawn: held as the server's, every death
+  left one for good, and a long game's ped pool filled up.
 - **A player's pull out of its car is predicted** (it can be undone, unlike a death): a jacker the client predicts, its own
   player or another, pulls the seated player out at the door as the game does. While the server's jacker is still on
   its way in, the pull stands (its victim stays where the pull put it, not in the server's seat); once the server's

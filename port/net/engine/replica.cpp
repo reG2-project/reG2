@@ -954,7 +954,8 @@ void net::engine::SetReplicaPose(const Pose& p)
     }
 }
 
+// A player's corpse (Player::Wasted's clone) keeps the player's mPlayer but is this game's own: the game frees it at the respawn
 bool net::engine::IsServerPed(const Ped* p)
 {
-    return p->mPlayer || gPedKeys.count(p);
+    return (p->mPlayer && p->mPlayer->mPlayerPed == p) || gPedKeys.count(p);
 }
