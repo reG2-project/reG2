@@ -840,6 +840,16 @@ line `shots blocked by a car C s by a wall W s of A s aimed deaths in a car D in
 foot at the nearest player within 30 degrees and 12 blocks of where it faces, and of that with a car or a wall in the
 way. Over 32 seeds on mp1 and downtown, with and without `--kit smg`: aimed fire blocked by a car 14..31% to 0, deaths
 in a car 529 to 98, frags 2869 to 3099.
+The rammer is the car brain and the simple fighter together, as the hunter is: in a car whenever it has one (it gets
+out only when the car burns or is wedged, with a gun even with someone near, to fight there); on foot it takes a car
+within 12 blocks (30 unarmed) unless it has a gun and someone was within 8 blocks in the last 5 s, and fights on foot
+otherwise. The car brain (the rammer's and the hunter's) keeps its target until another is much nearer (someone on
+foot counts as nearer), follows its route when far or round a block, aims at where the target will be when near,
+backs off a second after a hit to ram again, and uses the handbrake to turn back at a target near and well off its
+nose. The meter's line `car frags F far X s in a car C s` counts frags made in a car and the seconds alive with
+nobody within 12 blocks and in a car. Over 64 seeds on mp1 and downtown, with and without `--kit smg`, the rammer's
+frags went from 463 to 1097 (in a car 512 to 487), the cars it took from 3709 to 1969 and its idle time from 9.5 to
+2.2 s per match; the hunter's and the soldier's frags rose, the simple bot's rose with the kit and fell 8% without.
 A bot client still takes the keyboard's key events (Escape and the pause menu, the chat), so `GTA2_INPUT` can press
 them in a test.
 
@@ -848,7 +858,7 @@ them in a test.
 | `simple` | walks its route to the nearest player and fights when close |
 | `carhop` | gets into the nearest car, drives, gets out, again |
 | `pulse` | for comfort's input to motion: in the nearest car, forward with a turn each way, braked to a stop, again |
-| `rammer` | drives at players; stuck 4 s with nobody in front, leaves the car and skips it 30 s |
+| `rammer` | rams players in a car it keeps; on foot with a gun and someone near, or no car at hand, the fighter |
 | `hunter` | the rammer when a car is near, nobody is and it has a good gun or none to fetch, the fighter otherwise |
 | `soldier` | a weapon, a car, then to the nearest player: runs it over when coming at it head on, or gets out and shoots |
 | `human` | for crash hunts, what people do and the others don't, in turns: cars, buses and the tank (in, about, out at speed), trains (on at a station, a ride, off), every weapon it has, pickups, into water, its own blasts (`session/bot_human.cpp`) |

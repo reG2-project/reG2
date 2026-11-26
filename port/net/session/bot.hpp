@@ -91,7 +91,7 @@ class BotBrain
 
 // "simple": walks to the nearest player along its own route and shoots when close and facing it
 // "carhop": walks to the nearest car, gets in, drives a while, gets out, again (tests players in cars)
-// "rammer": gets into the nearest car and drives at the nearest player to hit it
+// "rammer": rams players in a car it keeps; on foot with a gun and someone near, or no car at hand, it fights
 // "hunter": the rammer when a car is near and nobody is close (and once in a car), the simple one otherwise
 // "soldier": a weapon, then a car, then to the nearest player: runs it over or gets out and shoots, whichever suits
 // "human": what people do and the other bots don't, in turns: cars and buses (in, about, out at speed), trains (on at a
