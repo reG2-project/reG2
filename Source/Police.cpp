@@ -146,6 +146,12 @@ PoliceCrew* Police::NewCrew()
 MATCH_FUNC(0x56f5c0)
 Ped* Police::SpawnRoadblockGuard(Fix16 xpos, Fix16 ypos, Fix16 zpos, Ang16 rotation)
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1, true, "a roadblock guard"))
+    {
+        return NULL;
+    }
+#endif
     Ped* pCop = NULL;
 
     if (gPedManager->mFbiArmyCount >= 30)
@@ -895,6 +901,12 @@ void Police::SpawnWalkingGuard(Ped* pPed, Fix16 xpos, Fix16 ypos, Fix16 zpos, An
 MATCH_FUNC(0x5703e0)
 bool Police::SpawnCrewInCar(Car* pCar)
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(2, false, "a police crew"))
+    {
+        return false; // a full ped pool: tried again on a later tick
+    }
+#endif
     if (gPedManager->mFbiArmyCount >= 30)
     {
         return false;

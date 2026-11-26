@@ -397,7 +397,10 @@ Ped* MapPed(Pass& a, const EntityState& e, Car* serverCar)
         {
             serverCar->SetDriver(NULL);
             ped = gPedManager->SpawnDriver(serverCar);
-            SetPedKind(ped, e);
+            if (ped) // NULL: a full pool (port/src/pool/guard.hpp)
+            {
+                SetPedKind(ped, e);
+            }
         }
     }
     if (!ped && !serverCar)

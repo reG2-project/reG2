@@ -1829,6 +1829,11 @@ void Player::Wasted()
 #endif
         {
             mAuxPed = gPedManager->ClonePed(mPlayerPed);
+#if defined(GTA2_PORT)
+            // A full ped pool (ClonePed): no corpse, the camera goes with the respawn
+            if (mAuxPed)
+            {
+#endif
             mAuxPed->mSelectedWeapon = NULL;
             mAuxPed->mId = 0;
             mAuxPed->ClearAttacking_403A40();
@@ -1836,6 +1841,9 @@ void Player::Wasted()
             mCameraMode = 2;
             memcpy(&mAuxGameCamera, &mGameCamera, sizeof(mAuxGameCamera));
             mAuxCamActive = true;
+#if defined(GTA2_PORT)
+            }
+#endif
         }
 #if defined(GTA2_PORT)
         // Port: the death's cry is the corpse's (the clone above), not the player's at its respawn place; in a car,
@@ -1936,6 +1944,11 @@ void Player::Busted()
             mPlayerPed->mPedGroup->DestroyGroup();
         }
         mAuxPed = gPedManager->ClonePed(mPlayerPed);
+#if defined(GTA2_PORT)
+        // A full ped pool (ClonePed): no stand-in, the camera goes with the respawn
+        if (mAuxPed)
+        {
+#endif
         mAuxPed->mSelectedWeapon = NULL;
         mAuxPed->mId = 0;
         mAuxPed->ClearAttacking_403A40();
@@ -1944,6 +1957,9 @@ void Player::Busted()
         mCameraMode = 2;
         memcpy(&mAuxGameCamera, &mGameCamera, sizeof(Camera));
         mAuxCamActive = true;
+#if defined(GTA2_PORT)
+        }
+#endif
         Player::RespawnPlayer();
         mPlayerPed->mShockCounter = 0;
         mPlayerPed->ClearWantedPoints();
@@ -1952,6 +1968,9 @@ void Player::Busted()
     else
     {
         --mDeathCountdown;
+#if defined(GTA2_PORT)
+        if (mAuxPed) // NULL: a full ped pool when busted
+#endif
         mAuxPed->ClearAttacking_403A40();
 
         if (!mDeathCountdown)
@@ -1989,10 +2008,17 @@ void Player::Busted()
                 mCameraMode = 0;
                 mGameCamera.ResetCameraSmoothing();
                 mGameCamera.SetSmoothFollow();
+#if defined(GTA2_PORT)
+                if (mAuxPed)
+                {
+#endif
                 mAuxPed->mShockCounter = 0;
                 mAuxPed->mShockCounter = 0;
                 mAuxPed->mWantedPoints = cop_level_ped_enum::cop_0_stars;
                 mAuxPed->Deallocate();
+#if defined(GTA2_PORT)
+                }
+#endif
                 mAuxPed = NULL;
                 mAuxCamActive = false;
                 mBusted = false;
@@ -2385,6 +2411,12 @@ MATCH_FUNC(0x569600)
 void Player::StartRemoteControl(Car* pCar)
 {
     mAuxPed = gPedManager->SpawnDriver(pCar);
+#if defined(GTA2_PORT)
+    if (!mAuxPed)
+    {
+        return; // a full ped pool (SpawnDriver): no remote control
+    }
+#endif
     mAuxPed->SetPedType(ped_type::player_2);
     mAuxPed->set_occupation(ped_ocupation_enum::empty);
     mAuxPed->SetPlayer(this, true);

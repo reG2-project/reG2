@@ -7691,11 +7691,24 @@ bool TrafficSpawner::SpawnTrafficCar(s32 spawn_type, s32 arrow_direction, s32 bl
                                 }
                                 else
                                 {
+#if defined(GTA2_PORT)
+                                    // Its driver, or police crew, below: InitCarAIControl gives no AI to a car without one
+                                    if (!PortRoomForPeds(2 + kPortAmbientPedReserve, false, "a traffic car"))
+                                    {
+                                        return false;
+                                    }
+#endif
                                     Car* pNewCar = gCarManager_6C->SpawnCarAtCorrectZ_WithScale(car_x,
                                                                                                 car_y,
                                                                                                 ReturnAngleFromRoadDirection(arrow_direction),
                                                                                                 car_model,
                                                                                                 kFpOne_6FF778);
+#if defined(GTA2_PORT)
+                                    if (!pNewCar)
+                                    {
+                                        return false; // a full car pool
+                                    }
+#endif
                                     if (car_model != car_model_enum::SWATVAN && car_model != car_model_enum::COPCAR &&
                                         car_model != car_model_enum::JEEP && car_model != car_model_enum::EDSELFBI)
                                     {

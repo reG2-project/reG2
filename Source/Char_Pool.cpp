@@ -101,6 +101,12 @@ EXPORT Ped* __stdcall SpawnPedChainGroupAt(char_type remap, u8 number_followers,
 MATCH_FUNC(0x46DB90)
 EXPORT Ped* __stdcall SpawnPedChainGroupAt(char_type remap, u8 number_followers, Fix16 xpos, Fix16 ypos, Fix16 zpos)
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1 + number_followers + kPortAmbientPedReserve, true, "a group of ambient peds"))
+    {
+        return NULL;
+    }
+#endif
     Fix16 xpos_adjusted = kFpPoint8_6784A0 + Fix16(static_cast<u8>(xpos.ToInt()));
     Fix16 ypos_adjusted = kFpPoint8_6784A0 + Fix16(static_cast<u8>(ypos.ToInt()));
 
@@ -160,6 +166,12 @@ enum
 MATCH_FUNC(0x46E380)
 EXPORT void __stdcall SpawnPedestrianAt(Fix16 xpos, Fix16 ypos, Fix16 zpos, Ang16 rotation)
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1 + kPortAmbientPedReserve, true, "an ambient ped"))
+    {
+        return;
+    }
+#endif
     u8 kind = k_spawn_dummy;
     s16 rng_val = gRng.get_int(1000);
 
@@ -807,6 +819,12 @@ PedManager::~PedManager()
 MATCH_FUNC(0x470a50)
 Ped* PedManager::SpawnPedAt(Fix16 xpos, Fix16 ypos, Fix16 zpos, u8 remap, Ang16 rotation)
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1, true, "a ped"))
+    {
+        return NULL;
+    }
+#endif
     Ped* pPed = gPedPool->Allocate();
 
     if (!pPed->AllocCharB4(xpos, ypos, zpos))
@@ -828,6 +846,12 @@ Ped* PedManager::SpawnPedAt(Fix16 xpos, Fix16 ypos, Fix16 zpos, u8 remap, Ang16 
 MATCH_FUNC(0x470b00)
 Ped* PedManager::SpawnDriver(Car* pCar)
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1, false, "a driver"))
+    {
+        return NULL;
+    }
+#endif
     Ped* pNewPed = gPedPool->Allocate();
     pNewPed->SetPedType(ped_type::dummy_3);
     pNewPed->set_occupation(ped_ocupation_enum::dummy_driver_4);
@@ -849,6 +873,12 @@ Ped* PedManager::SpawnDriver(Car* pCar)
 MATCH_FUNC(0x470ba0)
 Ped* PedManager::SpawnGangDriver(Car* pCar, Gang* pGang)
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1 + kPortAmbientPedReserve, false, "a traffic driver"))
+    {
+        return NULL;
+    }
+#endif
     Ped* pNewPed = gPedPool->Allocate();
 
     pNewPed->SetPedType(ped_type::dummy_with_occupation_6);
@@ -892,6 +922,12 @@ Ped* PedManager::SpawnGangDriver(Car* pCar, Gang* pGang)
 MATCH_FUNC(0x470cc0)
 Ped* PedManager::CreateDummyDriver(Car* pCar)
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1 + kPortAmbientPedReserve, false, "a traffic driver"))
+    {
+        return NULL;
+    }
+#endif
     Ped* pNewPed = gPedPool->Allocate();
     pNewPed->set_remap(-1);
     pNewPed->mGraphicType = ped_graphic_type::civilian_0;
@@ -912,6 +948,12 @@ Ped* PedManager::CreateDummyDriver(Car* pCar)
 MATCH_FUNC(0x470d60)
 Ped* PedManager::SpawnRunAwayGuy()
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1, false, "a robbed driver"))
+    {
+        return NULL;
+    }
+#endif
     Ped* pPed = gPedPool->Allocate();
 
     s32 rng_val = gRng.get_int(4);
@@ -948,6 +990,12 @@ Ped* PedManager::SpawnRunAwayGuy()
 MATCH_FUNC(0x470e30)
 Ped* PedManager::SpawnTrainLeaver()
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1 + kPortAmbientPedReserve, false, "a train passenger"))
+    {
+        return NULL;
+    }
+#endif
     Ped* pPed = gPedPool->Allocate();
 
     pPed->mGraphicType = ped_graphic_type::civilian_0;
@@ -982,6 +1030,12 @@ Ped* PedManager::SpawnTrainLeaver()
 MATCH_FUNC(0x470f30)
 Ped* PedManager::AllocatePed()
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1, false, "a ped"))
+    {
+        return NULL;
+    }
+#endif
     Ped* pNewPed = gPedPool->Allocate();
     pNewPed->mHealth = 100;
     return pNewPed;
@@ -990,6 +1044,12 @@ Ped* PedManager::AllocatePed()
 MATCH_FUNC(0x470f90)
 Ped* PedManager::ClonePed(Ped* pSrc)
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1, pSrc->mGameObject != NULL, "a ped clone"))
+    {
+        return NULL;
+    }
+#endif
     Ped* pDst = gPedPool->Allocate();
     Ped* pNext = pDst->mpNext;
     memcpy(pDst, pSrc, sizeof(Ped));

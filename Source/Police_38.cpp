@@ -144,6 +144,12 @@ void PoliceCrew::RemoveFromPursuit()
 MATCH_FUNC(0x570bf0)
 void PoliceCrew::SpawnPoliceInCar()
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(2, false, "a police crew"))
+    {
+        return; // a full ped pool: tried again on a later tick
+    }
+#endif
     PedGroup* pGroup = PedGroup::New();
     Ped* pCopLeader = gPedManager->AllocatePed();
     pCopLeader->SetPedType(ped_type::special_ped_4);
@@ -226,6 +232,12 @@ void PoliceCrew::SpawnPoliceInCar()
 MATCH_FUNC(0x570e30)
 void PoliceCrew::SpawnSWAT()
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(4, false, "a SWAT crew"))
+    {
+        return; // a full ped pool: tried again on a later tick
+    }
+#endif
     PedGroup* pSwatGroup = PedGroup::New();
     Ped* pSwatLeader = gPedManager->AllocatePed();
     pSwatLeader->SetPedType(ped_type::special_ped_4);
@@ -272,6 +284,12 @@ void PoliceCrew::SpawnSWAT()
 MATCH_FUNC(0x571150)
 void PoliceCrew::SpawnFBI_nonused()
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1, false, "an FBI crew"))
+    {
+        return; // a full ped pool: tried again on a later tick
+    }
+#endif
     Ped* pFBI = gPedManager->AllocatePed();
     pFBI->SetPedType(ped_type::special_ped_4);
     pFBI->set_occupation(ped_ocupation_enum::fbi);

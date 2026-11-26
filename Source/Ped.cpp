@@ -1444,6 +1444,12 @@ void Ped::SpawnDriverRunAway(Car* pCar, Ped* pCarThief)
                 PortRand::Scope owner(pCar);
 #endif
                 Ped* pPed = gPedManager->SpawnRunAwayGuy();
+#if defined(GTA2_PORT)
+                if (!pPed)
+                {
+                    return; // a full ped pool: the car keeps its dummy driver
+                }
+#endif
                 pPed->set_occupation(ped_ocupation_enum::scared_driver_50);
                 pCar->mDriver = pPed;
                 pPed->mCar = pCar;
@@ -6976,7 +6982,12 @@ void Ped::UpdateMovementTowardsTarget(Fix16 distance, u8 type)
             sPedUsedPathThisTick = 1;
             Ped::ChangeNextPedState1(ped_state_1::findind_path_2);
             Ped::ChangeNextPedState2(ped_state_2::ped2_walking_0);
+#if defined(GTA2_PORT)
+            // A full PedListNode pool: not queued yet, the ped waits and tries again
+            if (!mBf21C.bInPathList && PortPool::RoomOrSkip(gChar_8_Pool->mPool.PortRoom(), "a path queue entry"))
+#else
             if (!mBf21C.bInPathList)
+#endif
             {
                 gPathFinder->mPedList.AddPedToBackIfMissing(this);
                 mBf21C.bInPathList = true;
@@ -10972,6 +10983,12 @@ void Ped::RecruitNearbyPeds(s32 desiredCount, Fix16 searchRadius)
 MATCH_FUNC(0x46e200)
 void Ped::SpawnPedGroupFollowers(u8 total)
 {
+#if defined(GTA2_PORT)
+    if (total && !PortRoomForPeds(total, true, "a ped's followers"))
+    {
+        total = 0; // a full ped pool: the leader alone
+    }
+#endif
     PedGroup* pGroup = PedGroup::New();
     pGroup->add_ped_leader(this);
     u8 current = 0;

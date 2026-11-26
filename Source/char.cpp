@@ -1040,6 +1040,13 @@ void Char::UpdateAnimState()
                         pDriver = NULL;
                         mFrameTimer = 0;
                     }
+                    // A full ped pool: the robbed dummy driver can't be made, the jacker waits
+                    if (pDriver && pDriver->get_occupation() == ped_ocupation_enum::dummy_driver_4 &&
+                        !PortRoomForPeds(1, true, "a robbed driver"))
+                    {
+                        pDriver = NULL;
+                        mFrameTimer = 0;
+                    }
 #endif
                     if (pDriver)
                     {

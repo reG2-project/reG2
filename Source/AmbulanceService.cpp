@@ -278,6 +278,12 @@ void AmbulanceTask::AddPatient(Ped* pPed)
 MATCH_FUNC(0x4fa820)
 bool AmbulanceTask::SpawnParamedicCrew()
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(2, false, "a paramedic crew"))
+    {
+        return false; // a full ped pool: tried again on a later tick
+    }
+#endif
     PedGroup* pGroup = PedGroup::New();
     if (!pGroup)
     {
