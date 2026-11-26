@@ -76,17 +76,24 @@ live() {
   [ -n "$QUICK" ] && secs=20
   rm -f "$OUT"/live_*.log
   rm -f "$OUT/live_server.rec"
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 GTA2_NET_RECORD="$OUT/live_server.rec" exec "$BIN" --server --port $p --map mp1-6p --players 6 --police \
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 GTA2_NET_POSELOG=1 GTA2_NET_RECORD="$OUT/live_server.rec" exec "$BIN" --server --port $p --map mp1-6p --players 6 --police \
     --arena hunter,soldier,rammer,simple > "$OUT/live_server.log" 2>&1) &
   sleep 3
   for b in rammer soldier; do
-    (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 GTA2_NET_JERKLOG=1 GTA2_NET_COMPARE=1 GTA2_NET_CORRLOG=1 exec "$BIN" --connect 127.0.0.1:$p --name c_$b --bot $b \
+    (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 GTA2_NET_JERKLOG=1 GTA2_NET_COMPARE=1 GTA2_NET_CORRLOG=1 GTA2_NET_POSELOG=1 exec "$BIN" --connect 127.0.0.1:$p --name c_$b --bot $b \
       --lag 100 --jitter 10 --loss 2 > "$OUT/live_$b.log" 2>&1) &
   done
   sleep $secs
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
-  local crashes checks joined
+  local crashes checks joined firing posed
+  # The server bots (p0..p3) standing with a gun and the fire held: a client shows them in the firing pose on that tick
+  read -r firing posed <<< "$(awk '
+    FNR == 1 { file++ }
+    file == 1 && /POSE server tick/ && $6 ~ /^p[0-3]$/ && $8 == 1 && $10 >= 0 && $14 == 0 { firing[$5 $6] = 1 }
+    file == 2 && /POSE client tick/ && $8 == 1 { posed[$5 $6] = 1 }
+    END { for (k in firing) { f++; if (k in posed) p++ } printf "%d %d", f, p }' "$OUT/live_server.log" "$OUT/live_rammer.log")"
+  echo "  server bots firing on foot, standing: $firing ticks, $posed of them shown in the firing pose by a client"
   crashes=$(grep -l "crashed" "$OUT"/live_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/live_*.log | grep -c "net: CHECK")
   joined=$(grep -c "joined as player" "$OUT/live_server.log")
@@ -99,10 +106,12 @@ live() {
   echo "  server replay: ${replayed:-none}"
   if [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ "$joined" != 2 ]; then
     fail "live: $joined of 2 clients joined, $crashes crashed, $checks CHECK lines ($BUILD/net_check/live_*.log)"
+  elif [ "${firing:-0}" -lt 30 ] || [ $((${posed:-0} * 10)) -lt $((firing * 8)) ]; then
+    fail "live: a client showed $posed of $firing ticks of the server bots firing standing in the firing pose ($BUILD/net_check/live_*.log)"
   elif ! grep -q "matches the recording's" "$OUT/live_server_replay.log"; then
     fail "live: the server's replay differs ($BUILD/net_check/live_server_replay.log)"
   else
-    pass "live: 2 bot clients for ${secs} s at 100 ms, 2% loss, police on; the server's replay matches"
+    pass "live: 2 bot clients for ${secs} s at 100 ms, 2% loss, police on; the server bots' firing pose shown; the server's replay matches"
   fi
 }
 
