@@ -191,7 +191,7 @@ void SetSpawnPlayers(int players);
 void SetSpawnLead(int player, int ticks);
 void InstallNetworkViews(bool on); // every player's view at the network view and its lead, on both ends (spawn.cpp)
 int SpawnLead(int player);
-std::string SpawnStats(); // for the log: the ambient traffic and peds, the moving objects, and their limits
+std::string SpawnStats(); // for the log: the ambient traffic and peds, the moving objects, their limits, and the ped, char and car pools' use
 // A slot's name as the game shows it (over the player, in kill messages): Player::mPlayerName, up to 15
 void SetPlayerName(int slot, const char* name);
 std::string PlayerName(int slot); // as the game shows it

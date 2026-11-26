@@ -112,11 +112,12 @@ void net::engine::SetSpawnLead(int player, int ticks)
 
 std::string net::engine::SpawnStats()
 {
-    char line[160];
+    char line[240];
     const int dummies = gPedManager ? gPedManager->mMaxDummyChars * gPortSpawnPlayers : 0;
-    snprintf(line, sizeof(line), "traffic %d of %d, ambient peds %d of %d, moving objects %u of 385",
+    snprintf(line, sizeof(line), "traffic %d of %d, ambient peds %d of %d, moving objects %u of 385; pools: peds %d of 200, chars %d of 400, cars %d of 306",
              gCarManager_6C->mRecycledCars + gCarManager_6C->mProtoRecycledCars, PortTrafficLimit(), (int)gNumDummyChars,
-             dummies < 80 ? dummies : 80, (unsigned)gObj3C_live_count);
+             dummies < 80 ? dummies : 80, (unsigned)gObj3C_live_count, 200 - gPedPool->mPool.PortFree(),
+             400 - gChar_B4_Pool->mPool.PortFree(), 306 - gCar_BC_Pool->mPool.PortFree());
     return line;
 }
 
