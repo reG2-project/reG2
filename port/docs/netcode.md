@@ -965,7 +965,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `sound_obj.cpp` | `gPortFullQueueRanked` | a sample asked for when the mixer's request queue is full is ranked among all the others (`AddDetailsToRequestedOrderList`); the original's search stops at the slot it takes and loses the sample at that place |
 | `Object_3C.hpp` | `gPortGroundedObjects` | a new object isn't airborne by its pool slot's previous one, which the server and a client don't share |
 | `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
-| `Pool.hpp`, `Car.cpp`, `Char_Pool.cpp`, `Game.cpp` | `PortRand::Scope` (`port/src/rand/owner.hpp`) | who a random draw belongs to, and who makes a shot |
+| `Pool.hpp`, `Car.cpp`, `Char_Pool.cpp`, `Game.cpp`, `Ped.cpp` | `PortRand::Scope` (`port/src/rand/owner.hpp`) | who a random draw belongs to (a robbed driver's: its car), and who makes a shot |
 | `sound_obj.*`, `ParticleManager.cpp`, `Particle_4C.cpp`, `Explosion.cpp`, `Weapon.cpp` (`DrawElectricArc`) | `port/src/rand/sound.hpp`, `particle.hpp` | their own random streams; `SoundPosEntry` from the pool; `sound_obj`'s state public for the rollback |
 
 The game's own multiplayer assumed one machine per player in places; under `GTA2_PORT` a network game fixes them:

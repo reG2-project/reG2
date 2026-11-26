@@ -1438,6 +1438,11 @@ void Ped::SpawnDriverRunAway(Car* pCar, Ped* pCarThief)
         default:
             if (pCar->GetDoorCount())
             {
+#if defined(GTA2_PORT)
+                // Its draw is the car's (port/src/rand/owner.hpp): a shot that hits the car on one end only, often an
+                // unkeyed bullet, then leaves the game's stream alone
+                PortRand::Scope owner(pCar);
+#endif
                 Ped* pPed = gPedManager->SpawnRunAwayGuy();
                 pPed->set_occupation(ped_ocupation_enum::scared_driver_50);
                 pCar->mDriver = pPed;
