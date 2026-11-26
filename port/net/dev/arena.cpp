@@ -325,6 +325,7 @@ void net::Arena::Score(const Snapshot& world)
             bot.reward += me.car || bot.last.car ? kCarFragReward * frags : 0;
             bot.frags += frags, bot.deaths += deaths;
             bot.carDeaths += deaths > 0 && (me.car || bot.last.car) ? deaths : 0;
+            bot.carFrags += frags > 0 && (me.car || bot.last.car) ? frags : 0;
             bot.droveThisLife &= deaths == 0;
             if (me.car && !bot.droveThisLife)
             {
@@ -356,6 +357,8 @@ void net::Arena::Score(const Snapshot& world)
         {
             bot.aliveTicks++;
             bot.armedTicks += me.guns > 0;
+            bot.farTicks += nearest > 12;
+            bot.carTicks += me.car != 0;
             bot.fistTicks += !me.guns && !me.car && nearest < 1.5f;
             bot.carNearFootTicks += me.car && nearestOnFoot < 6;
             const bool unarmedOnFoot = !me.guns && !me.car;
@@ -521,6 +524,8 @@ void net::Arena::Finish(const Snapshot& world)
                    bot.burningCarTicks / 30.0);
             printf("net: arena %d %s idle %.1f s longest %.1f s retreats %.1f s turnbacks %d\n", p, bot.kind.c_str(), bot.idleTicks / 30.0,
                    bot.longestIdle / 30.0, bot.retreatTicks / 30.0, bot.turnbacks);
+            printf("net: arena %d %s car frags %d far %.1f s in a car %.1f s\n", p, bot.kind.c_str(), bot.carFrags, bot.farTicks / 30.0,
+                   bot.carTicks / 30.0);
         }
     }
     printf("net: arena search cells per tick: mean %.0f max %llu\n", mTicks ? (double)mExpanded / mTicks : 0.0, (unsigned long long)mMaxExpanded);

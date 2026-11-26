@@ -76,6 +76,8 @@ class Arena
         uint32_t aimedFireTicks = 0, carBlockedTicks = 0, wallBlockedTicks = 0;
         uint32_t burningCarTicks = 0; // in a car on fire (kCarOnFire)
         int carDeaths = 0; // deaths in a car
+        int carFrags = 0; // frags made in a car (run over, or its guns)
+        uint32_t farTicks = 0, carTicks = 0; // alive with nobody alive within 12 blocks; alive in a car
     };
     void MeterFire(Bot& bot);
     void Meter(Bot& bot, const Bot::Body& me, float carDist);
