@@ -4702,13 +4702,6 @@ void CarAI::ManageCollisions()
 
     if (mBf24.bCollidedWithCar)
     {
-#if defined(GTA2_PORT)
-        // Port: a network client's car can remember one freed since the hit (a resimulation), whose sprite is gone
-        if (!mCarInCollision || !mCarInCollision->mCarSprite)
-        {
-            return;
-        }
-#endif
         if (mCarInCollision->IsDespawning())
         {
             return;
