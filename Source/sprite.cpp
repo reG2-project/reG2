@@ -603,6 +603,12 @@ MATCH_FUNC(0x59e2e0)
 void Sprite::CopyCollisionShapeToVisual(void)
 {
     EnsureVisualShape();
+#if defined(GTA2_PORT)
+    if (!mpVisualShape)
+    {
+        return;
+    }
+#endif
     memcpy(mpVisualShape, mpCollisionShape, sizeof(SpriteShape));
 }
 
@@ -641,6 +647,12 @@ MATCH_FUNC(0x59e390)
 bool Sprite::ShrinkSprite(Fix16 xoff, Fix16 yoff, s32 bShrinkCollisionShape)
 {
     EnsureVisualShape();
+#if defined(GTA2_PORT)
+    if (!mpVisualShape)
+    {
+        return false;
+    }
+#endif
 
     Fix16 w_val;
     Fix16 h_val;
@@ -691,6 +703,12 @@ MATCH_FUNC(0x59e4c0)
 void Sprite::ApplyScaleToDimensions(Fix16 scale, s32 bScaleCollisionShape)
 {
     Sprite::EnsureVisualShape();
+#if defined(GTA2_PORT)
+    if (!mpVisualShape)
+    {
+        return;
+    }
+#endif
 
     mpVisualShape->ScaleWidthHeight(scale);
 
@@ -1111,6 +1129,12 @@ void Sprite::Draw()
     u32 car_flags;
 
     Sprite::EnsureVisualShape();
+#if defined(GTA2_PORT)
+    if (!mpVisualShape)
+    {
+        return; // not drawn this frame
+    }
+#endif
     if (mZoom != 0)
     {
         sprite_idx = gGtx_0x106C->mSpriteIndexCount - 1;
@@ -1330,6 +1354,13 @@ void Sprite::EnsureVisualShape()
     if (this->mpVisualShape == NULL)
     {
         this->mpVisualShape = gSpriteShapePool->Allocate();
+#if defined(GTA2_PORT)
+        if (!mpVisualShape)
+        {
+            PortPool::Skipped("a sprite's visual shape"); // its users go without (CopyCollisionShapeToVisual...)
+            return;
+        }
+#endif
 
         const u16 sprite_idx = GetTrueSpriteIdx();
         const sprite_index* pSpriteIndex = gGtx_0x106C->get_sprite_index(sprite_idx);
@@ -1924,6 +1955,12 @@ MATCH_FUNC(0x5a19c0)
 bool Sprite::IsStraddlingSlopeAndFlat()
 {
     EnsureVisualShape();
+#if defined(GTA2_PORT)
+    if (!mpVisualShape)
+    {
+        return true; // a skid mark then goes (CarPhysics::SpawnSkidSegment)
+    }
+#endif
 
     if (!mpVisualShape->mBboxUpToDate)
     {
@@ -1937,6 +1974,12 @@ MATCH_FUNC(0x5a1a60)
 char_type Sprite::CheckSlopeTopInFootprint()
 {
     EnsureVisualShape();
+#if defined(GTA2_PORT)
+    if (!mpVisualShape)
+    {
+        return 0;
+    }
+#endif
 
     SpriteShape* pShape = this->mpVisualShape;
 
