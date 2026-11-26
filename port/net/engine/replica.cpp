@@ -562,7 +562,7 @@ void RemoveUnsent(const Pass& a, const Snapshot& snap)
             continue;
         }
         Ped* q = it->second;
-        if (q->mCar && q->mEnterCarAsPassenger && !q->IsActive())
+        if (q->mCar && q->mEnterCarAsPassenger)
         {
             // A passenger the server doesn't have: out of its car's list (Deallocate leaves it there), then gone
             q->mCar->mPassengersList.RemovePed_471240(q);
