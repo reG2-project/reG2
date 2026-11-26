@@ -1144,6 +1144,7 @@ off by default:
 | `GTA2_NET_CARTURNS=0` | both | the game's own car order ("Cars in turn"), to compare: set on the server and its clients alike |
 | `GTA2_NET_MARKER=1` | client | a square where the newest snapshot has the local player |
 | `GTA2_NET_SFXLOG=1` (client), `=<slot>` (server) | both | every sample the mixer starts, by tick, what made it and where; a server with it opens its audio device and listens at that slot's player (to count what a client misses or plays twice) |
+| `GTA2_NET_DEATHLOG=1` | both | the players around a death: their ped and corpse every frame (a server's every tick), the drawn jump from the ped to its corpse (`deathjump`) and the corpse's drawn moves and poses after (`corpsemove`, `kept` after the respawn) |
 | `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death (and the cars around its view, its camera) and the server's hits on players, the sound's channels and the car radio |
 | `GTA2_NET_CARDIFF=1` | client | where the prediction of the local player's car differs from the snapshot |
 | `GTA2_NET_HITLOG=1` | both | every tick, each player in a car: its place (`DRIVE`); on a client also each impact of the local player's car on a ped as it happens (`CARHIT`, live ticks only) |
