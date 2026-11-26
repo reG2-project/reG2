@@ -23,6 +23,7 @@
 #include "Source/rng.hpp"
 #include "Source/sprite.hpp"
 #include "Source/GameSession.hpp"
+#include "Source/map_0x370.hpp"
 #include <ctype.h>
 #include <math.h>
 #include <string.h>
@@ -142,6 +143,17 @@ bool net::engine::OnMap(const Fix16& x, const Fix16& y, uint32_t id)
     }
     printf("net: CHECK entity %u moved off the map, to (%.2f, %.2f): not moved\n", id, x.ToFloat(), y.ToFloat());
     return false;
+}
+
+bool net::engine::InsideBlock(int32_t x, int32_t y, int32_t z)
+{
+    const int32_t bx = x >> 14, by = y >> 14, bz = z >> 14;
+    if (!gMap_0x370 || bx < 0 || bx > 255 || by < 0 || by > 255 || bz < 0 || bz > 7)
+    {
+        return false;
+    }
+    const gmp_block_info* block = gMap_0x370->GetBlock(bx, by, bz);
+    return block && GET_BLOCK_TYPE(block->mSlopeType) != AIR && GET_SLOPE_BITS(block->mSlopeType) == 0;
 }
 
 void net::engine::MovePed(Ped* ped, const Fix16& x, const Fix16& y, const Fix16& z, const Ang16& rot)
@@ -520,6 +532,38 @@ void net::engine::GlideDead()
         }
     }
     gShownDead.clear();
+}
+
+namespace
+{
+Sprite* OffsetSprite(uint32_t id)
+{
+    using namespace net::engine;
+    Ped* ped = IsPlayerId(id) ? InGamePed((int)id - 1) : id >= kPedIdBase ? ReplicaPed(id) : NULL;
+    return ped && !ped->mCar ? CharSprite(ped) : NULL;
+}
+} // namespace
+
+bool net::engine::SetPedOffset(uint32_t id, int32_t dx, int32_t dy, int32_t drot)
+{
+    Sprite* s = OffsetSprite(id);
+    if (s)
+    {
+        PortInterp::SetOffset(s, dx / 16384.0f, dy / 16384.0f, drot);
+    }
+    return s != NULL;
+}
+
+bool net::engine::PedOffset(uint32_t id, int32_t* dx, int32_t* dy, int32_t* drot)
+{
+    f32 fx = 0, fy = 0;
+    s32 rot = 0;
+    const Sprite* s = OffsetSprite(id);
+    const bool on = s && PortInterp::OffsetOf(s, &fx, &fy, &rot);
+    *dx = (int32_t)(fx * 16384.0f);
+    *dy = (int32_t)(fy * 16384.0f);
+    *drot = rot;
+    return on;
 }
 
 void net::engine::SetPose(const Pose& pose)

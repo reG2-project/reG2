@@ -122,6 +122,8 @@ inline bool IsCarId(uint32_t id)
 {
     return id >= kCarIdBase && id < kPedIdBase;
 }
+// <x, y, z> (raw Fix16) inside a plain solid block (not air, not a slope): a ped there is drawn under its top
+bool InsideBlock(int32_t x, int32_t y, int32_t z);
 // A position field (Fix16 raw: 14 fraction bits) in blocks
 inline float Blocks(int32_t raw)
 {
@@ -296,6 +298,10 @@ struct Pose
 };
 void Poses(std::vector<Pose>& out);
 void SetPose(const Pose& p);
+// A ped's correction smoothed in the drawing only (PortInterp::SetOffset): its drawn offset from the game's place after
+// this step, raw Fix16 and Ang16; false: no ped on foot of that id. PedOffset: the offset now (0 without one)
+bool SetPedOffset(uint32_t id, int32_t dx, int32_t dy, int32_t drot);
+bool PedOffset(uint32_t id, int32_t* dx, int32_t* dy, int32_t* drot);
 // Around a reconcile: the dead it moved, and the corpses it made of players shown alive, drawn gliding from where they
 // were shown (PortInterp::GlideFrom); the game keeps the server's place
 void NoteShownDead();

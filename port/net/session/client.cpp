@@ -498,7 +498,9 @@ void net::Client::RecordShown()
         float x, y;
         if (engine::PlayerPosition(i, &x, &y))
         {
-            rec.players.push_back(engine::ReplicaPos{(uint32_t)i + 1, x, y});
+            int32_t ox, oy, orot; // as drawn
+            engine::PedOffset((uint32_t)i + 1, &ox, &oy, &orot);
+            rec.players.push_back(engine::ReplicaPos{(uint32_t)i + 1, x + engine::Blocks(ox), y + engine::Blocks(oy)});
         }
     }
     rec.shownTick = mTick;
@@ -739,21 +741,34 @@ void net::Client::Blend(const std::vector<engine::Pose>& shown)
             }
         }
         mProbe.Correction(mFrame, n, dx, dy, dr, mReceived[mLatestTick % kRing]);
+        const bool self = n.id == (uint32_t)mSlot + 1 || (selfCar && n.id == selfCar);
+        if (!engine::IsCarId(n.id))
+        {
+            // A ped's blend is drawn only: the game keeps the corrected place (a blended one can be inside a block, a
+            // slope's or a fall's height carried over its edge), drawn off it by a part of the error shown
+            int32_t ox, oy, orot;
+            engine::PedOffset(n.id, &ox, &oy, &orot);
+            const int32_t ex = b.x + ox - n.x, ey = b.y + oy - n.y;
+            const int32_t er = ((b.rot + orot - n.rot) % 1440 + 1440 + 720) % 1440 - 720;
+            const float error = sqrtf((float)ex * ex + (float)ey * ey) / (float)kFar;
+            const float alpha = self ? env.blendSelf : env.blend + (env.blendFar - env.blend) * (error < 1 ? error : 1);
+            const bool snap = jumped || abs(ex) > kFar || abs(ey) > kFar || abs(dz) > kFar || alpha >= 1 || alpha <= 0;
+            const float keep = snap ? 0.0f : 1.0f - alpha;
+            engine::SetPedOffset(n.id, (int32_t)(ex * keep), (int32_t)(ey * keep), (int32_t)(er * keep));
+            continue;
+        }
         if (jumped || abs(dz) > kFar || (!dx && !dy && !dz && !dr))
         {
             continue;
         }
         // A larger part of a larger error (it shows the wrong place longer), and its own part for the local player
         const float error = sqrtf((float)dx * dx + (float)dy * dy) / (float)kFar;
-        const float alpha = n.id == (uint32_t)mSlot + 1 || (selfCar && n.id == selfCar) ? env.blendSelf : env.blend + (env.blendFar - env.blend) * (error < 1 ? error : 1);
+        const float alpha = self ? env.blendSelf : env.blend + (env.blendFar - env.blend) * (error < 1 ? error : 1);
         if (alpha >= 1 || alpha <= 0)
         {
             continue; // the corrected state as it is
         }
-        // A ped keeps the corrected height: a height between two levels on a flat block is floored to the lower one
-        // (Char::ManageZCoordAndSlopes), and the ped then stands inside that block, hidden under its top
-        const int32_t z = engine::IsCarId(n.id) ? b.z + (int32_t)(dz * alpha) : n.z;
-        const engine::Pose p = {n.id, b.x + (int32_t)(dx * alpha), b.y + (int32_t)(dy * alpha), z,
+        const engine::Pose p = {n.id, b.x + (int32_t)(dx * alpha), b.y + (int32_t)(dy * alpha), b.z + (int32_t)(dz * alpha),
                                 ((b.rot + (int32_t)(dr * alpha)) % 1440 + 1440) % 1440};
         engine::SetPose(p);
     }

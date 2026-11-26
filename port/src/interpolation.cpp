@@ -161,6 +161,15 @@ struct Glide
 };
 std::vector<Glide> sGlides;
 
+struct Offset
+{
+    Sprite* mpSprite;
+    s16 mId;
+    f32 mDx, mDy, mPrevDx, mPrevDy; // blocks: after the step, before it
+    s32 mRot, mPrevRot;
+};
+std::vector<Offset> sOffsets;
+
 ArrowRef ArrowAt(s32 i)
 {
     ArrowRef ref;
@@ -512,11 +521,47 @@ void ApplyGlides()
         i++;
     }
 }
+// After the sprites are placed for the draw: each offset sprite drawn off its place, <alpha> of the way from the
+// offset before the step to the one after it
+void ApplyOffsets(f32 alpha)
+{
+    for (size_t i = 0; i < sOffsets.size(); i++)
+    {
+        const Offset& o = sOffsets[i];
+        Sprite& sprite = *o.mpSprite;
+        if (sprite.mInstanceId != o.mId)
+        {
+            continue;
+        }
+        if (sSavedAt[&sprite - gSpritePool->mPool.mPool] < 0)
+        {
+            Save(sprite);
+        }
+        sprite.mXy.x = sprite.mXy.x + Fix16(o.mPrevDx + (o.mDx - o.mPrevDx) * alpha);
+        sprite.mXy.y = sprite.mXy.y + Fix16(o.mPrevDy + (o.mDy - o.mPrevDy) * alpha);
+        sprite.mRotation.rValue = static_cast<s16>(sprite.mRotation.rValue + o.mPrevRot + Lerp(0, o.mRot - o.mPrevRot, alpha));
+        sprite.mRotation.Normalize();
+        sprite.InvalidateZColAndBBoxes();
+    }
+}
 } // namespace
 
 void Snapshot()
 {
     sSteps++;
+    for (size_t i = 0; i < sOffsets.size();)
+    {
+        Offset& o = sOffsets[i];
+        if (o.mpSprite->mInstanceId != o.mId || (!o.mDx && !o.mDy && !o.mRot))
+        {
+            sOffsets.erase(sOffsets.begin() + static_cast<std::ptrdiff_t>(i));
+            continue;
+        }
+        o.mPrevDx = o.mDx;
+        o.mPrevDy = o.mDy;
+        o.mPrevRot = o.mRot;
+        i++;
+    }
     sValid = gSpritePool && ViewCamera();
     if (!sValid)
     {
@@ -551,6 +596,52 @@ void Clear()
     sValid = false;
     sSlides.clear();
     sGlides.clear();
+    sOffsets.clear();
+}
+
+void SetOffset(Sprite* pSprite, f32 dx, f32 dy, s32 rot)
+{
+    if (!pSprite)
+    {
+        return;
+    }
+    for (size_t i = 0; i < sOffsets.size(); i++)
+    {
+        Offset& o = sOffsets[i];
+        if (o.mpSprite == pSprite)
+        {
+            if (o.mId != pSprite->mInstanceId)
+            {
+                o = Offset{pSprite, pSprite->mInstanceId, 0, 0, 0, 0, 0, 0};
+            }
+            o.mDx = dx;
+            o.mDy = dy;
+            o.mRot = rot;
+            return;
+        }
+    }
+    if ((dx || dy || rot) && sOffsets.size() < 512)
+    {
+        sOffsets.push_back(Offset{pSprite, pSprite->mInstanceId, dx, dy, 0, 0, rot, 0});
+    }
+}
+
+bool OffsetOf(const Sprite* pSprite, f32* pDx, f32* pDy, s32* pRot)
+{
+    for (size_t i = 0; i < sOffsets.size(); i++)
+    {
+        const Offset& o = sOffsets[i];
+        if (o.mpSprite == pSprite && o.mId == pSprite->mInstanceId)
+        {
+            *pDx = o.mDx;
+            *pDy = o.mDy;
+            *pRot = o.mRot;
+            return true;
+        }
+    }
+    *pDx = *pDy = 0;
+    *pRot = 0;
+    return false;
 }
 
 void GlideFrom(Sprite* pSprite, f32 dx, f32 dy, f64 steps)
@@ -726,6 +817,7 @@ void Apply(f32 alpha)
         }
         sGliding[i] = false;
     }
+    ApplyOffsets(alpha);
     ApplyGlides();
     ApplyAttached(owners);
     Measure(alpha);
@@ -790,6 +882,7 @@ void ApplySlidesOnly(f32 alpha)
     sDrawTime = sSteps + static_cast<f64>(alpha);
     if (gSpritePool)
     {
+        ApplyOffsets(1.0f);
         ApplyGlides();
         ApplySlides();
     }

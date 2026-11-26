@@ -40,6 +40,11 @@ void SlideFrom(Sprite* pSprite, const Sprite* pFrom, f32 muzzle, bool slide);
 void GlideFrom(Sprite* pSprite, f32 dx, f32 dy, f64 steps);
 // What is left of a sprite's glide at the last step (blocks); false: none
 bool GlideOffset(const Sprite* pSprite, f32* pDx, f32* pDy);
+// A network client's correction of a ped, smoothed in the drawing only: drawn (dx, dy) blocks and rot (Ang16) off the
+// game's place after this step, lerped from the offset before it; the game keeps the corrected place
+void SetOffset(Sprite* pSprite, f32 dx, f32 dy, s32 rot);
+// A sprite's offset after the last step (blocks, Ang16); false: none
+bool OffsetOf(const Sprite* pSprite, f32* pDx, f32* pDy, s32* pRot);
 // A slid shot's first frame: its distance from the gun as the step left it drawn and as drawn (blocks); false: none left
 bool TakeSlideMeasure(f32* pWouldBe, f32* pDrawn);
 // The time of the frame being drawn, in steps

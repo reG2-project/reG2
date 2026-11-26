@@ -475,8 +475,14 @@ void net::engine::ComfortClientFrame(uint32_t frame, uint32_t tick, int slot, ui
     const Car* myCar = me && me->mCar && me->mCar->mDriver == me ? me->mCar : NULL;
     std::vector<Pose> poses;
     Poses(poses);
-    for (const Pose& p : poses)
+    for (Pose& p : poses)
     {
+        int32_t ox, oy, orot; // as drawn
+        if (!IsCarId(p.id) && PedOffset(p.id, &ox, &oy, &orot))
+        {
+            p.x += ox;
+            p.y += oy;
+        }
         const float dx = Blocks(p.x) - lx, dy = Blocks(p.y) - ly;
         const bool inView = dx * dx + dy * dy < kView * kView;
         if (dx * dx + dy * dy < kSeen * kSeen && p.id != (uint32_t)slot + 1 && !(IsCarId(p.id) && me && me->mCar && ReplicaCar(p.id) == me->mCar))
