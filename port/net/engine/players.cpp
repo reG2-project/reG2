@@ -836,7 +836,8 @@ bool net::engine::PlayerOf(const EntityState& e, int* pPlayer, uint32_t* pButton
 
 int net::engine::PlayerHealth(const EntityState& e)
 {
-    return e.type == kEntityPlayer ? e.f[kPlayerHealth] : 0;
+    // 0 while dead: a player waiting to respawn already has its respawn's 100 (Ped::RespawnPed)
+    return e.type == kEntityPlayer && !(e.f[kPlayerState] & kPlayerDead) ? e.f[kPlayerHealth] : 0;
 }
 
 bool net::engine::PlayerChat(const EntityState& e, std::string* pLine)
