@@ -82,6 +82,13 @@ MATCH_FUNC(0x5bc260)
 void TileAnimManager::AddAnim(s16 base, s16 start_frame, s16 length, s16 frame_rate, s16 repeat)
 {
     TileAnim* pAnim = gTileAnimPool->Allocate();
+#if defined(GTA2_PORT)
+    if (!pAnim)
+    {
+        PortPool::Skipped("a tile animation"); // the tile doesn't animate
+        return;
+    }
+#endif
     pAnim->Init(base, start_frame, length, frame_rate, repeat);
     pAnim->Start();
 }
@@ -90,6 +97,13 @@ MATCH_FUNC(0x5bc2c0)
 void TileAnimManager::AddGmpAnim(const gmp_tile_animation* pTileAnimation)
 {
     TileAnim* pAnim = gTileAnimPool->Allocate();
+#if defined(GTA2_PORT)
+    if (!pAnim)
+    {
+        PortPool::Skipped("a map tile animation");
+        return;
+    }
+#endif
     pAnim->InitFromGmpAnim(pTileAnimation);
     pAnim->Start();
 }

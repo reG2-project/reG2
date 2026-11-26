@@ -10,6 +10,13 @@ MATCH_FUNC(0x457ba0)
 void TaxiList::PushTaxi(Car* pCar)
 {
     TaxiListNode* pNode = sTaxi4Pool->Allocate();
+#if defined(GTA2_PORT)
+    if (!pNode)
+    {
+        PortPool::Skipped("a taxi list entry");
+        return;
+    }
+#endif
     pNode->mpCar = pCar;
     pNode->mpNext = this->mpFirst;
     this->mpFirst = pNode;
