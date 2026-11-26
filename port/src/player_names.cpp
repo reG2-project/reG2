@@ -42,7 +42,8 @@ void PortDrawPlayerNames(u16 font)
     for (Player* pPlayer = gGame_0x40->IterateFirstPlayer(); pPlayer; pPlayer = gGame_0x40->IterateNextPlayer())
     {
         Ped* pPed = pPlayer->mPlayerPed;
-        if (pPlayer->mIsUser || !pPed || pPed->mBf21C.bInvisible)
+        // A wasted or busted player is named again at its respawn, not on its corpse or its body waiting there
+        if (pPlayer->mIsUser || !pPed || pPed->mBf21C.bInvisible || pPlayer->mWastedOrBusted)
         {
             continue;
         }
