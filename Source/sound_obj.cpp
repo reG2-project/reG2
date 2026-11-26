@@ -38,6 +38,16 @@
 // A car's own sounds take the sample indices 0 to 15 and 100 to 199, a char's 0 to 5: a player's death cry has its own,
 // apart from the voice's (2), so that a client's sound log never takes it for another line of the same ped (sound_log.cpp)
 static const u8 kDeathCrySampleIndex = 16;
+
+// The death cries' channels: the frame each started and the frames it lasts, to tell a cry cut short from one that ended
+static u32 sPortCryFrame;
+static u32 sPortCryStart[64];
+static s32 sPortCryLength[64];
+
+static bool IsPortDeathCry(const sound_0x68& sample)
+{
+    return sample.mSampleIndex == kDeathCrySampleIndex && sample.mSampIdx >= 228 && sample.mSampIdx <= 232;
+}
 #endif
 
 // Forward declarations: the functions below are in address order
@@ -4336,6 +4346,9 @@ void sound_obj::ProcessActiveQueues()
     f32 z;
     u8 i;
     u8 j;
+#if defined(GTA2_PORT)
+    sPortCryFrame++;
+#endif
 
     for (u8 idx = 0; idx < mnActiveSamples; idx++)
     {
@@ -4380,6 +4393,12 @@ void sound_obj::ProcessActiveQueues()
 
                     if (!bUsed)
                     {
+#if defined(GTA2_PORT)
+                        if (IsPortDeathCry(active) && gPortDeathCryHook)
+                        {
+                            gPortDeathCryHook("ended", static_cast<s32>(sPortCryFrame - sPortCryStart[j]), sPortCryLength[j], active);
+                        }
+#endif
                         sample.mbIsPlayingFinished = true;
                         active.mbIsPlayingFinished = true;
                         active.mSampIdx = 321;
@@ -4511,6 +4530,17 @@ void sound_obj::ProcessActiveQueues()
         sound_0x68& active = mActiveSamples[j];
         if (active.mSampIdx != 321 && !active.mbIsBeingPlayed)
         {
+#if defined(GTA2_PORT)
+            if (IsPortDeathCry(active))
+            {
+                const s32 played = static_cast<s32>(sPortCryFrame - sPortCryStart[j]);
+                gPortSoundStats.cryCut += played + 2 < sPortCryLength[j];
+                if (gPortDeathCryHook)
+                {
+                    gPortDeathCryHook(played + 2 < sPortCryLength[j] ? "cut" : "ended", played, sPortCryLength[j], active);
+                }
+            }
+#endif
             if (mB3dSound)
             {
                 gSampManager.StopChannel3D(j);
@@ -4632,6 +4662,12 @@ void sound_obj::ProcessActiveQueues()
             sample.mVolumeChange = -1;
 #if defined(GTA2_PORT)
             gPortSoundStats.started++;
+            if (IsPortDeathCry(active))
+            {
+                gPortSoundStats.cryStarted++;
+                sPortCryStart[j] = sPortCryFrame;
+                sPortCryLength[j] = active.mFramesToPlay;
+            }
 #endif
             break;
         }
@@ -6164,8 +6200,23 @@ void sound_obj::HandlePedVoiceEvent(Sound_Params* pParams)
 // first in the mixer's queue (a priority of 0) so that the shots and impacts around a kill never push it out
 void sound_obj::PortPlayerDeathCry(Sound_Params* pParams)
 {
-    if (!CalculateDistance(Fix16(81)) || !VolCalc(35, Fix16(9), pParams->mbHasSolidAbove))
+    gPortSoundStats.cryAsked++;
+    if (!CalculateDistance(Fix16(81)))
     {
+        gPortSoundStats.cryFar++;
+        if (gPortDeathCryHook)
+        {
+            gPortDeathCryHook("far", Fix16::SquareRoot(mDistSquared).ToInt(), 0, msQueueSample);
+        }
+        return;
+    }
+    if (!VolCalc(35, Fix16(9), pParams->mbHasSolidAbove))
+    {
+        gPortSoundStats.crySilent++;
+        if (gPortDeathCryHook)
+        {
+            gPortDeathCryHook("vol0", msQueueSample.mDistance.ToInt(), 0, msQueueSample);
+        }
         return;
     }
     msQueueSample.mSampIdx = manRandomTable[static_cast<u32>(msQueueSample.mEntityIndex) % 5] % 5 + 228;
@@ -6183,8 +6234,16 @@ void sound_obj::PortPlayerDeathCry(Sound_Params* pParams)
     msQueueSample.mLoopStart = 0;
     msQueueSample.mLoopEnd = -1;
     msQueueSample.mLoopCount = 1;
+    const u32 full = gPortSoundStats.queueFull[gPortSoundSide];
     AddSampleToRequestedQueue();
+    gPortSoundStats.cryFull += gPortSoundStats.queueFull[gPortSoundSide] != full;
+    if (gPortDeathCryHook)
+    {
+        gPortDeathCryHook(gPortSoundStats.queueFull[gPortSoundSide] != full ? "full" : "queued",
+                          msQueueSample.mDistance.ToInt(), msQueueSample.mnVolume, msQueueSample);
+    }
 }
+
 #endif
 
 MATCH_FUNC(0x4236C0)

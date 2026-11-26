@@ -64,8 +64,12 @@ struct PortSoundStats
     u32 started, refused, badSample, noRate; // ProcessActiveQueues' new samples: started, InitSampleForType said no...
     u32 busyMax; // channels playing at a frame's end, the most
     u32 entityAdds, entityFrees, addFails, cameraRefused; // AddSoundObject, FreeSoundEntry: a full table, a second camera
+    u32 cryAsked, cryFar, crySilent, cryFull, cryStarted, cryCut; // a player's death cry: asked for, unheard, started, stopped early
 };
 extern PortSoundStats gPortSoundStats;
+// A player's death cry (sound_obj::PortPlayerDeathCry): asked for, unheard, started, ended; NULL but for a log (GTA2_NET_SFXLOG)
+struct sound_0x68;
+extern void (*gPortDeathCryHook)(const char* what, s32 a, s32 b, const sound_0x68& sample);
 extern int gPortSoundSide; // 1 while a network client's resimulated tick asks for its sounds
 // The mixer's (compat/src/miles.cpp) since the last call, then reset
 struct PortMixerStats

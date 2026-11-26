@@ -1048,6 +1048,15 @@ void LogSampleStart(const void*)
     printf("sfx: tick %u samp %u %s at %d,%d loops %u vol %u\n", gpRng ? (uint32_t)gpRng->get_cur_rng() : 0, a.mSampIdx, src,
            a.mObj.mX.ToInt(), a.mObj.mY.ToInt(), a.mLoopCount, a.mnVolume);
 }
+
+// A player's death cry: unheard (far, vol0: its distance), queued or not (full, queued: its distance and volume; a
+// resimulated tick's is the sound log's), and how long its channel played (cut, ended: the frames played and the sample's)
+void LogDeathCry(const char* what, s32 a, s32 b, const sound_0x68& q)
+{
+    printf("cry: tick %u %s %d %d at %d,%d listener %d,%d%s\n", gpRng ? (uint32_t)gpRng->get_cur_rng() : 0, what, (int)a, (int)b,
+           q.mObj.mX.ToInt(), q.mObj.mY.ToInt(), gSound_obj.mListenerX.ToInt(), gSound_obj.mListenerY.ToInt(),
+           gPortSoundSide ? " resim" : "");
+}
 } // namespace
 
 void net::engine::InstallSfxLog(bool server)
@@ -1058,6 +1067,7 @@ void net::engine::InstallSfxLog(bool server)
         return;
     }
     gPortSampleStartHook = LogSampleStart;
+    gPortDeathCryHook = LogDeathCry;
     const int slot = atoi(on);
     Game* g = gGame_0x40;
     Player* p = server && g && slot > 0 && slot < (int)g->mNumPlayers ? g->mPlayers[slot] : NULL;

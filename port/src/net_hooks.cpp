@@ -13,6 +13,7 @@ bool gPortNoAudio;
 void (*gPortSampleStartHook)(const void*);
 void (*gPortSoundRequestsHook)(bool);
 PortSoundStats gPortSoundStats;
+void (*gPortDeathCryHook)(const char*, s32, s32, const sound_0x68&);
 int gPortSoundSide;
 bool gPortServer;
 bool gPortNoRumble;
