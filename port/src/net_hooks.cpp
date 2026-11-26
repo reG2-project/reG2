@@ -4,6 +4,7 @@
 
 void (*gPortCrashHook)();
 void (*gPortSpriteMovedHook)(Sprite*);
+void (*gPortSpriteFreedHook)(Sprite*);
 void (*gPortIdleHook)();
 bool gPortNetFrameLoop;
 s32 gPortNetPaceMs = -1;

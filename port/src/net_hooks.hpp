@@ -21,6 +21,8 @@ extern void (*gPortCrashHook)();
 // After a sprite moved (Sprite::InvalidateZColAndBBoxes, every setter of its place calls it); NULL but for a check
 // (GTA2_NET_CHECKGRID: one moved off the map)
 extern void (*gPortSpriteMovedHook)(Sprite*);
+// Before a sprite goes back to its pool (Sprite::PoolDeallocate); NULL but for a check (GTA2_NET_CHECKSTALE)
+extern void (*gPortSpriteFreedHook)(Sprite*);
 // While the game waits for its next step: the netcode's polling, so a ping is answered at once and neither a step nor
 // a frame wait adds to the round trip
 extern void (*gPortIdleHook)();

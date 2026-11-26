@@ -2368,6 +2368,12 @@ void Sprite::PoolAllocate()
 MATCH_FUNC(0x5a3030)
 void Sprite::PoolDeallocate()
 {
+#if defined(GTA2_PORT)
+    if (gPortSpriteFreedHook)
+    {
+        gPortSpriteFreedHook(this);
+    }
+#endif
     FreeShapes();
     this->mInstanceId = 0;
     FreeSound();

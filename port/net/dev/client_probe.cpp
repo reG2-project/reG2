@@ -36,6 +36,7 @@ void net::ClientProbe::AfterTick()
     engine::DebugCheckWeapons("after the frame's tick", mLastSnap);
     engine::DebugCheckTurrets("after the frame's tick", mLastSnap);
     engine::DebugCheckGridLists("after the frame's tick", mLastSnap);
+    engine::DebugCheckStaleLinks("after the frame's tick", mLastSnap);
 }
 
 void net::ClientProbe::Input(uint32_t frame, uint32_t local)
@@ -78,6 +79,7 @@ void net::ClientProbe::AfterRestore(const Snapshot& snap)
     engine::DebugCheckWeapons("after the restore", snap.tick);
     engine::DebugCheckTurrets("after the restore", snap.tick);
     engine::DebugCheckGridLists("after the restore", snap.tick);
+    engine::DebugCheckStaleLinks("after the restore", snap.tick);
     engine::DebugOwnCarDiff(snap);
     if (Env().compare)
     {
@@ -93,6 +95,7 @@ bool net::ClientProbe::AfterApply(const Snapshot& snap, uint32_t ourTick)
     engine::DebugCheckWeapons("after the apply", snap.tick);
     engine::DebugCheckTurrets("after the apply", snap.tick);
     engine::DebugCheckGridLists("after the apply", snap.tick);
+    engine::DebugCheckStaleLinks("after the apply", snap.tick);
     const uint32_t s = snap.tick;
     if (!Env().divergeTick || s < Env().divergeTick)
     {
@@ -113,6 +116,7 @@ void net::ClientProbe::AfterPlainApply(const Snapshot& snap)
     engine::DebugCheckWeapons("after an apply without a restore", snap.tick);
     engine::DebugCheckTurrets("after an apply without a restore", snap.tick);
     engine::DebugCheckGridLists("after an apply without a restore", snap.tick);
+    engine::DebugCheckStaleLinks("after an apply without a restore", snap.tick);
 }
 
 void net::ClientProbe::AfterResim()
@@ -122,6 +126,7 @@ void net::ClientProbe::AfterResim()
     engine::DebugCheckWeapons("after a resimulated tick", mLastSnap);
     engine::DebugCheckTurrets("after a resimulated tick", mLastSnap);
     engine::DebugCheckGridLists("after a resimulated tick", mLastSnap);
+    engine::DebugCheckStaleLinks("after a resimulated tick", mLastSnap);
 }
 
 void net::ClientProbe::CompareAlone(const Snapshot& snap, engine::SavedWorld* saved, engine::SavedWorld& now)

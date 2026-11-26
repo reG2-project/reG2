@@ -14,7 +14,7 @@ namespace engine
 // The debug switches (GTA2_NET_*), read once (checks.cpp)
 struct DebugFlags
 {
-    bool carDiff, selfLog, animLog, soundLog, checkGrid, pickupLog;
+    bool carDiff, selfLog, animLog, soundLog, checkGrid, pickupLog, checkStale;
 };
 const DebugFlags& Debug();
 bool DebugGridOk(const char* where, Car* car); // GTA2_NET_CHECKGRID: the collision grid has no freed sprites
@@ -117,6 +117,8 @@ void DebugCheckWeapons(const char* where, uint32_t snapTick);
 void DebugCheckTurrets(const char* where, uint32_t snapTick);
 // GTA2_NET_CHECKGRID: every collision grid row a sorted list of cells and links from their pools
 void DebugCheckGridLists(const char* where, uint32_t snapTick);
+// GTA2_NET_CHECKSTALE: no sprite grid links a freed sprite (id 0); each one printed with where its sprite was freed
+void DebugCheckStaleLinks(const char* where, uint32_t snapTick);
 void DebugOnCrash(); // from the crash handler (port/compat/src/main.cpp): the local player's ped, car and camera
 void DebugSetFrame(uint32_t frame); // the client's frame, for the debug checks' messages
 // GTA2_NET_MARKER: a square drawn where the newest snapshot has the local player (raw Fix16), over the frame

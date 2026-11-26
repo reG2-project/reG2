@@ -52,7 +52,8 @@
 const net::engine::DebugFlags& net::engine::Debug()
 {
     static const DebugFlags sFlags = {getenv("GTA2_NET_CARDIFF") != NULL, getenv("GTA2_NET_SELFLOG") != NULL, getenv("GTA2_NET_ANIMLOG") != NULL,
-                                      getenv("GTA2_NET_SOUNDLOG") != NULL, getenv("GTA2_NET_CHECKGRID") != NULL, getenv("GTA2_NET_PICKUPLOG") != NULL};
+                                      getenv("GTA2_NET_SOUNDLOG") != NULL, getenv("GTA2_NET_CHECKGRID") != NULL, getenv("GTA2_NET_PICKUPLOG") != NULL,
+                                      getenv("GTA2_NET_CHECKSTALE") != NULL};
     return sFlags;
 }
 
@@ -514,6 +515,126 @@ void net::engine::DebugCheckGridLists(const char* where, uint32_t snapTick)
                 lastX = c->mX;
             }
         }
+    }
+}
+
+namespace
+{
+struct SpriteFreed
+{
+    uint32_t frame, tick;
+    int type, model, links;
+    const void* owner;
+    void* frames[16];
+};
+std::unordered_map<const Sprite*, SpriteFreed> gSpriteFreed; // each freed sprite's last free
+uint64_t gStaleLinks, gStaleChecks;
+
+// The links to <sp> in the three sprite grids
+int GridLinksTo(const Sprite* sp)
+{
+    int n = 0;
+    const SpriteGrid* grids[] = {gSpriteGrid_1, gSpriteGrid_2, gSpriteGrid_3};
+    for (const SpriteGrid* g : grids)
+    {
+        const GridCell* const* rows = reinterpret_cast<const GridCell* const*>(g);
+        for (int y = 0; rows && y < 256; y++)
+        {
+            for (const GridCell* c = rows[y]; c; c = c->mpNext)
+            {
+                for (const GridSpriteLink* l = c->mpSpriteLinks; l; l = l->mpNext)
+                {
+                    n += l->mpSprite == sp;
+                }
+            }
+        }
+    }
+    return n;
+}
+
+void SpriteFreedHook(Sprite* sp)
+{
+    SpriteFreed& f = gSpriteFreed[sp];
+    f.frame = gDebugFrame;
+    f.tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+    f.type = (int)sp->mSpriteTypeEnum;
+    f.owner = (const void*)sp->mObject2CPtr;
+    // An object's model by its definition: Object::PoolDeallocate clears mModel before it frees the sprite
+    f.model = -1;
+    const ObjectDefinition* def = sp->IsObject2CType() && sp->mObject2CPtr ? sp->mObject2CPtr->mDefinition : NULL;
+    for (int i = 0; def && gObjectDefinitions && i < ObjectDefinitions::k_max_definitions && f.model < 0; i++)
+    {
+        f.model = gObjectDefinitions->mDefinitionByIdx[i] == def ? i : -1;
+    }
+    f.links = GridLinksTo(sp);
+    memset(f.frames, 0, sizeof(f.frames));
+#if !defined(_WIN32)
+    backtrace(f.frames, 16);
+#endif
+}
+} // namespace
+
+void net::engine::DebugCheckStaleLinks(const char* where, uint32_t snapTick)
+{
+    static int sSaid;
+    if (!Debug().checkStale || !gSpritePool)
+    {
+        return;
+    }
+    gStaleChecks++;
+    const Sprite* pool = gSpritePool->mPool.mPool;
+    const size_t kSprites = sizeof(gSpritePool->mPool.mPool) / sizeof(gSpritePool->mPool.mPool[0]);
+    const SpriteGrid* grids[] = {gSpriteGrid_1, gSpriteGrid_2, gSpriteGrid_3};
+    for (int gi = 0; gi < 3; gi++)
+    {
+        const GridCell* const* rows = reinterpret_cast<const GridCell* const*>(grids[gi]);
+        for (int y = 0; rows && y < 256; y++)
+        {
+            for (const GridCell* c = rows[y]; c; c = c->mpNext)
+            {
+                for (const GridSpriteLink* l = c->mpSpriteLinks; l; l = l->mpNext)
+                {
+                    const Sprite* sp = l->mpSprite;
+                    if (!sp || sp->mInstanceId != 0)
+                    {
+                        continue;
+                    }
+                    gStaleLinks++;
+                    if (sSaid >= 12)
+                    {
+                        continue;
+                    }
+                    sSaid++;
+                    const bool inPool = sp >= pool && sp < pool + kSprites;
+                    printf("net: CHECK frame %u tick %u %s (snapshot %u): grid %d cell (%d, %d) links freed sprite %p (type %d, %s, at "
+                           "(%.2f, %.2f))\n",
+                           gDebugFrame, gpRng ? (uint32_t)gpRng->get_cur_rng() : 0, where, snapTick, gi + 1, (int)c->mX, y, (const void*)sp,
+                           (int)sp->mSpriteTypeEnum, inPool ? "a pool sprite" : "not a pool sprite", sp->mXy.x.ToFloat(), sp->mXy.y.ToFloat());
+                    auto f = gSpriteFreed.find(sp);
+                    if (f == gSpriteFreed.end())
+                    {
+                        printf("net: CHECK   never freed while the check ran\n");
+                        continue;
+                    }
+                    printf("net: CHECK   freed at frame %u tick %u as type %d, owner %p, model %d, with %d grid links then; backtrace:\n",
+                           f->second.frame, f->second.tick, f->second.type, f->second.owner, f->second.model, f->second.links);
+                    fflush(stdout);
+#if !defined(_WIN32)
+                    int n = 0;
+                    while (n < 16 && f->second.frames[n])
+                    {
+                        n++;
+                    }
+                    backtrace_symbols_fd(f->second.frames, n, 1);
+#endif
+                }
+            }
+        }
+    }
+    if (gStaleChecks % 20000 == 0)
+    {
+        printf("net: stale link check: %llu checks, %llu stale links seen\n", (unsigned long long)gStaleChecks,
+               (unsigned long long)gStaleLinks);
     }
 }
 
@@ -1011,6 +1132,10 @@ void net::engine::InstallSpriteCheck()
     if (Debug().checkGrid)
     {
         gPortSpriteMovedHook = SpriteMovedOff;
+    }
+    if (Debug().checkStale)
+    {
+        gPortSpriteFreedHook = SpriteFreedHook;
     }
 }
 
