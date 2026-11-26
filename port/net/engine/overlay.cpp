@@ -7,6 +7,7 @@
 #include "Source/Frontend.hpp"
 #include "Source/Game.hpp"
 #include "Source/Player.hpp"
+#include "Source/enums.hpp"
 #include "Source/gtx_0x106C.hpp"
 #include <algorithm>
 #include <ctype.h>
@@ -19,6 +20,7 @@ namespace
 // The corner holds the round's line, GTA2_NET_STATS's and the ping's
 wchar_t gStatusCorner[256], gStatusCentre[64];
 wchar_t gBanner[64];
+int gWarning; // SetNetWarning's level
 } // namespace
 
 namespace
@@ -98,8 +100,35 @@ void net::engine::SetNetStatus(const std::string& corner, const std::string& cen
     Widen(centre, gStatusCentre, sizeof(gStatusCentre) / sizeof(gStatusCentre[0]));
 }
 
+void net::engine::SetNetWarning(int level)
+{
+    gWarning = level;
+}
+
 namespace
 {
+// The bad connection icon on the line at <y>, right-aligned to <right>: the game's lightning bolt (a power-up's) and a
+// word in the text font, "LAG" yellow, "NO SIGNAL" red and blinking
+void DrawWarning(s32 right, s32 y)
+{
+    const long long blink = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count() % 800;
+    if (!gWarning || (gWarning >= 2 && blink >= 500))
+    {
+        return;
+    }
+    const s16 kBolt = 150; // a user sprite, 20x30
+    const s32 kBoltWidth = 15; // drawn at 3/4
+    const s32 kFontYellow = 7, kFontRed = 5; // font remaps
+    const Fix16 x = Fix16(right - kBoltWidth / 2), top = Fix16(y + 12);
+    const s32 sprites = palette_types_enum::sprites_2, remaps = palette_types_enum::font_remaps_8;
+    DrawFigure(sprite_types_enum::user_6, kBolt, UI_X(x), UI_Y(top), Ang16(0), gViewCamera->mUiScale * 3 / 4, sprites, 0, 0, 0, false);
+    wchar_t text[16];
+    Widen(gWarning >= 2 ? "NO SIGNAL" : "LAG", text, sizeof(text) / sizeof(text[0]));
+    const s32 textRight = right - kBoltWidth - 4;
+    DrawStringScaledPalette(text, textRight - Frontend::GetMaxTextWidth(text, gStyleTextFont), y, gStyleTextFont, remaps,
+                            gWarning >= 2 ? kFontRed : kFontYellow, 0, 0);
+}
+
 // <text> centred at <y>, wrapped at spaces to fit <w> less a margin; the y under it. No std::wstring, whose
 // traits assume a 4-byte wchar_t (the port has -fshort-wchar)
 s32 DrawCentredWrapped(const wchar_t* text, s32 w, s32 y, s32 lineHeight)
@@ -245,6 +274,7 @@ void net::engine::DrawOverlay()
         DrawStringScaled(line.data(), w - 8 - Frontend::GetMaxTextWidth(line.data(), gStyleTextFont), cornerY, gStyleTextFont);
         end = start > gStatusCorner ? start - 1 : start;
     }
+    DrawWarning(w - 8, cornerY - 4);
     // The chat lines sent, left-aligned above the lines being typed (the game's, at the bottom: Hud_ChatInput)
     const long long nowMs = NowMs();
     gChatLines.erase(std::remove_if(gChatLines.begin(), gChatLines.end(), [nowMs](const ChatLine& c) { return c.untilMs <= nowMs; }),

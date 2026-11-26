@@ -6,6 +6,7 @@
 #include "../transport/transport.hpp"
 #include "../dev/client_probe.hpp"
 #include "bot.hpp"
+#include "link_warning.hpp"
 #include "recording.hpp"
 #include "round_flow.hpp"
 #include "session.hpp"
@@ -217,6 +218,8 @@ class Client
     };
     LinkStats mLink;
     std::string mLinkShown;
+    LinkWarning mWarning; // the bad connection icon
+    LinkLevel mWarningShown = kLinkGood;
     long long mPingShownMs = 0, mLastSnapshotMs = 0, mReconnectMs = 0, mPingSentMs = 0;
     std::vector<TransportEvent> mPending; // what Idle polled, for the next frame
     int mReconnects = 0; // attempts since the connection dropped

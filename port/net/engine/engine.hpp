@@ -345,6 +345,8 @@ void DrawOverlay(); // the game calls it while drawing (Game::Draw, gPortDrawOve
 // A client's connection, over the frame: <corner> small at the bottom right (the ping), <centre> across the middle
 // (an outage); empty: nothing
 void SetNetStatus(const std::string& corner, const std::string& centre);
+// A client's bad connection icon, over the corner's lines: 0 none, 1 lag, 2 no snapshots (LinkLevel)
+void SetNetWarning(int level);
 // The scoreboard, over the middle of the frame instead of the round's panel while shown (scoreboard.cpp): the map's title,
 // two lines under it, the players by score (their name in their HUD colour, the local one marked)
 struct Scoreboard

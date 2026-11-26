@@ -400,6 +400,7 @@ void net::Client::OnSnapshot(BitReader& r)
     mReceived[h.tick % kRing] = snap;
     mForwarded[h.tick % kRing] = h.forwarded;
     mLatestTick = h.tick;
+    mWarning.OnSnapshot(NowMs(), h.tick);
     mLink.snapshots++;
     mSlack = (int)h.lastCmdTick - (int)(h.tick + 1);
     mSlackKnown = mSynced && h.lastCmdTick > mJumpTick; // it has heard of the ticks since our last jump
@@ -1092,6 +1093,7 @@ void net::Client::StartOver()
     mGeneration = engine::GameGeneration();
     mSlot = mNextSlot;
     mSynced = false;
+    mWarning.Reset();
     mNewSnapshot = false;
     mTakenTick = 0;
     // The old game ran on through the map change's pause into the new one's first ticks: its inputs (sent as commands
@@ -1148,6 +1150,7 @@ void net::Client::FastForward(int ticks)
     mJumpTick = mTick;
     mStats.fastForwards++;
     mGameCatchUps++;
+    mWarning.OnCatchUp(NowMs());
     printf("net: frame %u, our commands came late: %d ticks run at once\n", mFrame, ticks);
 }
 
@@ -1161,6 +1164,7 @@ void net::Client::Resync(const Snapshot& snap)
     {
         mStats.jumps++;
         mGameJumps++;
+        mWarning.OnCatchUp(NowMs());
         printf("net: frame %u, a jump to tick %u (our commands %d ticks off two early)\n", mFrame, mTick, off);
     }
     else
@@ -1427,6 +1431,7 @@ void net::Client::Rejoined(const Welcome& welcome)
     mLatestTick = 0;
     mServerGame = welcome.game;
     mLastSnapshotMs = NowMs();
+    mWarning.Reset();
     for (Snapshot& s : mReceived)
     {
         s = Snapshot();
@@ -1493,6 +1498,13 @@ void net::Client::ShowStatus()
         centre = "Connection interrupted";
     }
     engine::SetNetStatus(RoundCorner() + (mConnected && mPingShown ? mLinkShown + "ping " + std::to_string(mPingShown) : ""), centre);
+    const LinkLevel level = mLeft ? kLinkGood : mWarning.Update(now, mConnected, mSynced, mPingMs);
+    if (level != mWarningShown)
+    {
+        printf("net: frame %u, link warning %d (ping %u, usual %u)\n", mFrame, (int)level, mPingMs, mWarning.Baseline());
+        mWarningShown = level;
+    }
+    engine::SetNetWarning(level);
 }
 
 void net::Client::SendLeave(const std::string& why)
