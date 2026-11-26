@@ -163,7 +163,7 @@ void net::engine::ApplyPickups(const Snapshot& snap)
         gObjects[e.id] = o;
         mapped.insert(o);
     }
-    // Not in the snapshot: collected on the server, or out of the area. Only well inside it (20 of the 24 blocks) is it
+    // Not in the snapshot: collected on the server, or out of the area. Only well inside it (2 blocks from its edge) is it
     // gone; nearer the edge it stays (in and out of the area as we move, it was made again and again)
     const ReachArea area(snap, 2.0f);
     std::set<Object*> gone;
