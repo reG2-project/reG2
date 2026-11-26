@@ -2697,10 +2697,23 @@ bool PoliceRoadblock::CreateRoadblock(u8 x, u8 y, u8 z, s32 orientation)
                                                                                  kFpOne_6FECEC);
                                 sRoadblockLaneHasBarriers = 0;
                                 sRoadblockLaneHasGuard = 0;
+#if defined(GTA2_PORT)
+                                if (!pCar)
+                                {
+                                    break; // a full car pool
+                                }
                                 Ped* pDriver = gPedManager->SpawnDriver(pCar);
+                                if (pDriver) // NULL: a full ped pool, the tank stays empty
+                                {
+#else
+                                Ped* pDriver = gPedManager->SpawnDriver(pCar);
+#endif
                                 pDriver->SetPedType(ped_type::script_created_5);
                                 pDriver->set_occupation(ped_ocupation_enum::road_block_tank_man);
                                 pDriver->mThreatReaction = threat_reaction_enum::react_as_emergency_1;
+#if defined(GTA2_PORT)
+                                }
+#endif
                                 pCar->mAttachments.GetSpriteForModel(objects::tank_cannon_148)->mOffsetRot =
                                     kAng90_6FEB74;
                             }
@@ -3023,10 +3036,23 @@ bool PoliceRoadblock::CreateRoadblock(u8 x, u8 y, u8 z, s32 orientation)
                                                                                  kFpOne_6FECEC);
                                 sRoadblockLaneHasBarriers = 0;
                                 sRoadblockLaneHasGuard = 0;
+#if defined(GTA2_PORT)
+                                if (!pCar)
+                                {
+                                    break; // a full car pool
+                                }
                                 Ped* pDriver = gPedManager->SpawnDriver(pCar);
+                                if (pDriver) // NULL: a full ped pool, the tank stays empty
+                                {
+#else
+                                Ped* pDriver = gPedManager->SpawnDriver(pCar);
+#endif
                                 pDriver->SetPedType(ped_type::script_created_5);
                                 pDriver->set_occupation(ped_ocupation_enum::road_block_tank_man);
                                 pDriver->mThreatReaction = threat_reaction_enum::react_as_emergency_1;
+#if defined(GTA2_PORT)
+                                }
+#endif
                             }
                             break;
                     }

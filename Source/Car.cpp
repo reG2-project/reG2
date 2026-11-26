@@ -1342,6 +1342,12 @@ Car* CarManager::SpawnCarOnRoadNetwork(Fix16 xpos, Fix16 ypos, s32 road_directio
                 {
                     Car* pCar =
                         SpawnCar_426E10_v2(x, y, ground_z, ReturnAngleFromRoadDirection(road_direction), car_model_type);
+#if defined(GTA2_PORT)
+                    if (!pCar)
+                    {
+                        return NULL; // a full car pool
+                    }
+#endif
                     pCar->SetupCarPhysicsAndSpriteBindingWithTrailer();
                     pCar->AllocateAI();
                     pCar->mAI->SetCar(pCar);
@@ -1396,6 +1402,14 @@ Car* CarManager::SpawnCarAt(Fix16 xpos, Fix16 ypos, Fix16 zpos, Ang16 rotation, 
 
     car_info* pCarInfo = gGtx_0x106C->get_car_info_5AA3B0(car_info_idx);
 
+#if defined(GTA2_PORT)
+    if (!gCar_BC_Pool->mPool.PortRoom())
+    {
+        PortPool::Skipped("a car");
+        return NULL;
+    }
+    PortPool::Essential essential; // the car's own lights, sirens and roof objects
+#endif
     Car* pCar;
     if (pCarInfo->IsTruckCab())
     {
@@ -1539,6 +1553,13 @@ Trailer* CarManager::SpawnCabAndTrailer(Fix16 xpos, Fix16 ypos, Ang16 rotation, 
 {
     Ang16 out_rot;
 
+#if defined(GTA2_PORT)
+    if (!gCar_BC_Pool->mPool.PortRoom(2) || !gTrailerPool->mPool.PortRoom())
+    {
+        PortPool::Skipped("a truck and trailer");
+        return NULL;
+    }
+#endif
     Car* pCab = SpawnCarAtCorrectZ(xpos, ypos, rotation, car_model);
 
     // Separate output locals: VC6 puts them in the dead xpos/ypos arg slots and keeps the
@@ -5709,6 +5730,13 @@ MATCH_FUNC(0x4427a0)
 void Car::AttachTrailer(Car* pTrailerCar)
 {
     mpTrailer = gTrailerPool->mPool.Allocate();
+#if defined(GTA2_PORT)
+    if (!mpTrailer)
+    {
+        PortPool::Skipped("a trailer hitch");
+        return;
+    }
+#endif
     mpTrailer->SetTruckCabAndTrailerCar(this, pTrailerCar);
 
     Car* pLast = NULL;
