@@ -1070,7 +1070,7 @@ bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, con
         LeaveToMenu(missing.c_str());
         return false;
     }
-    printf("net: frame %u, the next map: %s%s\n", mFrame, scr.c_str(), slot != mSlot ? (", as player " + std::to_string(slot)).c_str() : "");
+    printf("net: frame %u, tick %u (%lld ms), the next map: %s%s\n", mFrame, mTick, NowMs(), scr.c_str(), slot != mSlot ? (", as player " + std::to_string(slot)).c_str() : "");
     engine::ChangeMap(gmp, sty, scr, players, slot, pauseTicks);
     mNextSlot = slot;
     mScr = scr;
@@ -1106,7 +1106,10 @@ void net::Client::StartOver()
     mKnownTick = 0;
     mBot.reset(); // and its map of the old one
     mNavMap.reset();
-    printf("net: frame %u, a new game\n", mFrame);
+    mGameStartMs = NowMs();
+    mSyncFrame = 0;
+    mGameJumps = mGameCatchUps = 0;
+    printf("net: frame %u, tick %u (%lld ms), a new game\n", mFrame, mTick, mGameStartMs);
     engine::PrintSoundDiag(("frame " + std::to_string(mFrame) + ", the new game").c_str());
 }
 
@@ -1136,6 +1139,7 @@ void net::Client::FastForward(int ticks)
     mSlackKnown = false; // until a snapshot answers commands for the new ticks
     mJumpTick = mTick;
     mStats.fastForwards++;
+    mGameCatchUps++;
     printf("net: frame %u, our commands came late: %d ticks run at once\n", mFrame, ticks);
 }
 
@@ -1148,7 +1152,14 @@ void net::Client::Resync(const Snapshot& snap)
     if (mSynced)
     {
         mStats.jumps++;
+        mGameJumps++;
         printf("net: frame %u, a jump to tick %u (our commands %d ticks off two early)\n", mFrame, mTick, off);
+    }
+    else
+    {
+        mSyncFrame = mFrame;
+        printf("net: frame %u, synced at tick %u, server %u (%lld ms, %lld after this game's start)\n", mFrame, mTick, snap.tick, NowMs(),
+               mGameStartMs ? NowMs() - mGameStartMs : 0);
     }
     mSynced = true;
     mSlackKnown = false; // until a snapshot answers commands for the new ticks
@@ -1598,6 +1609,11 @@ void net::Client::Step()
     {
         TakeSnapshot();
         AnnounceRound();
+    }
+    if (mSynced && mSyncFrame && mFrame == mSyncFrame + 90)
+    {
+        printf("net: frame %u, 90 frames after the sync: tick %u, server %u, our commands %d ticks early; %u jumps, %u catch-ups at once since\n", mFrame,
+               mTick, mLatestTick, mSlackKnown ? mSlack : -99, mGameJumps, mGameCatchUps);
     }
     if (mSynced)
     {

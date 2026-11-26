@@ -232,6 +232,9 @@ class Client
     int mMarks = 0; // mark key presses (F12 or the key under Esc) (ChooseInput)
     engine::Round mRound; // the last one announced
     int mGeneration = 0; // engine::GameGeneration's, of the game running
+    long long mGameStartMs = 0; // when this game started here (0: the join's game)
+    uint32_t mSyncFrame = 0; // the frame of this game's first sync
+    uint32_t mGameJumps = 0, mGameCatchUps = 0; // this game's Resyncs and FastForwards
     int mServerGame = -1; // the server's game we take snapshots of (the welcome's, the next after a map change)
     uint32_t mMarkFrame = 0;
     bool mLeft = false; // left the server (the pause menu's LEAVE GAME, a kick, a lost server)

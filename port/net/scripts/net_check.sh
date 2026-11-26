@@ -171,7 +171,7 @@ maps() {
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
   local changes crashes checks followed=1 heard=1 gunfire=1 b
-  changes=$(grep -c "net: the next map:" "$OUT/maps_server.log")
+  changes=$(grep -c "), the next map:" "$OUT/maps_server.log")
   crashes=$(grep -l "crashed" "$OUT"/maps_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/maps_*.log | grep -c "net: CHECK")
   for b in rammer soldier; do
@@ -183,7 +183,7 @@ maps() {
   # On every later map m_rammer hears the others' gunfire as the server's listener at its place does: at least half
   # the shots' samples of a map the server heard 20 of (the last map's, maybe cut short, not counted)
   if grep -q "as player 3 of" "$OUT/maps_rammer.log"; then
-    awk '/net: the next map:/ { n++ } /^sfx: / && / weapon/ && !/\/p3 / && n { s[n]++ } END { for (i = 1; i < n; i++) print i, s[i] + 0 }' \
+    awk '/\), the next map:/ { n++ } /^sfx: / && / weapon/ && !/\/p3 / && n { s[n]++ } END { for (i = 1; i < n; i++) print i, s[i] + 0 }' \
       "$OUT/maps_server.log" > "$OUT/maps_gunfire_server.txt"
     awk '/a new game/ { n++ } /^sfx: / && / weapon/ && !/\/p3 / && n { c[n]++ } END { for (i = 1; i <= n; i++) print i, c[i] + 0 }' \
       "$OUT/maps_rammer.log" > "$OUT/maps_gunfire_client.txt"

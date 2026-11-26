@@ -499,6 +499,10 @@ void net::Server::OnCommands(int slot, BitReader& r)
     }
     if (ack > s.ackTick && ack <= mTick)
     {
+        if (mStarted && mGeneration > 0 && s.ackTick < mGameStartTick && ack >= mGameStartTick)
+        {
+            printf("net: tick %u (%lld ms), player %d has the new game (%u ticks after its start)\n", mTick, NowMs(), slot, mTick - mGameStartTick);
+        }
         s.ackTick = ack;
     }
     for (int i = 0; i < n; i++)
@@ -1304,7 +1308,7 @@ void net::Server::ChangeToMap(int map)
     mPrint.gmp = engine::DataFileCrc(m.gmp);
     mPrint.sty = engine::DataFileCrc(m.sty);
     mPrint.scr = engine::DataFileCrc(m.scr);
-    printf("net: the next map: %s\n", m.name.c_str());
+    printf("net: tick %u (%lld ms), the next map: %s\n", mTick, NowMs(), m.name.c_str());
     MapChange change;
     change.map = m.name;
     change.print = mPrint;
@@ -1366,6 +1370,7 @@ void net::Server::StartOver()
 {
     mGeneration = engine::GameGeneration();
     mStarted = false;
+    printf("net: tick %u (%lld ms), a new game\n", mTick, NowMs());
     for (Slot& s : mSlots)
     {
         s.ackTick = 0; // the old game's snapshots are no baseline: full ones again
