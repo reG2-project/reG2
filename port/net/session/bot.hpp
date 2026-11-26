@@ -96,7 +96,7 @@ class BotBrain
 // "soldier": a weapon, then a car, then to the nearest player: runs it over or gets out and shoots, whichever suits
 // "human": what people do and the other bots don't, in turns: cars and buses (in, about, out at speed), trains (on at a
 // station, a ride, off), every weapon it has, pickups, walking into water and blowing itself up (bot_human.cpp);
-// "human:<act>" does that one only
+// "human:<act>" does that one only; "human:charge", never in the turns, fights running at the target all the way
 // "nn:<file>": a neural network's (bot_nn.cpp), its weights from the file (port/net/scripts/rl_bots.py)
 std::unique_ptr<BotBrain> CreateBotBrain(const std::string& kind);
 std::unique_ptr<BotBrain> CreateNeuralBrain(const std::string& path); // NULL if the file is no network of this shape
