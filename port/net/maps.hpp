@@ -8,9 +8,15 @@ namespace net
 {
 // A server's maps: the first (<map>, or the rotation's first) into sc.game, the rotation (<maps>, comma-separated) and
 // what a vote chooses from (the rotation, else the multiplayer maps the game ships); sc.game.players in: --players
-// (0: as many as the biggest map takes); false: an error, printed
+// (0: NET_MAX_PLAYERS), the slots of every map; false: an error, printed
 bool SetUpMaps(const std::string& map, const std::string& maps, ServerConfig& sc);
 // The name players know a map by: data/<name>.mmp's Description without its " 6player" ("Face Off" for mp5-6p), as
 // the original lobby listed them; <name> without one
 std::string MapTitle(const std::string& name);
+// A network game starts and respawns its players at the map's restart zones: data/<gmp> has one, else <name> isn't
+// playable (the game's fatal error at its start) and a warning ending with <then> is printed (NULL: none)
+bool Playable(const std::string& name, const std::string& gmp, const char* then);
+// The players data/<name>.mmp is made for (net::MapPlayers), 0 unreadable: what players see in the map list, as
+// every map has the server's slots
+int MapOwnPlayers(const std::string& name);
 } // namespace net

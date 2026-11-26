@@ -75,7 +75,7 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
 {
     mConfig = config;
     mConfig.packets = config.packets < 1 ? 1 : config.packets > kMaxParts ? kMaxParts : config.packets;
-    mSlots.assign(config.game.players, Slot()); // the first map's players; ChangeToMap and StartOver resize it
+    mSlots.assign(config.game.players, Slot());
     mTransport.reset(CreateServerTransport(config.port, (uint32_t)config.slots + 4, error));
     if (!mTransport)
     {
@@ -87,7 +87,7 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
     }
     if (config.arena.size() > mSlots.size())
     {
-        *error = "more arena bots than the map takes players (" + std::to_string(mSlots.size()) + ")";
+        *error = "more arena bots than player slots (" + std::to_string(mSlots.size()) + ")";
         return false;
     }
     if (!mArena.Start(config.arena, error))
@@ -109,13 +109,6 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
     mMap = (size_t)(mConfig.currentMap >= 0 ? mConfig.currentMap : 0);
     mRounds.Start(mConfig.rules, mapNames, mConfig.currentMap);
     mRounds.SetMapTitles(titles);
-    std::vector<int> takes;
-    for (const MapFiles& m : mConfig.voteMaps)
-    {
-        takes.push_back(m.players);
-    }
-    mRounds.SetMapPlayers(takes);
-    mGamePlayers = (int)mSlots.size();
     engine::CurrentRound() = mRounds.State();
     mProbe.Start();
     mSession = std::random_device{}() | 1; // never 0: a welcome's session is always set
@@ -123,8 +116,7 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
     mPrint.gmp = engine::DataFileCrc(mConfig.game.gmp);
     mPrint.sty = engine::DataFileCrc(mConfig.game.sty);
     mPrint.scr = engine::DataFileCrc(mConfig.game.scr);
-    printf("net: server on port %u, %d player slots (%d on this map), %s, reG2 %s\n", config.port, config.slots, config.game.players,
-           config.game.scr.c_str(), config.build.c_str());
+    printf("net: server on port %u, %d player slots, %s, reG2 %s\n", config.port, config.slots, config.game.scr.c_str(), config.build.c_str());
     return true;
 }
 
@@ -229,10 +221,6 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
         {
             Reject reject;
             reject.reason = "the server is full";
-            if ((int)mSlots.size() < mConfig.slots && mMap < mConfig.voteMaps.size())
-            {
-                reject.reason += ": " + MapTitle(mConfig.voteMaps[mMap].name) + " takes " + std::to_string(mSlots.size()) + " players";
-            }
             WriteReject(w, reject);
             printf("net: turned away a client: %s\n", reject.reason.c_str());
         }
@@ -252,7 +240,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
             s.token = token;
             Welcome welcome;
             welcome.slot = (uint8_t)slot;
-            welcome.players = (uint8_t)mGamePlayers; // a map change's next game, if one is pending
+            welcome.players = (uint8_t)mSlots.size();
             welcome.gameType = (uint8_t)mConfig.game.gameType;
             welcome.fragLimit = (uint32_t)mConfig.game.fragLimit;
             welcome.timeLimitMin = (uint16_t)mConfig.game.timeLimitMin;
@@ -330,6 +318,48 @@ void net::Server::OnCommands(int slot, BitReader& r)
     }
 }
 
+void net::Server::AnswerPing(const TransportEvent& e)
+{
+    std::vector<uint8_t> pong = e.data;
+    pong[0] = kMsgPong;
+    mTransport->Send(e.peer, kChannelUnreliable, pong.data(), pong.size(), false);
+    BitReader r(e.data.data(), e.data.size());
+    r.Bits(8 + 32);
+    const uint32_t ping = r.Bits(16);
+    const int slot = SlotOfPeer(e.peer);
+    if (slot >= 0 && !r.Overflow())
+    {
+        mSlots[slot].ping = (uint16_t)ping;
+    }
+}
+
+// Once a second, to every client: each player's ping as its own client measures it (ENet's until it says)
+void net::Server::SendPings()
+{
+    Pings pings;
+    for (size_t i = 0; i < (size_t)kMaxPlayers; i++)
+    {
+        const Slot* s = i < mSlots.size() && mSlots[i].used ? &mSlots[i] : NULL;
+        if (s && s->peer == kArenaPeer)
+        {
+            pings.ms[i] = kPingBot;
+        }
+        else if (s)
+        {
+            pings.ms[i] = s->ping ? s->ping : (uint16_t)std::min<uint32_t>(mTransport->RoundTripMs(s->peer), kPingMax);
+        }
+    }
+    BitWriter w;
+    WritePings(w, pings);
+    for (const Slot& s : mSlots)
+    {
+        if (s.used && s.peer != kArenaPeer)
+        {
+            mTransport->Send(s.peer, kChannelUnreliable, w.Data().data(), w.ByteCount(), false);
+        }
+    }
+}
+
 void net::Server::OnReceive(const TransportEvent& e)
 {
     BitReader r(e.data.data(), e.data.size());
@@ -341,9 +371,7 @@ void net::Server::OnReceive(const TransportEvent& e)
     }
     if (type == kMsgPing) // polled in a frame, not between them (Idle): late by that much
     {
-        std::vector<uint8_t> pong = e.data;
-        pong[0] = kMsgPong;
-        mTransport->Send(e.peer, kChannelUnreliable, pong.data(), pong.size(), false);
+        AnswerPing(e);
         return;
     }
     const int slot = SlotOfPeer(e.peer);
@@ -688,8 +716,7 @@ void net::Server::Idle()
         waited = false;
         if (e.type == TransportEvent::kReceive && e.channel == kChannelUnreliable && !e.data.empty() && e.data[0] == kMsgPing)
         {
-            e.data[0] = kMsgPong;
-            mTransport->Send(e.peer, kChannelUnreliable, e.data.data(), e.data.size(), false);
+            AnswerPing(e);
             mTransport->Flush();
         }
         else
@@ -829,7 +856,6 @@ std::vector<net::RoundPlayer> net::Server::RoundPlayers(const Snapshot& world) c
     std::vector<RoundPlayer> players(mSlots.size());
     for (size_t i = 0; i < mSlots.size(); i++)
     {
-        players[i].taken = mSlots[i].used;
         players[i].in = mSlots[i].used && (engine::MapChangePending() || engine::SlotInGame((int)i)); // the pause: the next game's slots
         players[i].voter = mSlots[i].used && mSlots[i].peer != kArenaPeer;
         players[i].alwaysReady = mSlots[i].peer == kArenaPeer;
@@ -987,12 +1013,23 @@ void net::Server::Kick(int slot)
 // next starts at once on it
 void net::Server::ChangeToMap(int map)
 {
-    mMap = (size_t)map;
+    // Its files may have changed since the start: one without a restart zone would end the game here and on the clients
+    const size_t n = mConfig.voteMaps.size();
+    size_t pick = (size_t)map;
+    while (!Playable(mConfig.voteMaps[pick].name, mConfig.voteMaps[pick].gmp, "the next playable map instead"))
+    {
+        pick = (pick + 1) % n;
+        if (pick == (size_t)map)
+        {
+            fprintf(stderr, "net: no map here is playable any more: the server ends\n");
+            Shutdown(); // LeaveServer's work for a server (atexit, skipped by _Exit): the clients hear of it
+            fflush(NULL);
+            _Exit(1); // not exit(): the game's destructors would run under its threads still going (as in Client)
+        }
+    }
+    mMap = pick;
     const MapFiles& m = mConfig.voteMaps[mMap];
-    // Its players, and the slots renumbered from 0 for it (CompactSlots): one that doesn't fit (the round flow picks a
-    // map only if they all do, RoundFlow::Fits) is put out. The slots past them stay closed through the pause; more
-    // open with the new game (StartOver)
-    mGamePlayers = m.players < mConfig.slots ? m.players : mConfig.slots;
+    // The slots renumbered from 0 for it (CompactSlots): every player stays, as every map has the server's slots
     std::vector<bool> taken(mSlots.size()), kept(mSlots.size());
     const uint32_t tps = 1000 / (mConfig.game.tickMs > 0 ? mConfig.game.tickMs : 33);
     for (size_t i = 0; i < mSlots.size(); i++)
@@ -1000,28 +1037,8 @@ void net::Server::ChangeToMap(int map)
         taken[i] = mSlots[i].used;
         kept[i] = !mSlots[i].used && !mSlots[i].name.empty() && mTick - mSlots[i].leftTick < kComeBackSec * tps;
     }
-    const int open = std::min((int)mSlots.size(), mGamePlayers);
+    const int open = (int)mSlots.size();
     const std::vector<int> to = CompactSlots(taken, kept, open);
-    for (size_t i = 0; i < mSlots.size(); i++)
-    {
-        if (!mSlots[i].used || to[i] >= 0)
-        {
-            continue;
-        }
-        printf("net: player %zu (%s) has no place on %s\n", i, mSlots[i].name.c_str(), m.name.c_str());
-        if (mSlots[i].peer != kArenaPeer)
-        {
-            BitWriter w;
-            Reject reject;
-            reject.reason = MapTitle(m.name) + " takes " + std::to_string(mGamePlayers) + " players";
-            WriteReject(w, reject);
-            mTransport->Send(mSlots[i].peer, kChannelReliable, w.Data().data(), w.ByteCount(), true);
-            mTransport->Flush();
-            mTransport->Disconnect(mSlots[i].peer);
-        }
-        mRounds.Left((int)i);
-        engine::TakeOutOfGame((int)i);
-    }
     mRounds.Renumber(to);
     std::vector<Slot> slots((size_t)open);
     for (size_t i = 0; i < mSlots.size(); i++)
@@ -1051,7 +1068,7 @@ void net::Server::ChangeToMap(int map)
     change.sty = m.sty;
     change.scr = m.scr;
     change.game = (uint16_t)(engine::GameGeneration() + 1);
-    change.players = (uint8_t)mGamePlayers;
+    change.players = (uint8_t)mSlots.size();
     for (size_t i = 0; i < mSlots.size(); i++)
     {
         if (mSlots[i].used && mSlots[i].peer != kArenaPeer)
@@ -1064,7 +1081,7 @@ void net::Server::ChangeToMap(int map)
     }
     // The round flow showed the results already: half a second for the clients to hear of it. Without it (an arena's
     // rotation) the pause shows the winner
-    engine::ChangeMap(m.gmp, m.sty, m.scr, mGamePlayers, 0, mConfig.rules.enabled ? 15 : 90);
+    engine::ChangeMap(m.gmp, m.sty, m.scr, (int)mSlots.size(), 0, mConfig.rules.enabled ? 15 : 90);
 }
 
 void net::Server::Shutdown()
@@ -1105,7 +1122,6 @@ void net::Server::StartOver()
 {
     mGeneration = engine::GameGeneration();
     mStarted = false;
-    mSlots.resize((size_t)mGamePlayers); // the slots this map takes open
     for (Slot& s : mSlots)
     {
         s.ackTick = 0; // the old game's snapshots are no baseline: full ones again
@@ -1188,6 +1204,10 @@ void net::Server::Frame()
         {
             SendSnapshot((int)i, mSlots[i], world);
         }
+    }
+    if (mTick % (1000 / (mConfig.game.tickMs > 0 ? mConfig.game.tickMs : 33)) == 0)
+    {
+        SendPings();
     }
     mTransport->Flush();
     if (mTick % 300 == 0)

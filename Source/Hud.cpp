@@ -38,6 +38,7 @@
 #if defined(GTA2_PORT)
 #include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
 #include "../port/src/player_looks.hpp"
+#include "../port/src/player_names.hpp"
 #endif
 
 #if defined(GTA2_PORT_SDL)
@@ -452,6 +453,13 @@ void Hud_GangRespectBars::InitGangRespectBars()
 MATCH_FUNC(0x5cfe40)
 void Hud_PlayerNames::DrawPlayerNames()
 {
+#if defined(GTA2_PORT)
+    // Port: over each ped where the frame draws it, in screen pixels (port/src/player_names.cpp)
+    if (bStartNetworkGame && bShow_player_names)
+    {
+        PortDrawPlayerNames(sPlayerNameFont);
+    }
+#else
     if (bStartNetworkGame && bShow_player_names)
     {
         Camera* pCam = gGame_0x40->mLocalPlayer->get_camera();
@@ -486,6 +494,7 @@ void Hud_PlayerNames::DrawPlayerNames()
             }
         }
     }
+#endif
 }
 
 // ----------------------------------------------------
@@ -3033,6 +3042,12 @@ void Hud_PlayerStats::DrawPlayerStats()
 
     if (bStartNetworkGame)
     {
+#if defined(GTA2_PORT)
+        // Port: a network client's line shows its standing in place of the game's frags or tag time counter
+        const bool standings = gPortDrawNetStandings && gPortDrawNetStandings();
+        if (!standings)
+        {
+#endif
         if (IsTagGame())
         {
             swprintf(buffer,
@@ -3040,8 +3055,16 @@ void Hud_PlayerStats::DrawPlayerStats()
                      gTagGame.GetPlayerTime(pPlayer) / 60,
                      gTagGame.GetPlayerTime(pPlayer) % 60);
 
+#if defined(GTA2_PORT)
+            // Port: the port's looks' colours have other font remaps (player_looks.hpp)
+            s32 text_palette_type;
+            u16 text_palette;
+            PortHudTextPalette(pPlayer->mHudPaletteType, pPlayer->mHudPalette, &text_palette_type, &text_palette);
+            DrawStringScaledPalette(buffer, 420, 4, gStyleTextFont, text_palette_type, text_palette, 0, 0);
+#else
             const s32 text_palette_type = (pPlayer->mHudPaletteType != palette_types_enum::user_remaps_7) ? palette_types_enum::sprites_2 : palette_types_enum::font_remaps_8;
             DrawStringScaledPalette(buffer, 420, 4, gStyleTextFont, text_palette_type, pPlayer->mHudPalette - 1, 0, 0);
+#endif
         }
         else
         {
@@ -3049,6 +3072,14 @@ void Hud_PlayerStats::DrawPlayerStats()
             pFragDigits->DrawDigitsRightAligned(490, 4);
         }
 
+#if defined(GTA2_PORT)
+        }
+        // Port: a network client's rank and score (net/engine/scoreboard.cpp) instead of a row per player
+        if (standings)
+        {
+            return;
+        }
+#endif
         s32 ypos = 8;
         for (Player* pMultiPlayer = gGame_0x40->IterateFirstPlayer(); pMultiPlayer != NULL;
              pMultiPlayer = gGame_0x40->IterateNextPlayer())
@@ -3075,8 +3106,16 @@ void Hud_PlayerStats::DrawPlayerStats()
                              gTagGame.GetPlayerTime(pMultiPlayer) / 60,
                              gTagGame.GetPlayerTime(pMultiPlayer) % 60);
 
+#if defined(GTA2_PORT)
+                    // Port: the port's looks' colours have other font remaps (player_looks.hpp)
+                    s32 text_palette_type;
+                    u16 text_palette;
+                    PortHudTextPalette(pMultiPlayer->mHudPaletteType, pMultiPlayer->mHudPalette, &text_palette_type, &text_palette);
+                    DrawStringScaledPalette(buffer, score_end_xpos + 20, static_cast<u32>(ypos), gStyleTextFont, text_palette_type, text_palette, 0, 0);
+#else
                     const s32 text_palette_type = (pMultiPlayer->mHudPaletteType != palette_types_enum::user_remaps_7) ? palette_types_enum::sprites_2 : palette_types_enum::font_remaps_8;
                     DrawStringScaledPalette(buffer, score_end_xpos + 20, static_cast<u32>(ypos), gStyleTextFont, text_palette_type, pMultiPlayer->mHudPalette - 1, 0, 0);
+#endif
                 }
                 else
                 {

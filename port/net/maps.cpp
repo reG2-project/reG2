@@ -2,6 +2,7 @@
 #include "maps.hpp"
 #include "cmdline.hpp"
 #include "core/map_players.hpp"
+#include "core/player_limit.hpp"
 #include <SDL3/SDL.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -32,7 +33,7 @@ int ScriptPlayerPeds(const std::string& scr)
     return net::ScriptPlayerPeds(data.data(), n);
 }
 
-// data/<name>.mmp's files into <g> ([MapFiles] GMPFile, STYFile, SCRFile) and the players it takes into <players>
+// data/<name>.mmp's files into <g> ([MapFiles] GMPFile, STYFile, SCRFile) and the players it is made for into <players>
 // (net::MapPlayers); false: no such map (printed if <required>), one of its files missing, names a client would refuse
 // (net::BareFileName) or a script without players, printed
 bool ReadMmp(const std::string& name, net::engine::NetworkGame& g, bool required, int* players)
@@ -122,6 +123,40 @@ bool ReadMmp(const std::string& name, net::engine::NetworkGame& g, bool required
 }
 } // namespace
 
+bool net::Playable(const std::string& name, const std::string& gmp, const char* then)
+{
+    FILE* f = fopen(("data/" + gmp).c_str(), "rb"); // the port's: whatever the case, as the game opens it
+    std::vector<uint8_t> data;
+    if (f)
+    {
+        uint8_t buffer[1 << 16];
+        size_t n;
+        while ((n = fread(buffer, 1, sizeof(buffer), f)) > 0)
+        {
+            data.insert(data.end(), buffer, buffer + n);
+        }
+        fclose(f);
+    }
+    const int zones = net::GmpRestartZones(data.data(), data.size());
+    if (zones > 0)
+    {
+        return true;
+    }
+    if (then)
+    {
+        fprintf(stderr, "net: warning: %s (data/%s) %s, not playable: %s\n", name.c_str(), gmp.c_str(),
+                zones < 0 ? "isn't a map" : "has no restart zone", then);
+    }
+    return false;
+}
+
+int net::MapOwnPlayers(const std::string& name)
+{
+    engine::NetworkGame g;
+    int players = 0;
+    return ReadMmp(name, g, false, &players) ? players : 0;
+}
+
 std::string net::MapTitle(const std::string& name)
 {
     if (!BareFileName(name, ""))
@@ -183,7 +218,15 @@ bool net::SetUpMaps(const std::string& firstMap, const std::string& maps, Server
         {
             return false;
         }
-        sc.maps.push_back(MapFiles{name, files.gmp, files.sty, files.scr, players});
+        if (Playable(name, files.gmp, "left out of the rotation"))
+        {
+            sc.maps.push_back(MapFiles{name, files.gmp, files.sty, files.scr, players});
+        }
+    }
+    if (!maps.empty() && sc.maps.empty())
+    {
+        fprintf(stderr, "net: --maps %s: no map there is playable\n", maps.c_str());
+        return false;
     }
     if (!sc.maps.empty())
     {
@@ -191,7 +234,7 @@ bool net::SetUpMaps(const std::string& firstMap, const std::string& maps, Server
     }
     const int asked = sc.game.players;
     int firstPlayers = 0;
-    if (!ReadMmp(map, sc.game, true, &firstPlayers))
+    if (!ReadMmp(map, sc.game, true, &firstPlayers) || !Playable(map, sc.game.gmp, "the server can't play it"))
     {
         return false;
     }
@@ -205,7 +248,7 @@ bool net::SetUpMaps(const std::string& firstMap, const std::string& maps, Server
         {
             engine::NetworkGame files;
             int players = 0;
-            if (ReadMmp(name, files, false, &players))
+            if (ReadMmp(name, files, false, &players) && Playable(name, files.gmp, "left out of the votes"))
             {
                 sc.voteMaps.push_back(MapFiles{name, files.gmp, files.sty, files.scr, players});
             }
@@ -226,21 +269,20 @@ bool net::SetUpMaps(const std::string& firstMap, const std::string& maps, Server
         sc.voteMaps.insert(sc.voteMaps.begin(), MapFiles{map, sc.game.gmp, sc.game.sty, sc.game.scr, firstPlayers});
         sc.currentMap = 0;
     }
-    // The slots: as many as the server's biggest map takes at most; the game on a map, as many as it takes
-    int most = 0;
-    for (const MapFiles& m : sc.voteMaps)
+    // Every map has the server's slots: past its PLAYER_PEDs, players start at its restart zones (engine/starts.cpp)
+    sc.slots = asked ? asked : kMaxPlayers;
+    sc.game.players = sc.slots;
+    std::string fewer;
+    for (const MapFiles& m : sc.maps.empty() ? std::vector<MapFiles>{sc.voteMaps[sc.currentMap]} : sc.maps)
     {
-        most = m.players > most ? m.players : most;
+        if (m.players < sc.slots)
+        {
+            fewer += (fewer.empty() ? "" : ", ") + MapTitle(m.name) + " (" + std::to_string(m.players) + ")";
+        }
     }
-    sc.slots = asked && asked < most ? asked : most;
-    if (asked > most)
+    if (!fewer.empty())
     {
-        printf("net: --players %d: the maps here take %d players at most, %d player slots\n", asked, most, sc.slots);
-    }
-    sc.game.players = firstPlayers < sc.slots ? firstPlayers : sc.slots;
-    if (sc.game.players < sc.slots)
-    {
-        printf("net: %s takes %d players, the other slots open on a map that takes more\n", map.c_str(), sc.game.players);
+        printf("net: warning: maps made for fewer than %d players, whose scripts may leave the others out: %s\n", sc.slots, fewer.c_str());
     }
     return true;
 }

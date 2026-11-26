@@ -3,7 +3,21 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <random>
+
+const char* const net::kWarmupNotice = "Warmup: F1 ready, F10 chat, Esc menu";
+const char* const net::kVoteKeys = " (Y / N)";
+
+std::string net::PadNotice(const std::string& text)
+{
+    const size_t n = strlen(kVoteKeys);
+    if (text == kWarmupNotice)
+    {
+        return "Warmup: ready in the Start menu";
+    }
+    return text.size() > n && text.compare(text.size() - n, n, kVoteKeys) == 0 ? text.substr(0, text.size() - n) + " (Start menu)" : text;
+}
 
 namespace
 {
@@ -87,7 +101,7 @@ void net::RoundFlow::Enter(uint32_t tick, RoundPhase phase, RoundActions& out)
     else
     {
         mPhaseEnd = 0; // the warmup's clock starts once the minimum is in
-        out.notices.push_back({-1, "Warmup: F1 ready, F10 chat, Esc menu"});
+        out.notices.push_back({-1, kWarmupNotice});
     }
     printf("net: round flow: %s (round %d)\n", PhaseName(phase), mState.number);
 }
@@ -231,7 +245,7 @@ net::RoundActions net::RoundFlow::Tick(uint32_t tick, const std::vector<RoundPla
             mState.phaseLeft = Seconds(mPhaseEnd > tick ? mPhaseEnd - tick : 0);
             if (tick >= mPhaseEnd)
             {
-                const int next = NextMap(players);
+                const int next = NextMap();
                 FreshGame(tick, next >= 0 ? next : mCurrentMap, out); // NewGame: the warmup instead if too few are left
             }
             break;
@@ -272,7 +286,7 @@ void net::RoundFlow::EndRound(uint32_t tick, const std::vector<RoundPlayer>& pla
     if (!mRules.enabled)
     {
         // Without the round flow: the next round at once, or the rotation's next map
-        const int next = RotationNext(players);
+        const int next = RotationNext();
         if (next != mCurrentMap)
         {
             out.changeMap = next;
@@ -286,17 +300,6 @@ void net::RoundFlow::EndRound(uint32_t tick, const std::vector<RoundPlayer>& pla
         return;
     }
     Enter(tick, kPhaseResults, out);
-}
-
-bool net::RoundFlow::Fits(int map, const std::vector<RoundPlayer>& players) const
-{
-    const int takes = map >= 0 && map < (int)mTakes.size() ? mTakes[map] : kRoundSlots;
-    int taken = 0;
-    for (const RoundPlayer& p : players)
-    {
-        taken += p.taken;
-    }
-    return taken <= takes;
 }
 
 std::vector<int> net::CompactSlots(const std::vector<bool>& taken, const std::vector<bool>& kept, int count)
@@ -348,27 +351,19 @@ void net::RoundFlow::Renumber(const std::vector<int>& to)
     }
 }
 
-int net::RoundFlow::RotationNext(const std::vector<RoundPlayer>& players) const
+int net::RoundFlow::RotationNext() const
 {
-    for (int k = 1; mRules.rotation && k < (int)mMaps.size(); k++)
-    {
-        const int m = (mCurrentMap + k) % (int)mMaps.size();
-        if (Fits(m, players))
-        {
-            return m;
-        }
-    }
-    return mCurrentMap;
+    return mRules.rotation && mMaps.size() > 1 ? (mCurrentMap + 1) % (int)mMaps.size() : mCurrentMap;
 }
 
-int net::RoundFlow::NextMap(const std::vector<RoundPlayer>& players) const
+int net::RoundFlow::NextMap() const
 {
     int votes[16] = {};
     int most = 0;
     for (int i = 0; i < kRoundSlots; i++)
     {
         const int c = mState.mapChoice[i] - 1;
-        if (c >= 0 && c < (int)mMaps.size() && c < 16 && Fits(c, players))
+        if (c >= 0 && c < (int)mMaps.size() && c < 16)
         {
             most = ++votes[c] > most ? votes[c] : most;
         }
@@ -386,7 +381,7 @@ int net::RoundFlow::NextMap(const std::vector<RoundPlayer>& players) const
         static std::mt19937 sRandom{std::random_device{}()}; // not the game's random: that one is part of its state
         return tied[sRandom() % tied.size()];
     }
-    return RotationNext(players);
+    return RotationNext();
 }
 
 int net::RoundFlow::FindMap(const std::string& arg) const
@@ -476,11 +471,6 @@ void net::RoundFlow::Command(uint32_t tick, int slot, const std::string& text, c
             out.notices.push_back({slot, "Maps: " + list});
             return;
         }
-        if (!Fits(m, players))
-        {
-            out.notices.push_back({slot, Title(m) + " takes " + std::to_string(mTakes[m]) + " players: more are in"});
-            return;
-        }
         if (mState.phase == kPhaseResults && mRules.enabled)
         {
             mState.mapChoice[slot] = (uint8_t)(m + 1); // the results' choice, no vote needed
@@ -534,7 +524,7 @@ void net::RoundFlow::OpenVote(uint32_t tick, int slot, VoteKind kind, int arg, c
     mVoteEnd = tick + (uint32_t)(mRules.voteSec * tps);
     mState.voteLeft = (uint8_t)mRules.voteSec;
     const std::string what = kind == kVoteStart ? "start the round" : kind == kVoteMap ? "change to " + Title(arg) : "kick " + players[arg].name;
-    out.notices.push_back({-1, players[slot].name + " calls a vote: " + what + " (Y / N)"});
+    out.notices.push_back({-1, players[slot].name + " calls a vote: " + what + kVoteKeys});
     printf("net: round flow: vote %d (%d) by player %d\n", (int)kind, arg, slot);
     DecideVote(tick, players, out);
 }
@@ -563,11 +553,11 @@ void net::RoundFlow::DecideVote(uint32_t tick, const std::vector<RoundPlayer>& p
     printf("net: round flow: vote %d (%d) %s, %d of %d\n", (int)kind, arg, passed ? "passed" : "failed", yes, n);
     if (passed)
     {
-        Carry(kind, arg, tick, players, out);
+        Carry(kind, arg, tick, out);
     }
 }
 
-void net::RoundFlow::Carry(VoteKind kind, int arg, uint32_t tick, const std::vector<RoundPlayer>& players, RoundActions& out)
+void net::RoundFlow::Carry(VoteKind kind, int arg, uint32_t tick, RoundActions& out)
 {
     if (kind == kVoteKick)
     {
@@ -577,11 +567,6 @@ void net::RoundFlow::Carry(VoteKind kind, int arg, uint32_t tick, const std::vec
     if (kind == kVoteStart && mState.phase == kPhaseWarmup)
     {
         FreshGame(tick, mCurrentMap, out);
-        return;
-    }
-    if (kind == kVoteMap && !Fits(arg, players))
-    {
-        out.notices.push_back({-1, Title(arg) + " takes " + std::to_string(mTakes[arg]) + " players: more are in now"});
         return;
     }
     if (kind == kVoteMap)

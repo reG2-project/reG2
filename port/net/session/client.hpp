@@ -158,6 +158,10 @@ class Client
     void WatchChat(); // a chat line typed to its end that starts with '/' goes as a command
     void KeepChatLines(); // the lines players ended, kept over the frame for a while (the game shows them while typed)
     void ShowRound(); // the warmup, countdown, results and an open vote over the frame
+    // The scoreboard over the frame if <shown> (SCORES or the gamepad's Back held, the pause menu's PLAYERS <fromMenu>,
+    // GTA2_NET_SCOREBOARD=1), else hidden
+    void ShowScoreboard(const std::vector<engine::PlayerRow>& players, bool shown, bool fromMenu);
+    int PeerPing(int slot) const; // PlayerRow::ping's: -1 unknown, -2 an arena bot
     std::string RoundCorner() const;
     void BotRound(); // a bot readies up and votes
     uint32_t BotMapChoice() const; // the map a bot votes for in the results (1-based)
@@ -204,6 +208,7 @@ class Client
     uint32_t mRtt = 0; // the round trip as the transport sees it (or the recording says)
     uint32_t mPingMs = 0; // the network's round trip: a ping to its pong, both answered between frames (a link conditioner's delay too)
     uint32_t mPingShown = 0;
+    Pings mPings; // every player's, from the server's last kMsgPings
     // GTA2_NET_STATS: the connection over the last second, shown with the ping
     struct LinkStats
     {
@@ -230,9 +235,11 @@ class Client
     bool mLeft = false; // left the server (the pause menu's LEAVE GAME, a kick, a lost server)
     std::vector<std::string> mMaps; // what a map vote chooses from (the welcome's)
     std::vector<std::string> mMapTitles; // their names as players know them (MapTitle)
+    std::vector<int> mMapPlayers; // the players each is made for (MapOwnPlayers), shown with it
+    std::string mMapTitle; // the map being played's (MapTitle)
     struct ScoreRow
     {
-        int slot, frags, deaths, tag, points; // tag: the seconds "it" in a tag game
+        int slot, frags, deaths, tag, points, money; // tag: the seconds "it" in a tag game
     };
     std::vector<ScoreRow> mResultsRows; // the scores as the results began
     bool mWasChatting = false;

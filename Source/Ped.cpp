@@ -4,6 +4,7 @@
 #include "../port/src/twin_stick.hpp"
 // Port: VIBRATION for the player's hits (TakeDamage).
 #include "../port/src/rumble.hpp"
+#include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
 #endif
 #include "ped_move_target_type.hpp"
 #include "ped_attack_target_type.hpp"
@@ -1192,6 +1193,15 @@ void Ped::SpawnCharInZone(gmp_map_zone* pZone)
     u8 x_steps_left = 1;
     u8 y_steps_left = 1;
 
+#if defined(GTA2_PORT)
+    // Port: a network game's player starts on a block of the zone no other player stands on.
+    s32 port_x, port_y;
+    if (gPortSpawnBlock && gPortSpawnBlock(this, pZone, &port_x, &port_y, &found_z))
+    {
+        AllocCharB4(Fix16(port_x) + kFpHalf_67853C, Fix16(port_y) + kFpHalf_67853C, found_z + 1);
+        return;
+    }
+#endif
     while (true)
     {
         if (gMap_0x370->FindHighestBlockForCoord(x, y, &found_z))

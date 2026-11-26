@@ -71,6 +71,8 @@ and the wheel to change weapons; Delete clears it) and a gamepad input. F1 to F1
 own uses (F7 the brief, F9 the zone name, F10 the network chat).
 The original's SPECIAL 1 is HORN OR TAUNT (C by default), SPECIAL 2 is LOOK AROUND, and SPECIAL 3,
 which the game never reads, is not listed but keeps its bindings. Saved bindings keep their keys.
+SCORES, after LOOK AROUND, shows a network game's scoreboard while held (Tab by default; on a gamepad, Back held).
+When another control has SCORES' key too (an older profile's HORN OR TAUNT on Tab), a network game only shows the board.
 CONTROLS on the controls page chooses how the player walks on foot: CLASSIC, the original's tank
 controls, or TWIN STICK, which moves and aims apart, both relative to the screen.
 The left stick, the d-pad or the movement keys walk; the right stick aims (its reticle
@@ -246,7 +248,7 @@ After a stall the game catches up at most 4 steps before the next frame, then dr
 
 ## Network game
 
-Client/server multiplayer on the game's multiplayer maps (6 players) and maps for up to 10, in place of the original's
+Client/server multiplayer for up to 10 players on the game's multiplayer maps (made for 6) and others, in place of the original's
 DirectPlay game ([docs/netcode.md](docs/netcode.md)). NETWORK GAME in the start menu joins a server; from a game folder (macOS:
 `reg2.app/Contents/MacOS/reg2`):
 

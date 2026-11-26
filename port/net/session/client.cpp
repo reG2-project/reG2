@@ -58,9 +58,11 @@ void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
     mConfig.name = welcome.name; // a reconnect asks for it: the server keeps our slot under it
     mMaps = welcome.maps;
     mMapTitles.clear();
+    mMapPlayers.clear();
     for (const std::string& m : mMaps)
     {
         mMapTitles.push_back(MapTitle(m)); // every client has the maps (the data check)
+        mMapPlayers.push_back(MapOwnPlayers(m));
     }
     mConnected = true;
     pGame->players = welcome.players;
@@ -77,7 +79,19 @@ void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
     pGame->sty = welcome.sty;
     pGame->scr = welcome.scr;
     mScr = welcome.scr;
+    mMapTitle = MapTitle(welcome.map);
     mProbe.Start();
+}
+
+// A map the game can start: one without a restart zone ends it with a fatal error (a server's checks leave such a map out)
+static bool PlayableMap(const std::string& map, const std::string& gmp, std::string* error)
+{
+    if (net::Playable(map, gmp, NULL))
+    {
+        return true;
+    }
+    *error = "the server's map " + map + " has no restart zone (data/" + gmp + "): not playable";
+    return false;
 }
 
 bool net::Client::StartReplay(const char* path, engine::NetworkGame* pGame, std::string* error)
@@ -88,7 +102,7 @@ bool net::Client::StartReplay(const char* path, engine::NetworkGame* pGame, std:
     {
         return false;
     }
-    if (!PlainNames(BadMapName(welcome), "the recording", error))
+    if (!PlainNames(BadMapName(welcome), "the recording", error) || !PlayableMap(welcome.map, welcome.gmp, error))
     {
         return false;
     }
@@ -218,7 +232,8 @@ bool net::Client::OnWelcome(const TransportEvent& e, engine::NetworkGame* pGame,
         *error = "a welcome we don't understand";
         return false;
     }
-    if (!PlainNames(BadMapName(welcome), "the server", error) || !HaveMap(welcome.gmp, welcome.sty, welcome.scr, error) || !SameMap(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, error))
+    if (!PlainNames(BadMapName(welcome), "the server", error) || !HaveMap(welcome.gmp, welcome.sty, welcome.scr, error) || !SameMap(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, error) ||
+        !PlayableMap(welcome.map, welcome.gmp, error))
     {
         SendLeave(*error);
         Leave();
@@ -739,6 +754,7 @@ void net::Client::SendPing()
     BitWriter w;
     w.Bits(kMsgPing, 8);
     w.Bits((uint32_t)now, 32);
+    w.Bits(std::min<uint32_t>(mPingMs, kPingMax), 16);
     mTransport->Send(0, kChannelUnreliable, w.Data().data(), w.ByteCount(), false);
     mTransport->Flush();
 }
@@ -891,6 +907,14 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
             {
                 OnSnapshotPart(r);
             }
+            else if (type == kMsgPings)
+            {
+                Pings pings;
+                if (ReadPings(r, pings))
+                {
+                    mPings = pings;
+                }
+            }
         }
         else if (e.type == TransportEvent::kReceive)
         {
@@ -911,7 +935,7 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
                 std::string text;
                 if (ReadText(r, text))
                 {
-                    engine::ShowHudMessage(text.c_str());
+                    engine::ShowHudMessage(engine::PadMode() ? PadNotice(text).c_str() : text.c_str());
                     printf("net: frame %u, notice: %s\n", mFrame, Printable(text).c_str());
                 }
             }
@@ -976,9 +1000,10 @@ bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, con
     std::string missing;
     if (players <= slot)
     {
-        missing = "the server's next map takes " + std::to_string(players) + " players, not enough for us (player " + std::to_string(slot) + ")";
+        missing = "the server's next game has " + std::to_string(players) + " players, not enough for us (player " + std::to_string(slot) + ")";
     }
-    if (!missing.empty() || !PlainNames(BadMapName(map, gmp, sty, scr), "the server", &missing) || !HaveMap(gmp, sty, scr, &missing) || !SameMap(map, gmp, sty, scr, print, &missing))
+    if (!missing.empty() || !PlainNames(BadMapName(map, gmp, sty, scr), "the server", &missing) || !HaveMap(gmp, sty, scr, &missing) || !SameMap(map, gmp, sty, scr, print, &missing) ||
+        !PlayableMap(map, gmp, &missing))
     {
         printf("net: frame %u, %s\n", mFrame, missing.c_str());
         SendLeave(missing);
@@ -989,6 +1014,7 @@ bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, con
     engine::ChangeMap(gmp, sty, scr, players, slot, pauseTicks);
     mNextSlot = slot;
     mScr = scr;
+    mMapTitle = MapTitle(map);
     mServerGame = game; // from now on: the old game's snapshots would put its things into the next map's
     return true;
 }
@@ -1000,6 +1026,12 @@ void net::Client::StartOver()
     mSynced = false;
     mNewSnapshot = false;
     mTakenTick = 0;
+    // The old game ran on through the map change's pause into the new one's first ticks: its inputs (sent as commands
+    // again), predicted positions and shown entities are not this game's
+    for (TickRecord& rec : mHist)
+    {
+        rec = TickRecord();
+    }
     for (Snapshot& s : mReceived)
     {
         s = Snapshot();
@@ -1136,9 +1168,11 @@ void net::Client::PrintStats(const Snapshot& snap)
     float drift = 0;
     engine::ReplicaStats(snap, &cars, &peds, &drift);
     const Stats& st = mStats;
-    printf("net: frame %u, tick %u (server %u, our commands %d ticks early), %zu entities (%d cars, %d peds), %u rollbacks, "
+    // Until the server answers our commands for the ticks since the sync, its slack is about older ones (none at a join)
+    const std::string slack = mSlackKnown ? std::to_string(mSlack) + " ticks early" : "not answered yet";
+    printf("net: frame %u, tick %u (server %u, our commands %s), %zu entities (%d cars, %d peds), %u rollbacks, "
            "%.1f ticks resimulated each, prediction error up to %.2f blocks, cars and peds shown %.2f blocks off (up to %.2f)\n",
-           mFrame, mTick, mLatestTick, mSlack, snap.entities.size(), cars, peds, st.rollbacks, st.rollbacks ? (float)st.resimTicks / st.rollbacks : 0.0f,
+           mFrame, mTick, mLatestTick, slack.c_str(), snap.entities.size(), cars, peds, st.rollbacks, st.rollbacks ? (float)st.resimTicks / st.rollbacks : 0.0f,
            st.maxError, st.shownErrorCount ? (float)(st.shownErrorSum / st.shownErrorCount) : 0.0f, st.shownErrorMax);
     printf("net: frame %u, players shown off the server's: the others %.3f blocks on average (up to %.2f), ourselves %.3f (up to %.2f)\n",
            mFrame, st.others.Mean(), st.others.max, st.self.Mean(), st.self.max);
@@ -1508,9 +1542,9 @@ void net::Client::SendCommand(const std::string& text)
 }
 
 // F1 in the warmup (ready), else while a vote is open (yes); Y or N, as the keyboard's layout types them, while a vote
-// is open; in the results, the number keys, or Up, Down and Enter, choose the next map. A gamepad's Back is F1, its
-// d-pad and A in the results the arrows and Enter (SetRoundPad). Not while typing a chat line, whose keys they are
-// then. The keys go to neither the game here nor the server
+// is open; in the results, the number keys, or Up, Down and Enter, choose the next map. A gamepad's d-pad and A in the
+// results are the arrows and Enter (SetRoundPad); its ready and votes are the pause menu's. Not while typing a chat
+// line, whose keys they are then. The keys go to neither the game here nor the server
 void net::Client::RoundKeys(uint32_t& local, uint32_t key)
 {
     const uint32_t kKeyDown = 0x200000, kKeyBits = 0x1FF000, kF1 = 0x3B; // DIK_F1
@@ -1647,7 +1681,7 @@ void net::Client::ShowRound()
         uint32_t b = 0;
         if (engine::PlayerOf(e, &p, &b))
         {
-            rows.push_back(ScoreRow{p, engine::PlayerFrags(e), engine::PlayerDeaths(e), engine::TagSeconds(p), engine::PlayerPoints(e)});
+            rows.push_back(ScoreRow{p, engine::PlayerFrags(e), engine::PlayerDeaths(e), engine::TagSeconds(p), engine::PlayerPoints(e), engine::PlayerMoney(e)});
         }
     }
     // The results show the scores the round ended with: the game goes on meanwhile, and so do the frags
@@ -1707,7 +1741,7 @@ void net::Client::ShowRound()
         {
             lines.push_back("You are ready");
         }
-        lines.push_back(pad ? "Back ready   Start menu" : "F1 ready   F10 chat   Esc menu");
+        lines.push_back(pad ? "Start: ready   Back: scores" : "F1 ready   F10 chat   Esc menu");
     }
     else if (r.phase == kPhaseResults)
     {
@@ -1720,10 +1754,12 @@ void net::Client::ShowRound()
         });
         lines.push_back("");
         // tables: the overlay lines up rows with tabs
-        lines.push_back(tag ? "Player\tIt (s)\tFrags\tDeaths" : points ? "Player\tPoints\tFrags\tDeaths" : "Player\tFrags\tDeaths");
+        lines.push_back(tag ? "Player\tTime IT\tFrags\tDeaths" : points ? "Player\tPoints\tFrags\tDeaths" : "Player\tFrags\tDeaths");
         for (const ScoreRow& row : board)
         {
-            const std::string first = tag ? std::to_string(row.tag) + "\t" : points ? std::to_string(row.points) + "\t" : "";
+            char clock[16];
+            snprintf(clock, sizeof(clock), "%d:%02d", row.tag / 60, row.tag % 60);
+            const std::string first = tag ? std::string(clock) + "\t" : points ? "$" + std::to_string(row.points) + "\t" : "";
             lines.push_back(engine::PlayerName(row.slot) + "\t" + first + std::to_string(row.frags) + "\t" + std::to_string(row.deaths));
         }
         lines.push_back("");
@@ -1738,7 +1774,8 @@ void net::Client::ShowRound()
                 votes += r.mapChoice[i] == m + 1;
             }
             const bool mine = mSlot < kRoundSlots && r.mapChoice[mSlot] == m + 1;
-            const std::string name = m == mMapCursor ? "(" + mMapTitles[m] + ")" : mMapTitles[m]; // the font has no '>'
+            const std::string title = mMapTitles[m] + (mMapPlayers[m] ? " " + std::to_string(mMapPlayers[m]) + "p" : "");
+            const std::string name = m == mMapCursor ? "(" + title + ")" : title; // the font has no '>'
             lines.push_back(std::to_string(m + 1) + "\t" + name + "\t" + (votes ? std::to_string(votes) : std::string("-")) + "\t" + (mine ? "you" : ""));
         }
     }
@@ -1747,29 +1784,99 @@ void net::Client::ShowRound()
                              : r.voteKind == kVoteMap   ? "change to " + (r.voteArg < mMapTitles.size() ? mMapTitles[r.voteArg] : std::string("a map"))
                                                         : "kick " + engine::PlayerName(r.voteArg);
     const bool mine = mSlot < kRoundSlots && ((r.voteYes | r.voteNo) >> mSlot & 1);
+    // The scoreboard, by score; our own ping as we measure it, the others' as the server last sent them
+    std::vector<engine::PlayerRow> players;
+    for (const ScoreRow& row : rows)
+    {
+        const int score = mGameType == 3 ? row.tag : mGameType == 2 ? row.points : row.frags;
+        const bool you = row.slot == mSlot;
+        const bool ready = r.phase == kPhaseWarmup && r.minPlayers && row.slot < kRoundSlots && (r.ready >> row.slot & 1);
+        const int ping = !you ? PeerPing(row.slot) : mConnected && mPingShown ? (int)mPingShown : -1;
+        players.push_back({row.slot, engine::PlayerName(row.slot), score, row.money, row.frags, row.deaths, ping, you, engine::PlayerWasted(row.slot),
+                           row.slot < 32 && (mChatting >> row.slot & 1), ready});
+    }
+    std::stable_sort(players.begin(), players.end(), [](const engine::PlayerRow& a, const engine::PlayerRow& b) { return a.score > b.score; });
+    engine::SetStandings(players, mGameType);
     if (engine::MenuOpen())
     {
-        // The pause menu's PLAYERS, by score (the ping is only ours: the others' isn't sent), its READY and the open vote
-        std::vector<engine::MenuPlayer> players;
-        for (const ScoreRow& row : rows)
-        {
-            const int score = mGameType == 3 ? row.tag : mGameType == 2 ? row.points : row.frags;
-            const bool you = row.slot == mSlot;
-            players.push_back({engine::PlayerName(row.slot), score, row.deaths, you && mConnected && mPingShown ? (int)mPingShown : -1, you});
-        }
-        std::stable_sort(players.begin(), players.end(), [](const engine::MenuPlayer& a, const engine::MenuPlayer& b) { return a.score > b.score; });
         const bool ready = mSlot < kRoundSlots && (r.ready >> mSlot & 1);
-        engine::OfferMenu(players, mGameType == 3 ? "IT" : mGameType == 2 ? "POINTS" : "FRAGS",
-                          r.phase == kPhaseWarmup && r.minPlayers ? (ready ? 2 : 1) : 0,
+        engine::OfferMenu(r.phase == kPhaseWarmup && r.minPlayers ? (ready ? 2 : 1) : 0,
                           r.voteKind != kVoteNone && !mine ? "Vote to " + what : std::string());
     }
+    // Held, or the pause menu's PLAYERS
+    const bool fromMenu = mConnected && !mLeft && engine::MenuOnPlayers();
+    ShowScoreboard(players, fromMenu || (!hidden && (Env().scoreboard || engine::ScoresHeld())), fromMenu);
     if (r.voteKind != kVoteNone && !hidden)
     {
         lines.push_back("");
         lines.push_back("Vote: " + what + "   " + std::to_string(bits(r.voteYes)) + " yes, " + std::to_string(bits(r.voteNo)) + " no   " +
-                        std::to_string(r.voteLeft) + " s" + (mine ? "" : pad ? "   Back: yes" : "   Y / N"));
+                        std::to_string(r.voteLeft) + " s" + (mine ? "" : pad ? "   Start: vote" : "   Y / N"));
     }
     engine::SetNetPanel(lines);
+}
+
+int net::Client::PeerPing(int slot) const
+{
+    const uint16_t ms = slot >= 0 && slot < kMaxPlayers ? mPings.ms[slot] : kPingNone;
+    return ms == kPingNone ? -1 : ms == kPingBot ? -2 : (int)ms;
+}
+
+void net::Client::ShowScoreboard(const std::vector<engine::PlayerRow>& players, bool shown, bool fromMenu)
+{
+    if (!shown)
+    {
+        engine::SetScoreboard(NULL);
+        return;
+    }
+    const engine::Round& r = engine::CurrentRound();
+    engine::Scoreboard board;
+    board.title = mMapTitle;
+    std::string game = mGameType == 3 ? "Tag" : mGameType == 2 ? "Points" : "Frags";
+    if (mFragLimit > 0 && mGameType != 3)
+    {
+        game += std::string(", first to ") + (mGameType == 2 ? "$" : "") + std::to_string(mFragLimit);
+    }
+    std::string round;
+    if (r.phase == kPhaseWarmup)
+    {
+        round = "warmup";
+    }
+    else if (r.phase == kPhaseCountdown)
+    {
+        round = "round " + std::to_string(r.number) + " starting";
+    }
+    else if (r.phase == kPhaseResults)
+    {
+        round = "round " + std::to_string(r.number - 1) + " over";
+    }
+    else
+    {
+        round = "round " + std::to_string(r.number);
+        if (r.secondsLeft > 0)
+        {
+            char clock[24];
+            snprintf(clock, sizeof(clock), ", %d:%02d left", r.secondsLeft / 60, r.secondsLeft % 60);
+            round += clock;
+        }
+    }
+    board.lines[0] = game + "   " + round;
+    // The server's address until servers have a name
+    board.lines[1] = std::to_string(players.size()) + " of " + std::to_string(engine::PlayerCount()) + " players   " + mConfig.host + ":" +
+                     std::to_string(mConfig.port);
+    // What the round panel it hides would have asked of this player
+    const bool pad = engine::PadMode();
+    const bool unready = r.phase == kPhaseWarmup && r.minPlayers && !(mSlot < kRoundSlots && (r.ready >> mSlot & 1));
+    const bool vote = r.voteKind != kVoteNone && !(mSlot < kRoundSlots && ((r.voteYes | r.voteNo) >> mSlot & 1));
+    board.hint = fromMenu ? (pad ? "B: back" : "Esc: back")
+                 : vote   ? (pad ? "Vote in the Start menu" : "Vote: Y / N")
+                 : unready ? (pad ? "Ready in the Start menu" : "F1: ready")
+                           : "";
+    board.scoreHeading = mGameType == 3 ? "Time IT" : mGameType == 2 ? "Points" : "Frags";
+    board.clock = mGameType == 3;
+    board.money = mGameType != 2;
+    board.frags = mGameType != 1;
+    board.rows = players;
+    engine::SetScoreboard(&board);
 }
 
 // A bot's map in the results: one of the others, picked by its slot and the frame (a vote among bots isn't always the

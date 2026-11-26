@@ -2,6 +2,7 @@
 #include "env.hpp"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 const net::SessionEnv& net::Env()
 {
@@ -40,6 +41,7 @@ const net::SessionEnv& net::Env()
         e.replayOn = getenv("GTA2_NET_REPLAYON") ? atoi(getenv("GTA2_NET_REPLAYON")) : 0;
         e.say = getenv("GTA2_NET_SAY");
         e.botVoteMap2 = getenv("GTA2_NET_BOTMAP2") != NULL;
+        e.scoreboard = getenv("GTA2_NET_SCOREBOARD") && !strcmp(getenv("GTA2_NET_SCOREBOARD"), "1");
         e.testWanted = getenv("GTA2_NET_TESTWANTED");
         e.fuzz = 0, e.fuzzRate = 20;
         if (const char* f = getenv("GTA2_NET_FUZZ"))

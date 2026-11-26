@@ -42,6 +42,7 @@ void SetTickMs(int ms);
 // The client's pause menu (port/src/pause_menu.cpp), over the game going on: Escape opens it, a key while open is its own
 // (with the character it typed), and what was chosen in it is taken once
 bool MenuOpen();
+bool MenuOnPlayers(); // on its PLAYERS page, which the scoreboard is
 void MenuKey(uint32_t dik, uint16_t typed);
 enum MenuChoice
 {
@@ -52,15 +53,18 @@ enum MenuChoice
     kMenuNo,
 };
 MenuChoice TakeMenuChoice();
-struct MenuPlayer
+// A player as the scoreboard and the HUD's standings list it
+struct PlayerRow
 {
+    int slot;
     std::string name;
-    int score, deaths, ping; // ping: -1 unknown
-    bool you;
+    int score, money, frags, deaths, ping; // score: the game type's (frags, points, seconds "it"); ping: -1 unknown, -2 an arena bot
+    bool you, dead, chatting, ready; // ready: in a warmup
 };
-// What it shows while open: PLAYERS, READY (1) or NOT READY (2) or neither (0), an open vote's question ("": none)
-void OfferMenu(const std::vector<MenuPlayer>& players, const char* scoreHeading, int ready, const std::string& vote);
-// The client's round keys on the gamepad: Back as F1, and in the results the d-pad and A as the arrows and Enter
+// What it shows while open: READY (1) or NOT READY (2) or neither (0), an open vote's question ("": none)
+void OfferMenu(int ready, const std::string& vote);
+// The client's round keys on the gamepad: Back held for the scoreboard, and in the results the d-pad and A as the
+// arrows and Enter
 void SetRoundPad(bool results);
 bool PadMode(); // the gamepad gave the last input: the hints name its buttons
 void IdleWait(); // while the game waits for its next step: a millisecond's sleep when that is more than 1 ms away
@@ -136,6 +140,7 @@ bool PlayerOf(const EntityState& e, int* pPlayer, uint32_t* pButtons);
 int PlayerHealth(const EntityState& e); // a player entity's health
 int PlayerFrags(const EntityState& e);
 int PlayerPoints(const EntityState& e);
+int PlayerMoney(const EntityState& e); // the money on its HUD (Player::mScores), what the original listed for the others
 int TagSeconds(int slot); // a tag game's: the seconds the slot was "it" (the game's tag winner has the most)
 int PlayerDeaths(const EntityState& e);
 uint32_t PlayerCarId(const EntityState& e); // the NetId of the car it drives, 0 on foot
@@ -297,6 +302,25 @@ void DrawOverlay(); // the game calls it while drawing (Game::Draw, gPortDrawOve
 // A client's connection, over the frame: <corner> small at the bottom right (the ping), <centre> across the middle
 // (an outage); empty: nothing
 void SetNetStatus(const std::string& corner, const std::string& centre);
+// The scoreboard, over the middle of the frame instead of the round's panel while shown (scoreboard.cpp): the map's title,
+// two lines under it, the players by score (their name in their HUD colour, the local one marked)
+struct Scoreboard
+{
+    std::string title;
+    std::string lines[2];
+    std::string hint; // under the rows ("": none)
+    const char* scoreHeading; // the game type's score
+    bool clock; // the score is seconds, shown m:ss (a tag game's time "it")
+    bool money; // a money column after the score; without it the score is the money (a points game)
+    bool frags; // a frags column after the score (a points or tag game's)
+    std::vector<PlayerRow> rows;
+};
+void SetScoreboard(const Scoreboard* pBoard); // NULL: hidden
+bool ScoresHeld(); // SCORES, or the gamepad's Back, held (compat/src/pad.cpp)
+// The local player's rank and score at the HUD's top left, in place of the original's list of the others and its own
+// counter (gPortDrawNetStandings, scoreboard.cpp), from the scoreboard's rows by score; <gameType> as the welcome's
+void SetStandings(const std::vector<PlayerRow>& rows, int gameType);
+bool DrawStandings(); // false: the local player isn't in the rows, and the original's list and counter show
 
 // The checks, logs and test cheats are engine/dev/dev.hpp's.
 } // namespace engine

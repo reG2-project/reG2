@@ -502,7 +502,7 @@ void port_OnInputEvent(const SDL_Event& e)
         const SDL_Keycode c = SDL_GetKeyFromScancode(e.key.scancode, e.key.mod, false);
         sTypedChar[dik & 0xFF] = c > ' ' && c < 256 && c != SDLK_DELETE ? static_cast<unsigned short>(c) : 0;
     }
-    const bool buffered = !port_AltKeyInGame(dik);
+    const bool buffered = !port_AltKeyInGame(dik) && !(down && port_ScoresKeyInGame(dik));
     for (Device* pDev : sDevices)
     {
         if ((pDev->mKeys[dik] != 0) != down)

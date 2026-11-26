@@ -30,7 +30,6 @@ struct RoundRules
 // A player slot as the round sees it
 struct RoundPlayer
 {
-    bool taken = false; // the slot has a player (a client, connecting or in, or an arena bot)
     bool in = false; // in the game
     bool voter = false; // a person (an arena bot doesn't vote)
     bool alwaysReady = false; // an arena bot
@@ -47,6 +46,12 @@ struct RoundActions
     int kick = -1; // this slot out
     std::vector<std::pair<int, std::string>> notices; // (slot, line), slot -1: everyone
 };
+
+// The notices that name keys: a warmup's, and a vote's ending; a client in gamepad mode shows its own (PadNotice)
+extern const char* const kWarmupNotice;
+extern const char* const kVoteKeys;
+// <text> for a player on the gamepad, whose ready and votes are the pause menu's
+std::string PadNotice(const std::string& text);
 
 // Tab in a chat line starting with '/': the line with its last word completed as far as all that fit agree, among the
 // commands, then a /map's maps or a /kick's players (any case); <options>: those that fit, when more than one does
@@ -81,13 +86,6 @@ class RoundFlow
     {
         mTitles = titles;
     }
-    // The players each map takes (core/map_players.hpp), in Maps()'s order; without them, any number
-    void SetMapPlayers(const std::vector<int>& players)
-    {
-        mTakes = players;
-    }
-    // <map> takes every taken slot: a map change renumbers them from 0 (CompactSlots), so only how many counts
-    bool Fits(int map, const std::vector<RoundPlayer>& players) const;
     // A map change's new slot numbers (<to>[old], -1: gone): the ready flags, votes and map choices follow
     void Renumber(const std::vector<int>& to);
 
@@ -97,11 +95,10 @@ class RoundFlow
     void EndRound(uint32_t tick, const std::vector<RoundPlayer>& players, RoundActions& out);
     void OpenVote(uint32_t tick, int slot, VoteKind kind, int arg, const std::vector<RoundPlayer>& players, RoundActions& out);
     void DecideVote(uint32_t tick, const std::vector<RoundPlayer>& players, RoundActions& out);
-    void Carry(VoteKind kind, int arg, uint32_t tick, const std::vector<RoundPlayer>& players, RoundActions& out);
-    // After the results: the most chosen (a tie: one of the tied, at random), else the rotation's next, else the same;
-    // of those that fit the players
-    int NextMap(const std::vector<RoundPlayer>& players) const;
-    int RotationNext(const std::vector<RoundPlayer>& players) const; // the next in turn that fits, else the same
+    void Carry(VoteKind kind, int arg, uint32_t tick, RoundActions& out);
+    // After the results: the most chosen (a tie: one of the tied, at random), else the rotation's next, else the same
+    int NextMap() const;
+    int RotationNext() const; // the next in turn, else the same
     int FindMap(const std::string& arg) const; // a number (1-based) or a name; -1 none
     int Seconds(uint32_t ticks) const;
     std::string Title(int map) const;
@@ -110,7 +107,6 @@ class RoundFlow
     RoundState mState;
     std::vector<std::string> mMaps;
     std::vector<std::string> mTitles;
-    std::vector<int> mTakes;
     int mCurrentMap = -1;
     uint32_t mPhaseEnd = 0; // the tick the countdown or results end (the warmup's: once the minimum is in)
     uint32_t mRoundStart = 0;

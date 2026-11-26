@@ -59,20 +59,12 @@ bool OnTranscript(f32* pTop, f32* pRoom);
 // After Open in game, again as the station changes: RADIO under RESUME with that station's name, left and right (or the
 // line's arrows) giving kPreviousStation and kNextStation, Enter kNextStation; no line if NULL.
 void OfferRadio(const wchar_t* pStation);
-// A network game's player as PLAYERS lists it; a ping below 0 if unknown.
-struct NetworkPlayer
-{
-    wchar_t mName[24];
-    s32 mScore;
-    s32 mDeaths;
-    s32 mPing;
-    bool mYou;
-};
-const s32 kMaxNetworkPlayers = 6;
-// After Open in a network game, again as they change: no GAME page, PLAYERS with those players and the score's heading,
-// READY (1) or NOT READY (2) giving kReadyChosen (0: no line), the open vote's title with VOTE YES and NO (NULL: none),
-// LEAVE GAME with a question giving kQuitGame, and the settings a network game turns off greyed.
-void OfferNetwork(const NetworkPlayer* pPlayers, s32 count, const wchar_t* pScoreHeading, s32 ready, const wchar_t* pVote);
+// After Open in a network game, again as they change: no GAME page, PLAYERS, READY (1) or NOT READY (2) giving
+// kReadyChosen (0: no line), the open vote's title with VOTE YES and NO (NULL: none), LEAVE GAME with a question giving
+// kQuitGame, and the settings a network game turns off greyed.
+void OfferNetwork(s32 ready, const wchar_t* pVote);
+// On PLAYERS: a page with nothing of its own but BACK, which the netcode's scoreboard covers.
+bool OnPlayers();
 // On LEAVE GAME's question.
 bool OnLeaveQuestion();
 // The menu is gone: the settings changed in it are saved now rather than at each change.

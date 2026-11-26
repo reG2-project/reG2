@@ -665,6 +665,11 @@ void Draw()
         return;
     }
     Apply(result);
+    if (sNetwork && PortMenu::OnPlayers())
+    {
+        UseGameStyle(); // the netcode's scoreboard is the page (Game::Draw's overlay, after the HUD)
+        return;
+    }
     PortMenu::Draw(scale, left, menuTop, true);
     if (!sNetwork)
     {

@@ -5,7 +5,9 @@
 #include "types.hpp"
 
 class Car;
+class Ped;
 class Player;
+class gmp_map_zone;
 class Sprite;
 struct Frontend;
 
@@ -53,6 +55,12 @@ inline s32 PortTrafficLimit()
 // network server, which moves a client's cameras' bounds to where that client already shows them (its lag ahead): a car
 // or ped spawned out of sight here would come into a fast client's view
 extern void (*gPortAfterPlayersHook)();
+// Called in Game::BootGame after the map script's level start, before the players are set up: NULL but in a network
+// game, whose players past the script's PLAYER_PEDs get a ped there
+extern void (*gPortExtraPlayerPeds)();
+// Asked as a ped (re)starts at a restart zone (Ped::SpawnCharInZone): true, and it starts on the block *x, *y at the
+// level *z instead of the zone's first block with ground. NULL but in a network game: a block nobody stands on
+extern bool (*gPortSpawnBlock)(Ped* pPed, gmp_map_zone* pZone, s32* x, s32* y, s32* z);
 // Asked in Game::UpdateGame after the players' tick: true, and nothing else runs this tick but the HUD (a network
 // game's results: the world stands still, the chat goes on)
 extern bool (*gPortWorldStill)();
@@ -69,6 +77,9 @@ extern bool (*gPortFrontendInput)(Frontend* pFrontend);
 // winmain.cpp, a network game over: the frontend page to go back to (a client that left), or -1 (the game's own)
 extern int (*gPortLeaveNetworkGame)();
 extern void (*gPortDrawOverlay)(); // drawn last in Game::Draw; NULL unless the netcode draws over the frame
+// Called in Hud_PlayerStats::DrawPlayerStats in a network game, before the local player's frags or tag time: true, it
+// drew the player's standing instead of them and of the list of the others. NULL but on a network client
+extern bool (*gPortDrawNetStandings)();
 // Asked when a network game has ended (winmain.cpp): true to start the next one at once, without the frontend (a
 // dedicated server's map change)
 extern bool (*gPortNextNetworkGame)();
@@ -100,5 +111,5 @@ inline bool PortReactsInvulnerable(s32 invulnerability, bool player)
 // server sends each player its own and a client shows only those
 extern bool (*gPortScoreBonusHook)(Player* pPlayer, s32 voice);
 // A network client's round keys on the gamepad (port_NetRoundPad, compat/src/pad.cpp): 0 none (no network game), 1
-// Back is F1 (ready, or yes to a vote), 2 the round's results: also the d-pad and A as the arrows and Enter (a map)
+// Back shows the scoreboard, 2 the round's results: also the d-pad and A as the arrows and Enter (a map)
 extern int gPortNetRoundPad;

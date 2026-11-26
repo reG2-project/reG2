@@ -1,5 +1,6 @@
 // port/net core: see protocol.hpp.
 #include "protocol.hpp"
+#include <algorithm>
 #include <ctype.h>
 #include <string.h>
 
@@ -245,6 +246,33 @@ void net::WriteText(BitWriter& w, MsgType type, const std::string& text)
 bool net::ReadText(BitReader& r, std::string& text)
 {
     return ReadString(r, text) && text.size() <= 120 && !r.Overflow();
+}
+
+void net::WritePings(BitWriter& w, const Pings& m)
+{
+    w.Bits(kMsgPings, 8);
+    for (int i = 0; i < kMaxPlayers; i++)
+    {
+        const uint16_t ms = m.ms[i];
+        w.Bits(ms != kPingNone, 1);
+        if (ms != kPingNone)
+        {
+            w.Bits(ms == kPingBot, 1);
+            if (ms != kPingBot)
+            {
+                w.Bits(std::min(ms, kPingMax), 12);
+            }
+        }
+    }
+}
+
+bool net::ReadPings(BitReader& r, Pings& m)
+{
+    for (int i = 0; i < kMaxPlayers; i++)
+    {
+        m.ms[i] = !r.Bits(1) ? kPingNone : r.Bits(1) ? kPingBot : (uint16_t)r.Bits(12);
+    }
+    return !r.Overflow();
 }
 
 void net::WriteMapChange(BitWriter& w, const MapChange& m)

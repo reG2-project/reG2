@@ -189,6 +189,9 @@ enum TrainField
     kTrainFieldCount = kTrainTimer0 + kTrainCarriages,
 };
 
+// SetScoreboard's, over the frame (overlay.cpp); false when hidden
+bool DrawScoreboard();
+
 // Shared helpers (snapshot.cpp)
 Player* GetPlayer(int slot); // NULL past the game's players
 Ped* InGamePed(int slot); // its ped while the slot is in the game (Player::mInUse)
@@ -254,6 +257,8 @@ void KillCredited(Ped* ped, int killerSlot); // the game's own death, credited t
 void KillNow(Ped* ped);
 void ApplyFire(Ped* p, bool onFire); // on fire or not as the server has it, the game's own way // the game's own death (Ped::Kill), dead at once even when knocked down
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there
+void InstallStarts(bool on); // the players' peds past the script's and their start blocks (starts.cpp)
+void ZoneTurnBack(); // the restart zones' turn back one, as before the last respawn (starts.cpp)
 void ResetDeaths(int slot); // the round's death count the snapshots carry (a new round)
 void ResetDeathEvents(); // and the game's, which a client carries out (a new game), and the scoring bonuses
 bool ScoreBonus(Player* p, s32 voice); // gPortScoreBonusHook: a server counts it for the player, nobody shows it there

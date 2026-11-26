@@ -5,6 +5,7 @@
 #include "../core/map_players.hpp"
 #include "../core/protocol.hpp"
 #include "../core/snapshot.hpp"
+#include "../core/spawn_spots.hpp"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -310,6 +311,18 @@ void TestMessages()
     std::string longText;
     CHECK(lr.Bits(8) == net::kMsgNotice && net::ReadText(lr, longText) && longText.size() == 120);
 
+    // The pings: none, a bot, a ping, one capped at kPingMax
+    net::Pings pings;
+    pings.ms[0] = net::kPingBot;
+    pings.ms[1] = 37;
+    pings.ms[net::kMaxPlayers - 1] = 9000;
+    net::BitWriter pw;
+    net::WritePings(pw, pings);
+    net::BitReader pr(pw.Data().data(), pw.ByteCount());
+    net::Pings pgot;
+    CHECK(pr.Bits(8) == net::kMsgPings && net::ReadPings(pr, pgot) && pgot.ms[0] == net::kPingBot && pgot.ms[1] == 37 &&
+          pgot.ms[2] == net::kPingNone && pgot.ms[net::kMaxPlayers - 1] == net::kPingMax);
+
     net::MapChange mc;
     mc.gmp = "MP1-comp.gmp";
     mc.sty = "wil.sty";
@@ -523,7 +536,7 @@ void TestEntryBits()
     }
 }
 
-// The players a map takes: the test map's script (testdata/tiny-10p.scr, scripts/mis2scr.py) has 10 PLAYER_PEDs
+// The players a map is made for: the test map's script (testdata/tiny-10p.scr, scripts/mis2scr.py) has 10 PLAYER_PEDs
 void TestMapPlayers()
 {
     FILE* f = fopen(NET_TESTDATA "/tiny-10p.scr", "rb");
@@ -535,7 +548,150 @@ void TestMapPlayers()
     CHECK(net::ScriptPlayerPeds(scr.data(), 1000) == -1);
     CHECK(net::MapPlayers(10, 0) == 10 && net::MapPlayers(6, 0) == 6 && net::MapPlayers(6, 4) == 4 && net::MapPlayers(6, 8) == 6);
     CHECK(net::MapPlayers(net::kMaxPlayers + 2, 0) == net::kMaxPlayers && net::MapPlayers(0, 6) == 0);
+    // A map's restart zones: a ZONE chunk after another chunk, with a restart zone, a navigation one and another restart
+    std::vector<uint8_t> gmp = {'G', 'B', 'M', 'P', 0xF4, 0x01, 'U', 'M', 'A', 'P', 3, 0, 0, 0, 1, 2, 3};
+    const uint8_t zones[] = {16, 1, 2, 3, 4, 2, 'r', '1', 1, 5, 5, 1, 1, 0, 16, 9, 9, 2, 2, 3, 'a', 'b', 'c'};
+    const uint8_t header[] = {'Z', 'O', 'N', 'E', sizeof(zones), 0, 0, 0};
+    std::vector<uint8_t> two = gmp;
+    two.insert(two.end(), header, header + sizeof(header));
+    two.insert(two.end(), zones, zones + sizeof(zones));
+    CHECK(net::GmpRestartZones(two.data(), two.size()) == 2);
+    std::vector<uint8_t> none = gmp; // no ZONE chunk, or only other zones: not playable
+    CHECK(net::GmpRestartZones(none.data(), none.size()) == 0);
+    const size_t first = gmp.size() + sizeof(header);
+    two[first] = 0;
+    two[first + 14] = 1;
+    CHECK(net::GmpRestartZones(two.data(), two.size()) == 0);
+    CHECK(net::GmpRestartZones(two.data(), two.size() - 1) == -1); // a chunk past the end
+    CHECK(net::GmpRestartZones(scr.data(), n) == -1 && net::GmpRestartZones(NULL, 0) == -1);
     printf("map players ok\n");
+}
+
+// A test world: ground at level 2 but for the blocks in <holes> (none) and <roofs> (level 5)
+struct TestWorld : net::SpawnWorld
+{
+    std::vector<std::pair<int, int>> holes, roofs;
+    static bool In(const std::vector<std::pair<int, int>>& v, int x, int y)
+    {
+        for (const auto& b : v)
+        {
+            if (b.first == x && b.second == y)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    bool Ground(int x, int y, int* z) const override
+    {
+        *z = In(roofs, x, y) ? 5 : 2;
+        return !In(holes, x, y);
+    }
+};
+
+// The blocks of <zone> in the order SpawnBlock takes them: every block of each ring's square from the centre, row by row,
+// kept when on the ring, in the zone and with ground at the level of the first one
+std::vector<std::pair<int, int>> RingOrder(const net::SpawnZone& zone, const TestWorld& w)
+{
+    std::vector<std::pair<int, int>> order;
+    const int cx = zone.x + (zone.w >> 1), cy = zone.y + (zone.h >> 1);
+    const int rings = zone.w > zone.h ? zone.w : zone.h;
+    int base = -1;
+    for (int r = 0; r <= rings; r++)
+    {
+        for (int by = cy - r; by <= cy + r; by++)
+        {
+            for (int bx = cx - r; bx <= cx + r; bx++)
+            {
+                const bool ring = by == cy - r || by == cy + r || bx == cx - r || bx == cx + r;
+                const bool inside = bx >= zone.x && bx < zone.x + zone.w && by >= zone.y && by < zone.y + zone.h;
+                int bz = 0;
+                if (ring && inside && w.Ground(bx, by, &bz) && (base < 0 ? (base = bz) : base) == bz)
+                {
+                    order.push_back({bx, by});
+                }
+            }
+        }
+    }
+    return order;
+}
+
+// The extra players' looks, and their start blocks: apart, in the zone, the next zone once it is full
+void TestSpawnSpots()
+{
+    uint32_t used = 1u << 0 | 1u << 6 | 1u << 9; // the script's: police, the blond redneck (the red-head's colours), Krishna
+    CHECK(net::FreeLook(&used) == 7 && net::FreeLook(&used) == 8 && net::FreeLook(&used) == 10);
+    for (int i = 0; i < 4; i++)
+    {
+        net::FreeLook(&used);
+    }
+    CHECK(used == (1u << 0 | 1u << 6 | 0x7F80u) && net::FreeLook(&used) == 0);
+    uint32_t none = 0;
+    CHECK(net::FreeLook(&none) == 0 && net::FreeLook(&none) == 5 && none == 0x21u);
+
+    const std::vector<net::SpawnZone> zones = {{10, 20, 3, 3}, {50, 60, 1, 1}};
+    TestWorld w;
+    int x = 0, y = 0, z = 0;
+    CHECK(net::SpawnBlock(zones, 0, 0, w, &x, &y, &z) && x == 11 && y == 21 && z == 2); // slot 0: the centre, as the game's
+    // Slots 0-9: the zone's 9 blocks, the nearest first, then the next zone; slot 10 round again from the first
+    std::vector<std::pair<int, int>> got;
+    for (int slot = 0; slot < 10; slot++)
+    {
+        CHECK(net::SpawnBlock(zones, 0, slot, w, &x, &y, &z));
+        CHECK(!TestWorld::In(got, x, y));
+        const bool first = x >= 10 && x < 13 && y >= 20 && y < 23;
+        CHECK(slot < 9 ? first : x == 50 && y == 60);
+        CHECK(slot == 0 || slot >= 9 || (x - 11) * (x - 11) + (y - 21) * (y - 21) >= 1);
+        got.push_back({x, y});
+    }
+    CHECK(net::SpawnBlock(zones, 0, 10, w, &x, &y, &z) && x == 11 && y == 21);
+    CHECK(net::SpawnBlock(zones, 0, 13, w, &x, &y, &z) && x == got[3].first && y == got[3].second);
+    CHECK(net::SpawnBlock(zones, 1, 1, w, &x, &y, &z) && x == 11 && y == 21); // from the second zone, wrapping
+    CHECK(net::SpawnBlock(zones, 0, -1, w, &x, &y, &z) && x == 11 && y == 21);
+    // A hole at the centre: the level of the first block with ground; a roof in the zone is skipped
+    TestWorld w2;
+    w2.holes = {{11, 21}};
+    CHECK(net::SpawnBlock(zones, 0, 0, w2, &x, &y, &z) && x == 10 && y == 20 && z == 2);
+    TestWorld w3;
+    w3.roofs = {{10, 20}};
+    CHECK(net::SpawnBlock(zones, 0, 1, w3, &x, &y, &z) && x == 11 && y == 20 && z == 2);
+    // The next zone first, wrapping; out of range: the first
+    CHECK(net::SpawnBlock(zones, 1, 0, w2, &x, &y, &z) && x == 50 && y == 60);
+    CHECK(net::SpawnBlock(zones, 7, 0, w2, &x, &y, &z) && x == 10 && y == 20);
+    CHECK(!net::SpawnBlock(std::vector<net::SpawnZone>(), 0, 0, w2, &x, &y, &z));
+    TestWorld bare;
+    bare.holes = {{50, 60}};
+    CHECK(!net::SpawnBlock({{50, 60, 1, 1}}, 0, 3, bare, &x, &y, &z));
+    // Odd, even, flat and one-block zones, with holes and roofs: slot i on the i-th block in ring order
+    const std::vector<net::SpawnZone> shapes = {{3, 4, 1, 1}, {3, 4, 2, 2}, {3, 4, 5, 5}, {3, 4, 6, 3}, {3, 4, 1, 7}, {3, 4, 8, 2}, {0, 0, 4, 9}};
+    for (const net::SpawnZone& shape : shapes)
+    {
+        for (int seed = 0; seed < 4; seed++)
+        {
+            TestWorld t;
+            for (int by = shape.y; by < shape.y + shape.h; by++)
+            {
+                for (int bx = shape.x; bx < shape.x + shape.w; bx++)
+                {
+                    const int k = (bx * 7 + by * 13 + seed * 5) % 9;
+                    if (seed && k == 0)
+                    {
+                        t.holes.push_back({bx, by});
+                    }
+                    else if (seed && k == 1)
+                    {
+                        t.roofs.push_back({bx, by});
+                    }
+                }
+            }
+            const std::vector<std::pair<int, int>> want = RingOrder(shape, t);
+            for (size_t i = 0; i < want.size() * 2; i++)
+            {
+                CHECK(net::SpawnBlock({shape}, 0, (int)i, t, &x, &y, &z) && x == want[i % want.size()].first && y == want[i % want.size()].second);
+            }
+        }
+    }
+    printf("spawn spots ok\n");
 }
 
 int main()
@@ -555,6 +711,7 @@ int main()
     TestFileNames();
     TestPrintable();
     TestMapPlayers();
+    TestSpawnSpots();
     printf("messages ok\n");
     printf("net core tests passed\n");
     return 0;

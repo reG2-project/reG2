@@ -301,6 +301,8 @@ bool CarryOutDeath(int i, Player* p, Ped* ped, const net::EntityState& e)
         // that "driver" out gave it a second char (left in the collision grid)
         ForceOutOfCar(ped, Raw(e.f[kPlayerX]), Raw(e.f[kPlayerY]), Raw(e.f[kPlayerZ]), Angle(e.f[kPlayerRot]));
     }
+    // The snapshot's turn is past the server's respawn of it: the one this death makes here takes the server's zone
+    ZoneTurnBack();
     KillCredited(ped, e.f[kPlayerKiller] == kKillerLaw ? -1 : e.f[kPlayerKiller] - 1);
     return true;
 }
@@ -607,6 +609,11 @@ bool net::engine::PlayerChat(const EntityState& e, std::string* pLine)
 int net::engine::PlayerPoints(const EntityState& e)
 {
     return e.type == kEntityPlayer ? e.f[kPlayerPoints] : 0;
+}
+
+int net::engine::PlayerMoney(const EntityState& e)
+{
+    return e.type == kEntityPlayer ? e.f[kPlayerMoney] : 0;
 }
 
 int net::engine::PlayerFrags(const EntityState& e)

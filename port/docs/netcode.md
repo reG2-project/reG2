@@ -16,10 +16,10 @@ joining and leaving mid-game, rounds with warmup, results and votes, map rotatio
 a frontend page to join, bots (scripted and trained), recordings that replay without a server. Protocol 30.
 
 The player limit is `NET_MAX_PLAYERS` (`core/player_limit.hpp`, 10), the port build's `MAX_PLAYERS`; the original and
-the MSVC build have 6. The map decides how many play on it ("Maps and players"). Each look a script gives a player has
+the MSVC build have 6. Every map has the server's player slots ("Maps and players"). Each look a script gives a player has
 its HUD colour and arrow from one table (`port/src/player_looks.hpp`): the original's, and three more looks (the police,
 Elvis, the fireman) for 10 apart. What stays as the game has it: the police chase 4 criminals at once, the ambient
-traffic and peds are 3 players' worth for everyone, and Residential has 4 restart zones (players start two to a zone).
+traffic and peds are 3 players' worth for everyone, and the respawns go round the map's restart zones (Residential has 4).
 
 ## Running
 
@@ -36,7 +36,7 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 
 | | Options |
 |---|---|
-| Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players N` (1-10, a cap; by default what the maps take), `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
+| Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players N` (1-10, 10: every map's slots), `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
 | Round flow | `--minplayers N` (2), `--warmup s` (60), `--results s` (15), `--votes start,map,kick` (or `none`), `--rounds on\|off` |
 | Arena | `--arena brain,...` (bots on the server itself), `--ticks N` (the result printed and the server ended at tick N), `--seed N` |
 | Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` |
@@ -45,20 +45,33 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 
 ### Maps and players
 
-A map's script makes a ped for each of its players (`PLAYER_PED`, `ScriptThread::Handle_PLAYER_PED`) and the game has no
-other, so a map takes as many players as its script has `PLAYER_PED`s, at most its `.mmp`'s `PlayerCount` when it has
-one (maps since Vike's 11.3 leave it out: any number; Mini City has one script and an `.mmp` for each of 2 to 6
-players), at most 10 (`core/map_players.cpp`). The game's maps take 6.
+The server's `--players` (10 by default) is how many play on every map. A map's script makes a ped for each player it
+was made for (`PLAYER_PED`, `ScriptThread::Handle_PLAYER_PED`): that count, at most its `.mmp`'s `PlayerCount` when it
+has one (`core/map_players.cpp`), is only shown, in the results' map list ("Downtown 6p") and in the server's warning
+at start about the maps it plays that were made for fewer players than its slots. The game's maps are made for 6.
 
-A server has as many slots as its biggest map takes, fewer with `--players N` (more than the maps take are cut, with a
-message). The game on a map has that map's players: past them a client is turned away ("the server is full: Downtown
-takes 6 players"), and the slots open again with a map that takes more. Slot N is the map's N-th `PLAYER_PED`. A join
-takes the first free slot of the current map; at a map change the taken slots are numbered again from 0 in their order
-(`CompactSlots`: 0, 1, 8 become 0, 1, 2), then those of players who dropped in the last 40 s (their reconnect), as far
-as the map goes; the other names are forgotten. Each client hears its new slot in its `kMsgMapChange` and takes it with
-the new game (its local player); the server moves each slot's token, name, commands, ready flag, votes and map choice
-with it, and holds every input through the pause. A vote, a results' choice and the rotation go to a map only if it
-takes as many players as are in or connecting (`RoundFlow::Fits`).
+The players past the script's get a ped at boot (`Game::BootGame`, `engine/starts.cpp`), the k-th at the k-th restart
+zone in the map's order (the restart zones' turn stays the script's), in the first of the 10 looks below the map's
+players don't have. A ped starting at a restart zone (those, a join, a respawn: `Ped::SpawnCharInZone`) takes the
+block its slot picks: of the zone's blocks in turn from its centre, at the level of its first block with ground, slot
+N takes the N-th, counting on into the next zones once a zone has fewer, and round again past the last
+(`core/spawn_spots.cpp`). Slot 0 starts at the centre, the game's own spot. The choice reads only the map, not where the
+other players are, so a client predicting its own respawn picks the server's block whatever it sees of the others.
+
+A map without a restart zone isn't playable (the game ends at its start with "No Restart Zone"): the server leaves
+it out of its rotation and votes with a warning, refuses to start if no map is left, checks a map again before it
+changes to it (the next playable one instead), and a client sent one leaves with the reason (`Playable`,
+`core/map_players.cpp`).
+
+Choosing maps that suit the server's players is the admin's job. The shipped maps have 4 (Residential) to 10 (Tiny Town)
+restart zones; their scripts handle players alike, so extras play as the others. A community map whose script
+handles players one by one (missions, scores kept per player on `p1`..`pN`) leaves the extras out of those.
+
+A join takes the first free slot; at a map change the taken slots are numbered again from 0 in their order
+(`CompactSlots`: 0, 1, 8 become 0, 1, 2), then those of players who dropped in the last 40 s (their reconnect); the
+other names are forgotten. Slot N is the map's N-th `PLAYER_PED` while there is one. Each client hears its new slot in
+its `kMsgMapChange` and takes it with the new game (its local player); the server moves each slot's token, name,
+commands, ready flag, votes and map choice with it, and holds every input through the pause.
 
 A player's look is the remap its `PLAYER_PED` gives the ped, and the HUD tells players apart by it (the digits' colour,
 the arrow's). For a map of its own, give each player a different one of these 10:
@@ -158,12 +171,31 @@ conditioner's options apply to a join from the page too.
 (`port/src/pause_menu.cpp`, not while a chat line is typed) over the game going on. Nothing is paused: the client keeps
 receiving and simulating, and sends no controls while the menu shows, so its player stands still. Its keys reach neither
 the game nor the server. It has RESUME, READY or NOT READY in a warmup (`/ready`), VOTE YES and VOTE NO under an open
-vote's question (`/yes`, `/no`), PLAYERS (each player's name, score and deaths by score, and the client's own ping: the
-others' isn't sent), GRAPHICS, DISPLAY, SOUND and CONTROLS (TWIN STICK with its settings and ZOOM greyed: they are off in
+vote's question (`/yes`, `/no`), PLAYERS (the scoreboard, below, with "Esc: back"), GRAPHICS, DISPLAY, SOUND and CONTROLS (TWIN STICK with its settings and ZOOM greyed: they are off in
 a network game), and LEAVE GAME, whose question LEAVE (Enter, Y, a pad's A) or CANCEL (N, Escape) answers. A round's
 fresh game closes it. Leaving leaves the server and goes back to the network page
 as a single player again. So does a client that lost the server for good, was kicked, or hasn't the next map's files,
 with why on the page; without the map's files a join fails the same way.
+
+**The scoreboard** (`engine/scoreboard.cpp`) shows over the middle of the frame while SCORES is held (a control of its
+own on the CONTROLS page, Tab by default: `kScoresKey` in `compat/src/pad.cpp`; the game never sees it) or a gamepad's
+Back is held (a pad's ready and votes are the pause menu's), and as the pause menu's PLAYERS. HORN OR TAUNT (SPECIAL 1)
+defaults to C; a profile that still has it on Tab keeps it (saved bindings are never changed), and in a network game's
+round the SCORES key's presses don't reach the game (`port_ScoresKeyInGame`), so Tab shows the board without the horn.
+On a translucent panel: the map's title, the game type and its limit, the round and its time left, the players in the
+game and the server's address (until servers have a name); then a row per player by score: its name in its HUD colour (a square for the cyan, which no font has), then chat,
+IT, dead or ready, its score (a tag game's time IT as 1:23), its money ("$1010": the money on its HUD, which the original's HUD listed for the other
+players; a points game's score is already the money, shown so), frags in a points or tag game, deaths, and the ping
+(each client reports its own in its pings, the server sends everyone's once a second: `kMsgPings`; BOT for an arena bot). The columns are laid out from the right by their widest entry, and the
+names cut to what is left. The local row is marked. Under the rows, what the round panel it hides would ask (ready, a vote:
+F1, Y / N, or the Start menu on a pad). Not over the pause menu, nor while typing a chat line. `GTA2_NET_SCOREBOARD=1`
+shows it all the time.
+
+**The HUD's standings.** Instead of the original's list of every other player's money and frags (or tag time) down the
+left side, a client shows its rank and score at the top left ("2nd / 10  7 frags", "1st / 10  1:23 it"), in place of
+the game's own counter at the top (the frags, or the tag time); in a points game the rank only, the score being the
+game's money at the top right, and no frags counter either. The others' scores and money are the scoreboard's, whose ranks these are, by the same
+score (`gPortDrawNetStandings`). A replay keeps the original's list and counter.
 
 **Connection.** The ping shows at the bottom right: the network's round trip alone (`kMsgPing`, answered at once,
 both polled between frames). With no snapshot for 0.7 s it shows **Connection interrupted** and plays on, the others'
@@ -191,7 +223,7 @@ player's name, as far as all that fit agree; when several fit they show over the
 
 **Rounds** (`session/round_flow.cpp`): a match is rounds in phases, run by the server and shown on every client:
 
-1. **Warmup**: the map is played as usual. It ends when `--minplayers` are in and all are ready (F1, a gamepad's Back, or `/ready`), or
+1. **Warmup**: the map is played as usual. It ends when `--minplayers` are in and all are ready (F1, the pause menu's READY, or `/ready`), or
    `--warmup` seconds after the minimum was reached (0: only when all are ready).
 2. **Countdown**, 5 s, large in the middle of the frame, in **a fresh game**: every round is a game of its own, started
    on the server and every client the way a map change starts one (on the same map, or the voted one), so scores,
@@ -214,8 +246,9 @@ player's name, as far as all that fit agree; when several fit they show over the
 
 **Votes**: `/start` (end the warmup), `/map N` (change now; a round ends without a winner), `/kick NAME` (out, and the
 name turned away for 10 minutes). One at a time, open 20 s, decided by a majority of the people in the game (not
-voting counts as no; the caller votes yes); Y or N while it shows (the keys that type them, so QWERTZ works), F1 or a
-gamepad's Back for yes. `--votes` sets which are allowed.
+voting counts as no; the caller votes yes); Y or N while it shows (the keys that type them, so QWERTZ works), F1 for
+yes, or the pause menu's VOTE YES and VOTE NO. On a gamepad the warmup's and the vote's hints and notices point to the
+Start menu (`PadNotice`). `--votes` sets which are allowed.
 
 With `--rounds off` (the default with `--arena`) the round starts at once and the next follows its end directly, in
 the same game (everyone respawned with no score: `engine::NewRound`).
@@ -286,8 +319,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   that view, so peds and cars spawn and go out of everyone's sight, and a traffic car, which the game spawns 5 blocks
   beyond one camera's edge, isn't spawned where another player's view is (`TrafficSpawner::SpawnTrafficCar`).
 - **Joining and leaving** (`engine/slots.cpp`): a slot without a client is out of the game the way the game handles a
-  player who left (its ped walks on as a pedestrian). A joining client gets a new player ped at the next restart zone
-  and an empty score. Snapshots carry the slots in the game, and clients mirror them. The others read "BOB joined",
+  player who left (its ped walks on as a pedestrian). A joining client gets a new player ped at the next restart zone,
+  on a block nobody stands on ("Maps and players"), and an empty score. Snapshots carry the slots in the game, and clients mirror them. The others read "BOB joined",
   "BOB is back", "BOB left" or "BOB was kicked" (the server's notices).
 - **Idle when empty**: a server with nobody to play for (no client connected or connecting, no arena bot) runs no
   step: its idle hook waits on the network up to 100 ms at a time (`Server::Deserted`, `Transport::Wait`) and puts the
@@ -388,7 +421,8 @@ the original's.
 
 Health, deaths, weapons and scores are the server's. A death the server had is carried out on the client with the
 game's own `Ped::Kill` (dead at once, also when a blast has the ped knocked down), credited to the killer, and the deaths carried out are part of the rollback set, so a
-resimulation never repeats one. The HUD's kill notices come from these deaths only, with the server's killer (none for
+resimulation never repeats one. Its respawn takes the server's restart zone: the snapshot's zone turn is already past the
+server's respawn, so it goes back one first (`ZoneTurnBack`), and the slot picks the same block. The HUD's kill notices come from these deaths only, with the server's killer (none for
 the police's), not from the deaths the client's prediction starts. A client goes by the game's death count, which only counts up (the round's, in the
 results, starts again with each round), and takes a player's count as it finds it the first time it sees the player. Scores (with the money and multiplier) are set before the resimulation, so its ticks and saves carry the server's
 (the HUD's rolling digits roll towards them), and again after it with power-up timers and the tag game's "it";
@@ -502,7 +536,8 @@ A little-endian bitstream (`core/bitstream.cpp`), never a copy of a struct: clie
 | `kMsgCommands` | unreliable | the last few commands (tick and input bits, each delta-coded against the one before; a key press with the character it typed) and the newest snapshot the client has |
 | `kMsgSnapshot`, `kMsgSnapshotPart` | unreliable | server tick, the baseline it is made against, the other players' forwarded controls, entities with field masks and changed fields (`core/snapshot.cpp`) |
 | `kMsgMapChange` | reliable | the next map, after a round, with its files' CRC-32s, the players of its game and the client's slot in it |
-| `kMsgPing`, `kMsgPong` | unreliable | the client's clock, sent back at once |
+| `kMsgPing`, `kMsgPong` | unreliable | the client's clock, sent back at once, and its ping |
+| `kMsgPings` | unreliable | once a second, every player's ping for the scoreboard: the one its client reported (ENet's round trip until it has), or a bot |
 | `kMsgCommand`, `kMsgNotice` | reliable | a player's command; a line to show (a vote, a player ready) |
 
 ENet runs with `mtu` the link's MTU less IP and UDP's 28 bytes (`--mtu`, 1280 by default), two channels (never reliable
@@ -592,7 +627,7 @@ port/net/
   cmdline.cpp     the command line            maps.cpp   the .mmp files, the rotation, what a vote chooses from
   menu.cpp        the frontend's network page (game UI, so it includes the game's headers)
   core/           no game, unit-tested: the bitstream, the protocol, entity states and their delta coding, the
-                  round's state
+                  round's state, a map's players, the extra players' looks and start blocks
   transport/      the network: an interface, its ENet implementation, a link conditioner for tests
   session/        server.cpp, client.cpp, round_flow.cpp (no game: tested on its own), the bots (bot*.cpp),
                   recording.cpp, env.cpp (the GTA2_NET_* switches)
@@ -607,7 +642,7 @@ port/net/
                     world.cpp, rollback.cpp, sound_pool.cpp             the rollback set, save and resimulate
                     rounds.cpp        new rounds, map changes           overlay.cpp       what a client draws over the frame
                     stats.cpp         the periodic log's statistics     navmap.cpp        the map for bots
-                    sound_log.cpp     a client's sound over rollbacks
+                    sound_log.cpp     a client's sound over rollbacks  starts.cpp        the players' peds and start blocks
                     dev/              checks, logs and test cheats (dev.hpp), off unless switched on
   dev/            the session's checks and test hooks (client_probe.cpp, server_probe.cpp), the arena, the jerk meter
   eval/           measurements behind the design (sim_bench.cpp, neteval.cpp)
@@ -631,6 +666,8 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | Where | Hook | |
 |---|---|---|
 | `Game.cpp` | `gPortAfterPlayersHook` | after the players' tick, before anything spawns: the server's camera lead |
+| `Game.cpp` | `gPortExtraPlayerPeds` | at boot, after the level start: a ped for each player past the script's `PLAYER_PED`s |
+| `Ped.cpp` | `gPortSpawnBlock` | a ped starting at a restart zone: a block of it no other player stands on |
 | `Game.cpp`, `sound_obj.cpp` | `gPortWorldStill` | the results: nothing runs but the players' tick and the HUD; the world's sounds stop |
 | `Game.cpp` | `gPortDrawOverlay` | drawn last: the status, the round's panel, chat completion |
 | `Car.cpp`, `Char_Pool.cpp` | `PortTrafficLimit()`, `gPortSpawnPlayers` | the spawn limits times the players |
@@ -647,6 +684,9 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Car.cpp` | `Car::TryHonkHorn` | a train's lead without a driver (a player got out of a carriage that stood still) doesn't read it |
 | `Hud.cpp` | `port_TypedChar` (`port/compat/src/dinput.cpp`), `gPortChatChar` | the chat types the keyboard layout's characters; a server, those its clients typed |
 | `Hud.cpp` | `gPortServerKillNotices` | a client's kill notices are the server's deaths only |
+| `Hud.cpp` | `gPortDrawNetStandings` | a client's rank and score at the top left, in place of the list of the other players and the game's frags or tag time counter |
+| `Hud.cpp` | `PortDrawPlayerNames` (`port/src/player_names.cpp`) | the names over the other players: centred over the ped (its car in one) where the frame draws it, by the drawn camera, at three quarters of the HUD's text size. The original's are placed by the game camera, which the frame doesn't draw between steps, and by the HUD's layout, whose edge anchors move them on wide screens |
+| `Hud.cpp` | `PortHudTextPalette` (`port/src/player_looks.hpp`) | the names over the players and the tag times in the port's looks' colours (the fonts have 9 remaps) |
 | `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
 | `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
@@ -769,6 +809,7 @@ off by default:
 | `GTA2_NET_TESTCAR=<tick>:<player>:<model>,...` | server | a car beside the player (11: a bus; 63, 64: a truck cab with a container trailer); model + 1000 * n: damaged by n * 1000 (n = 16: on fire, 25: burning); a model the game can't wreck (24 to 26, 85: the HOTDOG_D vans; the wrecks) isn't spawned |
 | `GTA2_NET_TESTTRAIN=<tick>:<player>:<train>,...` | server | the player at the wheel of a train; train + 10: that train into reverse; train + 20: the player on the platform of the station it stops at next |
 | `GTA2_NET_TESTARM=<weapon>:<ammo>[,...]`, `GTA2_NET_TESTWANTED=<points>` | server | every player kept armed (car weapons from 15: the car it drives), or at least that wanted (600: a star) |
+| `GTA2_NET_SCOREBOARD=1` | client | the scoreboard shown all the time, as if SCORES were held (captures) |
 | `GTA2_NET_BOTMAP2=1` | client bot | it votes map 2 in the results (net_check's rounds step) |
 | `GTA2_NET_BOTCARFIRE=1` | both | bots fire their car weapons while driving (a second in three) |
 | `GTA2_NET_BOTTURRET=1` | both | bots turn their roof turret while driving (a second in three) |

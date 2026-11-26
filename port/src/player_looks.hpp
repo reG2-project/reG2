@@ -40,6 +40,27 @@ inline const PortPlayerLook* PortLookOf(s32 remap)
     return look && (look->mHudPalette || look->mArrowSprite) ? look : NULL;
 }
 
+// The font remap that draws text in a HUD colour (Player::mHudPaletteType and mHudPalette), -1: none (white). The fonts
+// have 9 (0-8): the original looks' are one below their user remap, the port's pink is 8 and its cyan has none
+inline s32 PortFontRemap(s32 paletteType, s32 userRemap)
+{
+    if (paletteType != palette_types_enum::user_remaps_7)
+    {
+        return -1;
+    }
+    return userRemap >= 1 && userRemap <= 8 ? userRemap - 1 : (userRemap == 11 ? 8 : -1);
+}
+
+// The palette type and remap the HUD draws a player's text in (its name, its tag time): the original's, a font remap one
+// below its user remap, but for the port's looks' colours (PortFontRemap)
+inline void PortHudTextPalette(s32 hudPaletteType, s32 hudPalette, s32* pType, u16* pRemap)
+{
+    const s32 remap = PortFontRemap(hudPaletteType, hudPalette);
+    const bool user = hudPaletteType == palette_types_enum::user_remaps_7;
+    *pType = user && remap >= 0 ? palette_types_enum::font_remaps_8 : palette_types_enum::sprites_2;
+    *pRemap = static_cast<u16>(user ? (remap >= 0 ? remap : 0) : hudPalette - 1);
+}
+
 // Hud_Arrow::mArrowSprtIdx for a look's arrow: the sprite in bits 0-3, the remap in 4-9, the palette type in 10-13. The
 // game's own values (a sprite, below 16) read as themselves
 inline s16 PortArrowIndex(const PortPlayerLook& look)

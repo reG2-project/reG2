@@ -5,7 +5,8 @@
 // d-pad, A and B drive, as they answer the quit message. In the frontend it drives the menus as the
 // arrows, Enter and Escape. With TWIN STICK on foot, the sticks move and aim (port_TwinStickInput) and RT
 // attacks. Each control's second key (alt_<n>), a key, mouse button or wheel notch, presses it the same way.
-// A network game's round: Back is F1 (ready, or yes to a vote), and the results' map list takes the d-pad and A.
+// A network game's round: Back held shows the scoreboard (ready and votes are in the Start menu), and the results' map
+// list takes the d-pad and A. SCORES, a 13th binding the game never sees, holds the scoreboard too.
 #define DIRECTINPUT_VERSION 0x0700
 #include <windows.h>
 #include <dinput.h>
@@ -18,14 +19,18 @@
 namespace
 {
 const int kNumControls = 12;
-const DWORD kDefaultKeys[kNumControls] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN,
-                                          DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT};
+const int kScoresControl = 12;
+const int kNumBindings = 13;
+// SCORES' default key, the controls menu's too (port_DefaultKey)
+const DWORD kScoresKey = DIK_TAB;
+const DWORD kDefaultKeys[kNumBindings] = {DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_LCONTROL, DIK_RETURN,
+                                          DIK_SPACE, DIK_Z, DIK_X, DIK_C, DIK_LMENU, DIK_RSHIFT, kScoresKey};
 // Forward, backward, left, right, attack, enter/exit, jump/handbrake, previous and next weapon,
-// special 1 to 3.
-const int kDefaultPad[kNumControls] = {kPadUp, kPadDown, kPadLeft, kPadRight, 0, 3, 1, 4, 5, 2, 10, 11};
+// special 1 to 3, scores (Back, fixed: the capture takes Back as cancel).
+const int kDefaultPad[kNumBindings] = {kPadUp, kPadDown, kPadLeft, kPadRight, 0, 3, 1, 4, 5, 2, 10, 11, 6};
 // W, S, A, D, F and E by position.
-const int kDefaultAlt[kNumControls] = {DIK_W, DIK_S, DIK_A, DIK_D, kMouseCode + SDL_BUTTON_LEFT, DIK_F, 0,
-                                       kWheelUpCode, kWheelDownCode, DIK_E, 0, 0};
+const int kDefaultAlt[kNumBindings] = {DIK_W, DIK_S, DIK_A, DIK_D, kMouseCode + SDL_BUTTON_LEFT, DIK_F, 0,
+                                       kWheelUpCode, kWheelDownCode, DIK_E, 0, 0, 0};
 const Sint16 kThreshold = 24000;
 
 const int kMaxGamepads = 8;
@@ -51,11 +56,12 @@ bool sMigrated;
 bool sMenuBlocked; // back from a game with a button or W, A, S or D still down: the menus wait for its release
 bool sAccelHeld; // RT held since the player drove or was getting into a vehicle: it attacks once pressed again
 bool sMouseAims; // the mouse was used in game after the pad
+bool sBackScores; // Back held in a network game's round
 bool sKeyDown[256]; // by DIK code
 unsigned sButtonsDown; // bit n: SDL mouse button n
-int sAlt[kNumControls];
+int sAlt[kNumBindings];
 bool sAltRead;
-int sPad[kNumControls]; // pad_<n>, read once: port_UpdatePad wants them several times a frame
+int sPad[kNumBindings]; // pad_<n>, read once: port_UpdatePad wants them several times a frame
 bool sPadRead;
 int sWheelCode; // a wheel notch holds its control down for two steps
 unsigned sWheelUntil;
@@ -228,12 +234,12 @@ void WriteControl(const char* format, int control, DWORD value)
 // Read in every message loop poll (port_UpdatePad): from the registry again only once it changed.
 DWORD KeyFor(int control)
 {
-    static DWORD sKeys[kNumControls];
+    static DWORD sKeys[kNumBindings];
     static unsigned sKeysGeneration;
     static bool sKeysRead;
     if (!sKeysRead || sKeysGeneration != port_RegistryGeneration())
     {
-        for (int i = 0; i < kNumControls; i++)
+        for (int i = 0; i < kNumBindings; i++)
         {
             sKeys[i] = ReadControl("%d", i, kDefaultKeys[i]) & 0xFF;
         }
@@ -447,7 +453,7 @@ int port_GetPadBinding(int control)
             MigrateBindings();
         }
         sPadRead = true;
-        for (int i = 0; i < kNumControls; i++)
+        for (int i = 0; i < kNumBindings; i++)
         {
             sPad[i] = static_cast<int>(ReadControl("pad_%d", i, static_cast<DWORD>(kDefaultPad[i])));
         }
@@ -462,6 +468,11 @@ void port_SetPadBinding(int control, int code)
     WriteControl("pad_%d", control, static_cast<DWORD>(code));
 }
 
+int port_DefaultKey(int control)
+{
+    return static_cast<int>(kDefaultKeys[control]);
+}
+
 int port_DefaultPadBinding(int control)
 {
     return kDefaultPad[control];
@@ -473,17 +484,17 @@ int port_GetAltBinding(int control)
     {
         sAltRead = true;
         const DWORD kUnsaved = 0xFFFFFFFF;
-        bool unsaved[kNumControls];
-        for (int i = 0; i < kNumControls; i++)
+        bool unsaved[kNumBindings];
+        for (int i = 0; i < kNumBindings; i++)
         {
             const DWORD saved = ReadControl("alt_%d", i, kUnsaved);
             unsaved[i] = saved == kUnsaved;
             sAlt[i] = static_cast<int>(unsaved[i] ? static_cast<DWORD>(kDefaultAlt[i]) : saved);
         }
         // A default the player already uses on another control stays unbound.
-        for (int i = 0; i < kNumControls; i++)
+        for (int i = 0; i < kNumBindings; i++)
         {
-            for (int j = 0; unsaved[i] && sAlt[i] && j < kNumControls; j++)
+            for (int j = 0; unsaved[i] && sAlt[i] && j < kNumBindings; j++)
             {
                 if (j != i && (sAlt[j] == sAlt[i] || static_cast<int>(KeyFor(j)) == sAlt[i]))
                 {
@@ -523,6 +534,25 @@ bool port_AltKeyInGame(DWORD dik)
         alt = alt || port_GetAltBinding(i) == static_cast<int>(dik);
     }
     return alt;
+}
+
+bool port_ScoresKeyInGame(DWORD dik)
+{
+    if (!port_NetRoundPad() || port_QuitMessageShown())
+    {
+        return false;
+    }
+    const int alt = port_GetAltBinding(kScoresControl);
+    return dik == KeyFor(kScoresControl) || (alt > 0 && alt < 256 && dik == static_cast<DWORD>(alt));
+}
+
+bool port_ScoresHeld()
+{
+    if (!port_GameRunning() || port_QuitMessageShown() || port_ChatTyping())
+    {
+        return false;
+    }
+    return sKeyDown[KeyFor(kScoresControl)] || AltDown(kScoresControl) || sBackScores;
 }
 
 void port_CaptureStart()
@@ -794,10 +824,8 @@ void port_UpdatePad()
         {
             backFree = backFree && port_GetPadBinding(i) != 6;
         }
-        if (roundPad && backFree && back && !sPrevBack)
-        {
-            Tap(DIK_F1);
-        }
+        // From a press in a network game's round, not one in a menu or a chat line
+        sBackScores = (sBackScores || !sPrevBack) && back && roundPad && backFree;
         if (quitShown && b && !sPrevB)
         {
             Tap(DIK_ESCAPE);
@@ -816,6 +844,7 @@ void port_UpdatePad()
             sPrevDir[d] = down;
         }
     }
+    sBackScores = sBackScores && inGame;
     sPrevStart = start;
     sPrevA = a;
     sPrevB = b;

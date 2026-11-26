@@ -9,7 +9,7 @@
 
 namespace net
 {
-const uint32_t kProtocolVersion = 30;
+const uint32_t kProtocolVersion = 31;
 const uint16_t kDefaultPort = 27920;
 const size_t kMaxPayload = 1372; // the largest unreliable ENet packet at any link MTU (1428: ENet's mtu 1400)
 // The link's MTU, IP packets (--mtu, 576 to 1428): 1280 by default, the smallest of the VPNs people play LAN games over
@@ -35,11 +35,12 @@ enum MsgType : uint8_t
     kMsgSnapshot = 5, // server -> client, unreliable
     kMsgSnapshotPart = 6, // server -> client, unreliable: one part of a snapshot too big for one packet
     kMsgMapChange = 7, // server -> client, reliable: the next map, after a round (engine/rounds.cpp)
-    kMsgPing = 8, // client -> server, unreliable: the client's clock (ms, 32 bits), answered at once with
+    kMsgPing = 8, // client -> server, unreliable: the client's clock (ms, 32 bits) and ping (16 bits), answered at once with
     kMsgPong = 9, // server -> client, unreliable: the same clock back (the ping: the network's round trip alone)
     kMsgCommand = 10, // client -> server, reliable: a player's command ("/ready", "/yes", "/map 2"...: session/round_flow.cpp)
     kMsgNotice = 11, // server -> client, reliable: a line to show (a vote started or decided, a player ready...)
     kMsgLeave = 12, // client -> server, reliable, then disconnect: why it leaves (its copy of the map differs...)
+    kMsgPings = 13, // server -> client, unreliable, once a second: every player's ping, for the scoreboard
 };
 
 // CRC-32s of a map's files (core/crc32.hpp): a client with other files would play another game
@@ -130,6 +131,23 @@ bool ReadReject(BitReader& r, Reject& m);
 // A line of text: a player's command (kMsgCommand) or a notice to show (kMsgNotice), at most 120 characters
 void WriteText(BitWriter& w, MsgType type, const std::string& text);
 bool ReadText(BitReader& r, std::string& text);
+// Every slot's ping in ms (kMsgPings): the one its client measures and reports in its kMsgPing
+const uint16_t kPingNone = 0xFFFF; // no player, or no ping known yet
+const uint16_t kPingBot = 0xFFFE; // an arena bot: no connection
+const uint16_t kPingMax = 4095;
+struct Pings
+{
+    uint16_t ms[kMaxPlayers];
+    Pings()
+    {
+        for (uint16_t& m : ms)
+        {
+            m = kPingNone;
+        }
+    }
+};
+void WritePings(BitWriter& w, const Pings& m);
+bool ReadPings(BitReader& r, Pings& m);
 void WriteMapChange(BitWriter& w, const MapChange& m);
 bool ReadMapChange(BitReader& r, MapChange& m);
 
