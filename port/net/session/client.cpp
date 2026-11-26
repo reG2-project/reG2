@@ -744,7 +744,10 @@ void net::Client::Blend(const std::vector<engine::Pose>& shown)
         {
             continue; // the corrected state as it is
         }
-        const engine::Pose p = {n.id, b.x + (int32_t)(dx * alpha), b.y + (int32_t)(dy * alpha), b.z + (int32_t)(dz * alpha),
+        // A ped keeps the corrected height: a height between two levels on a flat block is floored to the lower one
+        // (Char::ManageZCoordAndSlopes), and the ped then stands inside that block, hidden under its top
+        const int32_t z = engine::IsCarId(n.id) ? b.z + (int32_t)(dz * alpha) : n.z;
+        const engine::Pose p = {n.id, b.x + (int32_t)(dx * alpha), b.y + (int32_t)(dy * alpha), z,
                                 ((b.rot + (int32_t)(dr * alpha)) % 1440 + 1440) % 1440};
         engine::SetPose(p);
     }

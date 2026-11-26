@@ -384,7 +384,9 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   than 2 blocks off (a respawn, a car entered) jumps. Tuned on recordings by the display error (what a tick showed
   against the server's tick, players included, in the client's log): against 0.2 for all, the other players are shown
   a third nearer the server's place, the local player half as far off, and they move no jerkier but at 60 ms of lag,
-  where steps changing by over 0.15 blocks/tick^2 go from 0.05% to 0.11% of the frames.
+  where steps changing by over 0.15 blocks/tick^2 go from 0.05% to 0.11% of the frames. A ped's height isn't blended:
+  between two levels on a flat block the game floors it (`Char::ManageZCoordAndSlopes`), and a player blended so off
+  the top of a slope sank into the roof it walked onto, hidden under it for the others while the server had it on top.
 - **What a client runs** (`engine/client_mode.cpp`): a client simulates what moves, not what decides. The game's own
   debug switches turn the rest off, set again every frame:
 
