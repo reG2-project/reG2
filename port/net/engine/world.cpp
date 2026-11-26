@@ -149,6 +149,9 @@ std::vector<net::engine::Block> net::engine::WorldBlocks()
     Block deaths = {0, 0, "net deaths"};
     NetDeaths_Memory(&deaths.addr, &deaths.size);
     blocks.push_back(deaths);
+    Block killCam = {0, 0, "kill cams"};
+    KillCam_Memory(&killCam.addr, &killCam.size);
+    blocks.push_back(killCam);
     Block particles = {0, 0, "particle random stream"};
     unsigned int size = 0;
     PortRand::ParticleMemory(&particles.addr, &size);

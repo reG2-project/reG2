@@ -6,10 +6,12 @@
 #include "../transport/transport.hpp"
 #include "../dev/arena.hpp"
 #include "../dev/server_probe.hpp"
+#include "recording.hpp"
 #include "round_flow.hpp"
 #include "session.hpp"
 #include <map>
 #include <memory>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -28,7 +30,7 @@ struct ServerConfig
     uint16_t port = kDefaultPort;
     engine::NetworkGame game; // game.players: <slots>
     int slots = 10; // the players on every map (--players, else NET_MAX_PLAYERS)
-    float interestRadius = 24.0f; // blocks around a client's player that its snapshots cover (players: always)
+    float interestRadius = 24.0f; // blocks around a client's player and its view that its snapshots cover (players: always)
     int packets = 4; // a snapshot's packets at most (--packets, 1..8): a busy area's goes in parts
     LinkShape link; // the link conditioner (tests)
     std::vector<std::string> arena; // bot brains playing the first slots on the server itself (--arena)
@@ -38,6 +40,8 @@ struct ServerConfig
     RoundRules rules; // the round flow (session/round_flow.cpp): warmup, countdown, results, votes
     std::vector<MapFiles> voteMaps; // what a vote chooses from: the rotation, else every multiplayer map there is
     int currentMap = 0; // the first map's number in voteMaps
+    std::vector<std::string> args; // the command line, for the recording
+    std::string replay; // a server recording played instead of the network (--replay)
 };
 
 class Server
@@ -121,7 +125,7 @@ class Server
     void StartOver(); // a new game (the next map): its start, and every client's baseline, again
     void PrintStats(const Snapshot& world);
     void SendSnapshot(int slot, Slot& s, const Snapshot& world);
-    std::vector<Item> PriceArea(const Slot& s, const std::vector<const EntityState*>& area, const Snapshot* base, float x, float y) const;
+    std::vector<Item> PriceArea(const Slot& s, const std::vector<const EntityState*>& area, const Snapshot* base, const engine::Foci& foci) const;
     ForwardedInputs Forwarded(int slot) const; // the other players' controls after this tick, for <slot>'s snapshot
     bool Fill(Slot& s, const Snapshot& fixed, std::vector<Item>& items, const Snapshot* base, BitWriter& w);
     void Transmit(const Slot& s, const BitWriter& w);
@@ -146,5 +150,13 @@ class Server
     uint32_t mCarInfo = 0; // data/nyc.gci's CRC-32
     MapPrint mPrint; // the map being played's files
     int mGeneration = 0; // engine::GameGeneration's, of the game running
+    std::mt19937 mRandom; // the session number and the tokens, from the recording's secret
+    std::unique_ptr<ServerRecorder> mRecorder;
+    std::unique_ptr<ServerReplay> mReplay;
+    std::vector<TransportEvent> mFrameEvents; // what this frame took, for the recording
+    uint32_t mReplayCheck = 0; // the recording's checksum of this tick
+    uint32_t mFirstDiff = 0; // the first tick a replay's world differs from the recording's
+    void CheckWorld(const Snapshot& world);
+    void EndReplay(uint32_t ticks); // the replay's verdict, and the end
 };
 } // namespace net

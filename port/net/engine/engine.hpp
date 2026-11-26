@@ -39,6 +39,7 @@ void SetPlayerTyped(int player, uint32_t buttons, uint16_t typed);
 uint16_t TypedChar(uint32_t buttons); // a client's: the character its key press in <buttons> typed here (0: none)
 // The length of a network tick (the game's own setting offers 50, 40 or 33 ms)
 void SetTickMs(int ms);
+void SetPaceMs(int ms); // the time between two steps, apart from their game length (0: no waiting, -1: that length)
 // The client's pause menu (port/src/pause_menu.cpp), over the game going on: Escape opens it, a key while open is its own
 // (with the character it typed), and what was chosen in it is taken once
 bool MenuOpen();
@@ -153,6 +154,15 @@ int CarModel(const EntityState& e); // a car entity's Car::mCarInfoIdx (car_mode
 bool PlayerPosition(int player, float* pX, float* pY);
 bool PlayerPose(int player, float* pX, float* pY, float* pZ, int* pRot); // and its height and heading (0..1439)
 bool PlayerWasted(int player); // dead and waiting to respawn (Player::mWastedOrBusted)
+// Where a player's snapshots are centred, in blocks: what its view follows (its corpse or arrested self while wasted or
+// busted, Player::Service's camera mode 2; its killer in the kill cam), the killer its kill cam will follow, and its own
+// ped (respawned at its restart zone), each when another
+struct Foci
+{
+    int count = 0;
+    float x[3] = {}, y[3] = {};
+};
+Foci PlayerFoci(int player);
 bool PlayerInCar(int player); // in this game
 // How far a player's camera shows (blocks, centre to corner): it zooms out with speed
 float PlayerViewRadius(int player);
@@ -184,7 +194,7 @@ bool PlayerChat(const EntityState& e, std::string* pLine);
 typedef RoundState Round; // the round's phase, votes and limits (session/round_flow.cpp keeps a server's)
 Round& CurrentRound();
 void NewRound(); // every slot in the game respawned with no score, weapons or power-ups
-void FreshScores(int slot); // its frags, points and HUD (money, frags, multiplier) as at a game's start (a new game's players)
+void FreshScores(int slot); // its frags, points, deaths, tag time and HUD (money, frags, multiplier) as at a game's start
 void ShowHudMessage(const char* text); // a line over the frame for a few seconds (overlay.cpp, with the status lines)
 // A chat line someone sent, over the frame above the lines being typed: the last 5, each for 10 s (overlay.cpp)
 void AddChatLine(const std::string& line);

@@ -283,9 +283,15 @@ void net::RoundFlow::EndRound(uint32_t tick, const std::vector<RoundPlayer>& pla
                                     : players[best].name + " wins round " + std::to_string(mState.number)});
     mState.winner = draw ? 0 : best + 1;
     mState.number++;
-    if (!mRules.enabled)
+    bool person = false;
+    for (const RoundPlayer& p : players)
     {
-        // Without the round flow: the next round at once, or the rotation's next map
+        person = person || (p.in && p.voter);
+    }
+    if (!mRules.enabled && !person)
+    {
+        // Without the round flow and nobody to read the results (bots only): the next round at once, or the rotation's
+        // next map
         const int next = RotationNext();
         if (next != mCurrentMap)
         {
@@ -378,8 +384,7 @@ int net::RoundFlow::NextMap() const
     }
     if (!tied.empty())
     {
-        static std::mt19937 sRandom{std::random_device{}()}; // not the game's random: that one is part of its state
-        return tied[sRandom() % tied.size()];
+        return tied[mRandom() % tied.size()];
     }
     return RotationNext();
 }
@@ -471,7 +476,7 @@ void net::RoundFlow::Command(uint32_t tick, int slot, const std::string& text, c
             out.notices.push_back({slot, "Maps: " + list});
             return;
         }
-        if (mState.phase == kPhaseResults && mRules.enabled)
+        if (mState.phase == kPhaseResults)
         {
             mState.mapChoice[slot] = (uint8_t)(m + 1); // the results' choice, no vote needed
             out.notices.push_back({-1, name + " votes for " + Title(m)});

@@ -3,6 +3,7 @@
 // it has acknowledged.
 #include "server.hpp"
 #include "env.hpp"
+#include "../core/crc32.hpp"
 #include "../maps.hpp"
 #include <algorithm>
 #include <chrono>
@@ -32,6 +33,16 @@ float Distance(const net::EntityState& e, float x, float y)
     return fabsf(dx) > fabsf(dy) ? fabsf(dx) : fabsf(dy);
 }
 
+float Distance(const net::EntityState& e, const net::engine::Foci& f) // to the nearer
+{
+    float d = Distance(e, f.x[0], f.y[0]);
+    for (int k = 1; k < f.count; k++)
+    {
+        d = std::min(d, Distance(e, f.x[k], f.y[k]));
+    }
+    return d;
+}
+
 // Its state in the client's baseline (NULL: new to it)
 const net::EntityState* InBase(const net::Snapshot* base, const net::EntityState& e)
 {
@@ -51,6 +62,76 @@ uint32_t WithoutEscape(uint32_t buttons)
     return ((buttons & kKeyBits) >> 12) == kEscape ? buttons & ~(kKeyDown | kKeyBits) : buttons;
 }
 
+// A replay's: the recording has what came in, and nothing goes out
+class NoTransport : public net::Transport
+{
+  public:
+    bool Poll(net::TransportEvent&) override
+    {
+        return false;
+    }
+    bool Send(uint32_t, uint8_t, const void*, size_t, bool) override
+    {
+        return true;
+    }
+    void Flush() override
+    {
+    }
+    void Disconnect(uint32_t) override
+    {
+    }
+    uint32_t RoundTripMs(uint32_t) const override
+    {
+        return 0;
+    }
+};
+
+// The world's checksum: every entity's id, type and fields
+uint32_t WorldCheck(const net::Snapshot& world)
+{
+    const net::Schema& schema = net::engine::NetSchema();
+    uint32_t crc = 0;
+    for (const net::EntityState& e : world.entities)
+    {
+        const uint32_t head[2] = {e.id, e.type};
+        crc = net::Crc32(head, sizeof(head), crc);
+        const size_t fields = e.type < schema.types.size() ? schema.types[e.type].fields.size() : 0;
+        crc = net::Crc32(e.f, fields * sizeof(e.f[0]), crc);
+    }
+    return crc;
+}
+
+// GTA2_NET_DUMPWORLD=<tick>[,<tick>...]: every entity of the server's world at those ticks, by the snapshots' ids
+void DumpWorld(const net::Snapshot& world)
+{
+    const char* ticks = net::Env().dumpWorld;
+    const std::string at = std::to_string(world.tick);
+    bool listed = false;
+    for (const char* p = ticks; p && *p && !listed; p = strchr(p, ',') ? strchr(p, ',') + 1 : "")
+    {
+        listed = !strncmp(p, at.c_str(), at.size()) && (p[at.size()] == ',' || !p[at.size()]);
+    }
+    if (!listed)
+    {
+        return;
+    }
+    const net::Schema& schema = net::engine::NetSchema();
+    printf("net: world at tick %u, %zu entities\n", world.tick, world.entities.size());
+    for (const net::EntityState& e : world.entities)
+    {
+        if (e.type >= schema.types.size())
+        {
+            continue;
+        }
+        const net::EntityType& type = schema.types[e.type];
+        std::string line = "net: " + std::to_string(world.tick) + " " + type.name + " " + std::to_string(e.id);
+        for (size_t i = 0; i < type.fields.size(); i++)
+        {
+            line += std::string(" ") + type.fields[i].name + "=" + std::to_string(e.f[i]);
+        }
+        puts(line.c_str());
+    }
+}
 } // namespace
 
 std::string net::Scoreboard(const Snapshot& snap)
@@ -76,12 +157,50 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
     mConfig = config;
     mConfig.packets = config.packets < 1 ? 1 : config.packets > kMaxParts ? kMaxParts : config.packets;
     mSlots.assign(config.game.players, Slot());
-    mTransport.reset(CreateServerTransport(config.port, (uint32_t)config.slots + 4, error));
+    ServerStart start;
+    start.args = config.args;
+    start.env = NetEnvironment();
+    std::random_device device;
+    for (uint32_t& word : start.secret)
+    {
+        word = device();
+    }
+    if (!config.replay.empty())
+    {
+        mReplay.reset(new ServerReplay());
+        if (!mReplay->Open(config.replay.c_str(), &start, error))
+        {
+            return false;
+        }
+        mTransport.reset(new NoTransport());
+    }
+    else
+    {
+        mTransport.reset(CreateServerTransport(config.port, (uint32_t)config.slots + 4, error));
+    }
     if (!mTransport)
     {
         return false;
     }
-    if (config.link.Any())
+    std::seed_seq seed(start.secret, start.secret + 8);
+    mRandom.seed(seed);
+    // GTA2_NET_RECORD=<file>, or off; recorded anyway unless the server only plays its own bots (tests, training)
+    const char* record = Env().record;
+    const std::string path = mReplay ? "" : record ? (strcmp(record, "off") ? record : "") : config.arena.empty() ? NextRecordingPath("server") : "";
+    if (!path.empty())
+    {
+        mRecorder.reset(new ServerRecorder());
+        if (!mRecorder->Open(path.c_str(), start))
+        {
+            printf("net: can't record to %s\n", path.c_str());
+            mRecorder.reset();
+        }
+        else
+        {
+            printf("net: recording to %s\n", path.c_str());
+        }
+    }
+    if (config.link.Any() && !mReplay)
     {
         mTransport.reset(CreateConditioner(mTransport.release(), config.link));
     }
@@ -90,7 +209,7 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
         *error = "more arena bots than player slots (" + std::to_string(mSlots.size()) + ")";
         return false;
     }
-    if (!mArena.Start(config.arena, error))
+    if (!mArena.Start(config.arena, start.secret[1], error))
     {
         return false;
     }
@@ -108,10 +227,11 @@ bool net::Server::Start(const ServerConfig& config, std::string* error)
     }
     mMap = (size_t)(mConfig.currentMap >= 0 ? mConfig.currentMap : 0);
     mRounds.Start(mConfig.rules, mapNames, mConfig.currentMap);
+    mRounds.Seed(start.secret[0]);
     mRounds.SetMapTitles(titles);
     engine::CurrentRound() = mRounds.State();
     mProbe.Start();
-    mSession = std::random_device{}() | 1; // never 0: a welcome's session is always set
+    mSession = mRandom() | 1; // never 0: a welcome's session is always set
     mCarInfo = engine::DataFileCrc("nyc.gci");
     mPrint.gmp = engine::DataFileCrc(mConfig.game.gmp);
     mPrint.sty = engine::DataFileCrc(mConfig.game.sty);
@@ -232,7 +352,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
             {
                 mTransport->Disconnect(s.peer);
             }
-            const uint32_t token = back >= 0 ? s.token : std::random_device{}() | 1;
+            const uint32_t token = back >= 0 ? s.token : mRandom() | 1;
             s = Slot();
             s.used = true;
             s.peer = peer;
@@ -398,7 +518,7 @@ const int kFarAgeTicks = 3;
 
 // Each nearby entity with what it costs new and aged, and its priority: the age plus one, over one plus a sixth of the
 // distance (an entity new to the client counts as 8 ticks old: one near comes soon)
-std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::vector<const EntityState*>& area, const Snapshot* base, float x, float y) const
+std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::vector<const EntityState*>& area, const Snapshot* base, const engine::Foci& foci) const
 {
     const Schema& schema = engine::NetSchema();
     std::vector<Item> items(area.size());
@@ -421,16 +541,16 @@ std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::
                 it.aged.f[f] = age < 1 ? 1 : age > 63 ? 63 : age;
             }
             it.agedBits = EntryBits(schema, it.had, it.aged);
-            it.priority = (float)(age + 1) / (1.0f + Distance(*it.now, x, y) / 6.0f);
+            it.priority = (float)(age + 1) / (1.0f + Distance(*it.now, foci) / 6.0f);
             // Off screen with a margin (a view is 8 to 11 blocks centre to corner), new state every third tick when it
             // costs more than its age: the client's own simulation keeps it within a pixel meanwhile (netcode.md, "Drift")
             const auto last = s.lastFresh.find(it.now->id);
             it.hold = last != s.lastFresh.end() && mTick - last->second < (uint32_t)kFarAgeTicks &&
-                      Distance(*it.now, x, y) > kFullRateRadius && it.freshBits > it.agedBits;
+                      Distance(*it.now, foci) > kFullRateRadius && it.freshBits > it.agedBits;
         }
         else
         {
-            it.priority = 9.0f / (1.0f + Distance(*it.now, x, y) / 6.0f);
+            it.priority = 9.0f / (1.0f + Distance(*it.now, foci) / 6.0f);
         }
     }
     return items;
@@ -571,12 +691,11 @@ void net::Server::Transmit(const Slot& s, const BitWriter& w)
 }
 
 // The client's area: every player and the cars they sit in (wherever they are: a player far off isn't a ped without its
-// car), every train (a few, and a client's own moves on wherever it is), and the cars, peds and pickups near its own,
-// nearest first
+// car), every train (a few, and a client's own moves on wherever it is), and the cars, peds and pickups near what its view
+// follows and near its ped (PlayerFoci: apart while it is wasted), nearest first
 void net::Server::SendSnapshot(int slot, Slot& s, const Snapshot& world)
 {
-    float x = 0, y = 0;
-    const bool located = engine::PlayerPosition(slot, &x, &y);
+    const engine::Foci foci = engine::PlayerFoci(slot);
     std::vector<uint32_t> playersCars;
     for (const EntityState& e : world.entities)
     {
@@ -595,15 +714,15 @@ void net::Server::SendSnapshot(int slot, Slot& s, const Snapshot& world)
         {
             fixed.entities.push_back(e);
         }
-        else if (located && Distance(e, x, y) <= mConfig.interestRadius)
+        else if (foci.count && Distance(e, foci) <= mConfig.interestRadius)
         {
             area.push_back(&e);
         }
     }
-    std::sort(area.begin(), area.end(), [&](const EntityState* a, const EntityState* b) { return Distance(*a, x, y) < Distance(*b, x, y); });
+    std::sort(area.begin(), area.end(), [&](const EntityState* a, const EntityState* b) { return Distance(*a, foci) < Distance(*b, foci); });
     const Snapshot& acked = s.sent[s.ackTick % kRing];
     const Snapshot* base = s.ackTick && acked.tick == s.ackTick && mTick - s.ackTick < (uint32_t)kRing ? &acked : NULL;
-    std::vector<Item> items = PriceArea(s, area, base, x, y);
+    std::vector<Item> items = PriceArea(s, area, base, foci);
     BitWriter w;
     if (Fill(s, fixed, items, base, w))
     {
@@ -654,13 +773,33 @@ void net::Server::StartGameOnce()
 
 void net::Server::PollTransport()
 {
-    for (const TransportEvent& e : mPending)
+    mFrameEvents.clear();
+    if (mReplay)
     {
-        OnEvent(e);
+        uint32_t tick = 0;
+        if (!mReplay->Frame(&tick, &mReplayCheck, mFrameEvents))
+        {
+            EndReplay(mTick - 1);
+        }
+        if (tick != mTick)
+        {
+            printf("net: the recording's frame is tick %u's, the replay's %u's\n", tick, mTick);
+            mFirstDiff = mFirstDiff ? mFirstDiff : mTick;
+            EndReplay(mTick - 1);
+        }
+        for (const TransportEvent& e : mFrameEvents)
+        {
+            OnEvent(e);
+        }
+        return;
     }
-    mPending.clear();
+    mFrameEvents.swap(mPending);
     TransportEvent e;
     while (mTransport->Poll(e))
+    {
+        mFrameEvents.push_back(e);
+    }
+    for (const TransportEvent& e : mFrameEvents)
     {
         OnEvent(e);
     }
@@ -1079,9 +1218,9 @@ void net::Server::ChangeToMap(int map)
             mTransport->Send(mSlots[i].peer, kChannelReliable, w.Data().data(), w.ByteCount(), true);
         }
     }
-    // The round flow showed the results already: half a second for the clients to hear of it. Without it (an arena's
-    // rotation) the pause shows the winner
-    engine::ChangeMap(m.gmp, m.sty, m.scr, (int)mSlots.size(), 0, mConfig.rules.enabled ? 15 : 90);
+    // A fresh game of the round flow's (its countdown next) comes after its results: half a second for the clients to
+    // hear of it. Else (an arena's rotation, bots only) the pause shows the winner
+    engine::ChangeMap(m.gmp, m.sty, m.scr, (int)mSlots.size(), 0, mRounds.State().phase == kPhaseCountdown ? 15 : 90);
 }
 
 void net::Server::Shutdown()
@@ -1179,10 +1318,15 @@ void net::Server::Frame()
     engine::Capture(world);
     world.tick = mTick;
     mProbe.Captured(mTick, world);
+    CheckWorld(world);
     SetNextInputs(world);
     RunRounds(world);
     if (mConfig.endTick && mTick >= mConfig.endTick)
     {
+        if (mReplay)
+        {
+            EndReplay(mTick);
+        }
         mArena.Finish(world);
         fflush(stdout);
         _Exit(0); // No game shutdown; the trainer only reads the result line
@@ -1214,4 +1358,34 @@ void net::Server::Frame()
     {
         PrintStats(world);
     }
+}
+
+void net::Server::CheckWorld(const Snapshot& world)
+{
+    DumpWorld(world);
+    const uint32_t check = WorldCheck(world);
+    if (mRecorder)
+    {
+        mRecorder->Frame(mTick, check, mFrameEvents);
+    }
+    if (mReplay && check != mReplayCheck && !mFirstDiff)
+    {
+        mFirstDiff = mTick;
+        printf("net: the replay's world differs from the recording's at tick %u\n", mTick);
+    }
+}
+
+// The recording played to its end: the replay's verdict, and its exit code
+void net::Server::EndReplay(uint32_t ticks)
+{
+    if (mFirstDiff)
+    {
+        printf("net: replayed %u ticks: the world differs from tick %u on\n", ticks, mFirstDiff);
+    }
+    else
+    {
+        printf("net: replayed %u ticks: the world matches the recording's at every tick\n", ticks);
+    }
+    fflush(stdout);
+    _Exit(mFirstDiff ? 1 : 0);
 }

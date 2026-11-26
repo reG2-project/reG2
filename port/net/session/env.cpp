@@ -9,6 +9,7 @@ const net::SessionEnv& net::Env()
     static const SessionEnv sEnv = [] {
         SessionEnv e;
         e.record = getenv("GTA2_NET_RECORD");
+        e.dumpWorld = getenv("GTA2_NET_DUMPWORLD");
         e.marker = getenv("GTA2_NET_MARKER") != NULL;
         e.corrLog = getenv("GTA2_NET_CORRLOG") != NULL;
         e.animLog = getenv("GTA2_NET_ANIMLOG") != NULL;

@@ -726,12 +726,19 @@ void net::engine::DebugSelfLog(uint32_t frame)
         return;
     }
     Sprite* s = PedSprite(ped);
+    const Foci foci = PlayerFoci(LocalPlayer());
+    int cars = 0; // around what the view follows
+    for (Car* c = gCar_BC_Pool->mPool.mpPrev; c && foci.count; c = c->mpNext)
+    {
+        cars += c->mCarSprite && Near(c->mCarSprite, Fix16(foci.x[0]).mValue, Fix16(foci.y[0]).mValue, Fix16(10).mValue);
+    }
     printf("net: frame %u, self: at (%.2f, %.2f) states %d/%d dead %d wasted %d countdown %d aux %p camera mode %d health %d char %p car %p "
-           "objective %d\n",
+           "objective %d, view at (%.2f, %.2f) with %d cars within 10 blocks, camera at (%.2f, %.2f, %.2f)\n",
            frame, s ? s->mXy.x.ToFloat() : -1.0f, s ? s->mXy.y.ToFloat() : -1.0f, (int)ped->mPedState1,
            (int)ped->mPedState2, (int)ped->isDead(), (int)p->mWastedOrBusted, (int)p->mDeathCountdown,
            (void*)p->mAuxPed, (int)p->mCameraMode, (int)ped->mHealth, (void*)ped->mGameObject,
-           (void*)ped->mCar, (int)ped->get_objective());
+           (void*)ped->mCar, (int)ped->get_objective(), foci.x[0], foci.y[0], cars, p->mViewCamera.mCurPos.mX.ToFloat(),
+           p->mViewCamera.mCurPos.mY.ToFloat(), p->mViewCamera.mCurPos.mZ.ToFloat());
 }
 
 void net::engine::DebugAnimLog(uint32_t frame)

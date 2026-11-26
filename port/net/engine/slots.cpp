@@ -9,6 +9,7 @@
 #include "Source/GameSession.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
+#include "Source/TagGame.hpp"
 #include "Source/Weapon.hpp"
 #include "Source/sprite.hpp"
 #include "Source/Car.hpp"
@@ -84,6 +85,14 @@ void net::engine::TakeOutOfGame(int slot)
             }
         }
     }
+    if (gTagGame.mFugitive == p)
+    {
+        // "It" to the nearest player, as when "it" dies with no killer (TagGame::UpdateFugitive); else nobody stays
+        // "it" for the rest of the round. Alone: the next player in the game's (TagGame::ExecuteGamemodeTick)
+        gTagGame.UpdateFugitive(p, NULL);
+        gTagGame.mFugitive = gTagGame.mFugitive == p ? NULL : gTagGame.mFugitive;
+    }
+    ForgetKillCams(slot); // a new player in the slot isn't the killer
     p->Disconnect(); // keeps its ped pointer, as the game does: the HUD and camera of a local slot use it
 }
 
@@ -101,6 +110,30 @@ void net::engine::NeverInGame(int slot)
     }
 }
 
+// A death's or an arrest's countdown over, the player's part, as Player::Wasted and Player::Busted end it: else one
+// caught counting down stays "wasted" with its ped alive (it no longer dies, so the countdown never runs): it can't
+// attack, its deaths no longer count, and its camera stays on the corpse it left
+void net::engine::EndDeath(Player* p)
+{
+    if (!p->mWastedOrBusted && !p->mAuxPed)
+    {
+        return;
+    }
+    p->ClearKFWeapon();
+    p->mCameraMode = 0;
+    p->mGameCamera.SetSmoothFollow();
+    if (p->mAuxPed)
+    {
+        p->mAuxPed->Deallocate();
+        p->mAuxPed = NULL;
+    }
+    p->mAuxCamActive = false;
+    p->mWastedOrBusted = false;
+    p->mBusted = false;
+    p->mAuxPedDying = false;
+    p->mDeathCountdown = 0;
+}
+
 void net::engine::PutInGame(int slot, bool freshScore)
 {
     Player* p = GetPlayer(slot);
@@ -109,15 +142,37 @@ void net::engine::PutInGame(int slot, bool freshScore)
     {
         return;
     }
-    if (freshScore && slot < MAX_PLAYERS)
+    if (freshScore)
     {
-        gGameSession.mFragsList[slot] = 0;
-        gGameSession.mPointsList[slot] = 0;
-        ResetHudScores(p);
+        // A new player: nothing of the slot's last one, who may have left with a score, deaths, "it" time or armour
+        FreshScores(slot);
+        p->ClearPowerUps(); // the timers only: a fresh ped, or one the respawn's reset made plain
     }
     if (p->mInUse && p->mPlayerPed)
     {
-        p->mPlayerPed->RespawnPed(zone); // still in: a fresh start where the others respawn
+        // Still in: a fresh start where the others respawn, as the game's death and respawn over at once. The game
+        // respawns a ped no car holds (a car's blast kills its driver and clears it, Car::KillContainedPeds): a car
+        // kept it as its driver. Only the car lets go: getting out already, it has its char (another would stay in
+        // the collision grid). The reset its respawn ends with: else a ped falling or knocked down stays
+        // immobilized for good, its walk and its death only stored (ChangeNextPedState1)
+        Ped* ped = p->mPlayerPed;
+        if (Car* car = ped->mCar)
+        {
+            if (car->mDriver == ped)
+            {
+                car->ClearDriver(); // its car weapons unloaded too
+            }
+            if (ped->mEnterCarAsPassenger)
+            {
+                car->mPassengersList.RemovePed_471240(ped);
+            }
+        }
+        ped->RespawnPed(zone);
+        if (ped->mGameObject)
+        {
+            ped->ResetForPlayerRespawn();
+        }
+        EndDeath(p);
         // Its camera there too, not panning over for seconds: until it sees the ped, the ped counts as off screen, and
         // a dead player ped off screen for 200 ticks is freed as a corpse (Ped::PoolUpdate), with the player still
         // pointing at it (a crash at its respawn, or once the memory is another ped)
@@ -146,7 +201,12 @@ void net::engine::PutInGame(int slot, bool freshScore)
     p->mTrafficSpawnThreshold = 1000;
     ped->SetPlayer(p, 0);
     p->mCameraMode = 0;
-    for (int w = 0; w < kPlayerWeapons; w++)
+    p->mTurnSpeed = Ang16(0); // a jump's turn (Player::HandleControls): kAngZero_6FE754 and kJumpTurnAccel * 2 + kAng3
+    p->mTurnAccel = Ang16(20);
+    p->mMoveDirection = Fix16(0);
+    p->mJumping = false; // as Player::InitializePlayerState: else a ped that left in the air turns as if jumping
+    // Its own weapons; its car's weapons stay its car's, which may be gone by now (one that left getting out kept them)
+    for (int w = 0; w < weapon_type::car_bomb; w++)
     {
         if (Weapon* weapon = p->mWeapons[w])
         {
@@ -154,8 +214,10 @@ void net::engine::PutInGame(int slot, bool freshScore)
             weapon->mAmmo = freshScore ? 0 : weapon->mAmmo; // a player back after a drop keeps its ammo
         }
     }
+    p->ClearCarWeapons();
     p->mCurrWeaponIdx = -1;
     p->mSavedPedWeaponIdx = -1;
+    p->mSavedCarWeaponIdx = 27;
     ped->mGraphicType = ped_graphic_type::character_1;
     p->set_in_use(1);
     ped->RespawnPed(zone); // a free spot in the zone, health, a moment of invulnerability
@@ -182,6 +244,8 @@ void net::engine::FreshScores(int slot)
     {
         gGameSession.mFragsList[slot] = 0;
         gGameSession.mPointsList[slot] = 0;
+        gTagGame.mItTimeSecs[slot] = 0; // a tag game's score
+        ResetDeaths(slot);
     }
     if (Player* p = GetPlayer(slot))
     {

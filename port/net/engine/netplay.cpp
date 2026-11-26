@@ -30,10 +30,11 @@ int gGeneration; // the games started since the boot's
 void* gHookUser;
 bool NextNetworkGame(); // gPortNextNetworkGame
 
-// gPortWorldStill: the results between rounds, on the server and the clients alike (the round's state is in the world entity)
+// gPortWorldStill: the results between rounds, on the server and the clients alike (the round's state is in the world
+// entity), and a map change's pause: the last frame stays till the next game, not the old one running on unsynced
 bool WorldStill()
 {
-    return net::WorldStandsStill(net::engine::CurrentRound().phase);
+    return net::WorldStandsStill(net::engine::CurrentRound().phase) || net::engine::MapChangePending();
 }
 
 // GTA2_OFFLINE_MP=<players>:<gmp>:<sty>:<scr>[:<game type 1-3>] (port/docs/netcode.md, "Measurements behind the design"): a local
@@ -93,6 +94,8 @@ void net::engine::StartNetworkGame(const NetworkGame& game)
     gPortWorldStill = WorldStill;
     gPortTagTimeCounts = true;
     gPortScoreBonusHook = net::engine::ScoreBonus;
+    gPortKillCamTicks = KillCamTicks;
+    gPortDeathViewPed = DeathCamera;
     InstallStarts(true);
     gNetPlay.mPlayerIdx = game.localPlayer;
     gNetPlay.mN2.mPlayersCount = 2; // > 1: the game calls SendToAll every frame
@@ -134,6 +137,8 @@ void net::engine::StopNetworkGame()
     gPortTagTimeCounts = false;
     gPortChatChar = NULL;
     gPortScoreBonusHook = NULL;
+    gPortKillCamTicks = NULL;
+    gPortDeathViewPed = NULL;
     InstallStarts(false);
     gNetPlay.mPlayerIdx = 0;
     gNetPlay.mN2.mPlayersCount = 0;

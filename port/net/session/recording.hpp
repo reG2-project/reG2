@@ -14,8 +14,8 @@
 
 namespace net
 {
-// recordings/session-<n>.rec, n counting up over the sessions (recordings/next) and kept for the newest 10
-std::string NextRecordingPath();
+// recordings/<kind>-<n>.rec, n counting up over the sessions (recordings/next, or <kind>-next) and kept for the newest 10
+std::string NextRecordingPath(const char* kind = "session");
 // A recording ends here (an evening in a busy area is hundreds of MB, and ten are kept): its replay ends there too
 const uint64_t kMaxRecordingBytes = 200ull << 20;
 
@@ -42,4 +42,41 @@ class ClientReplay
   private:
     FILE* mFile = nullptr;
 };
+
+// A server's session: what its world is made from, so that it replays without the network. The server's world is its
+// start (the command line, the GTA2_NET_* switches, the secret its session number and tokens are drawn from) and, per
+// frame, the transport events it took (the clients' hellos, commands, chat and votes, joins and leaves). Each frame's
+// record has a checksum of the world after it, so a replay finds the first tick where it differs.
+struct ServerStart
+{
+    std::vector<std::string> args; // the netcode's command line
+    std::vector<std::string> env; // "GTA2_NET_<name>=<value>"
+    uint32_t secret[8] = {}; // 256 bits: a client sees a few draws, which must not give the others away
+};
+
+class ServerRecorder
+{
+  public:
+    ~ServerRecorder();
+    bool Open(const char* path, const ServerStart& start);
+    void Frame(uint32_t tick, uint32_t check, const std::vector<TransportEvent>& events);
+
+  private:
+    FILE* mFile = nullptr;
+    uint64_t mBytes = 0;
+};
+
+class ServerReplay
+{
+  public:
+    ~ServerReplay();
+    static bool IsServerRecording(const char* path);
+    bool Open(const char* path, ServerStart* pStart, std::string* error);
+    bool Frame(uint32_t* pTick, uint32_t* pCheck, std::vector<TransportEvent>& events); // false at the end
+
+  private:
+    FILE* mFile = nullptr;
+};
+// The GTA2_NET_* variables set now (the server's start), but GTA2_NET_RECORD
+std::vector<std::string> NetEnvironment();
 } // namespace net

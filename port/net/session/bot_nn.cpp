@@ -216,6 +216,10 @@ class NeuralBot : public net::BotBrain
         snprintf(line, sizeof(line), "buttons 0x%x", mMemory.lastButtons);
         return line;
     }
+    void Seed(uint32_t seed) override
+    {
+        mRandom.seed(seed);
+    }
 
   private:
     int Sample(const float* logits, int n)

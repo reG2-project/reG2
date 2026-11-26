@@ -39,7 +39,7 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 | Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players N` (1-10, 10: every map's slots), `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
 | Round flow | `--minplayers N` (2), `--warmup s` (60), `--results s` (15), `--votes start,map,kick` (or `none`), `--rounds on\|off` |
 | Arena | `--arena brain,...` (bots on the server itself), `--ticks N` (the result printed and the server ended at tick N), `--seed N` |
-| Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` |
+| Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` (a client's recording, or a server's: that server again, "Recordings") |
 | Either end | `--lag ms`, `--jitter ms`, `--loss %`, `--lossburst N`, `--spike ms:on:every`: a link conditioner on this end's sends (losses in bursts of N on average; ms more delay for `on` s every `every` s); `--mtu N`: the link's MTU (IP packets, 1280 by default, which fits the VPNs people play over: Tailscale 1280, WireGuard 1420, Hamachi 1404; 1428 the most) |
 | Any | `--data <folder>` (the game folder, or its `data/`: else `GTA2_DIR`...), `--help` |
 
@@ -241,8 +241,9 @@ player's name, as far as all that fit agree; when several fit they show over the
    original lobby listed them; `/map` and Tab take the file names.
    The world stands still meanwhile: a tick runs only the players' own (the chat goes on) and the HUD, and the
    inputs are key events only, on the server and every client (`gPortWorldStill`); its sounds stop as in a pause.
-   Then the next round's fresh game, on the most chosen map (a tie: one of the tied, at random), else the rotation's next,
-   else the same map.
+   Then the next round's fresh game, on the most chosen map (a tie: one of the tied, drawn from the server's secret, as
+   its replay draws it), else the rotation's next, else the same map. The board and the still world stay through the
+   map change's pause, till that game's countdown.
 
 **Votes**: `/start` (end the warmup), `/map N` (change now; a round ends without a winner), `/kick NAME` (out, and the
 name turned away for 10 minutes). One at a time, open 20 s, decided by a majority of the people in the game (not
@@ -250,8 +251,10 @@ voting counts as no; the caller votes yes); Y or N while it shows (the keys that
 yes, or the pause menu's VOTE YES and VOTE NO. On a gamepad the warmup's and the vote's hints and notices point to the
 Start menu (`PadNotice`). `--votes` sets which are allowed.
 
-With `--rounds off` (the default with `--arena`) the round starts at once and the next follows its end directly, in
-the same game (everyone respawned with no score: `engine::NewRound`).
+With `--rounds off` (the default with `--arena`) the round starts at once, with no warmup. With bots only, the next
+follows its end directly, in the same game (everyone respawned with no score: `engine::NewRound`) or on the rotation's
+next map; with a person in, a round's end is the round flow's: the results, then the next round's fresh game and its
+countdown.
 The game's own end of a network game (its frag and time limits) can't be come back from on a dedicated server, so the
 game gets neither and the server ends rounds itself. A map change ends the game on the server and every client and
 starts the next at once: `winmain.cpp` asks the netcode (`gPortNextNetworkGame`) instead of going to the frontend.
@@ -298,11 +301,12 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   buffers them per tick and repeats a player's last input when one is late (its controls only: a repeated key would
   type twice), for 6 ticks at most: a client silent longer plays nothing, its player stands until it is back. It
   reports the newest command tick it has, and the client keeps its commands about two ticks early. The client paces
-  its ticks to keep them there (a quarter faster when late, a tenth or a fifth slower when early); commands a few
+  its ticks to keep them there (a quarter faster when late, a tenth or a fifth slower when early: only the wait between
+  them, the game's timers still count the server's tick length); commands a few
   ticks late are caught up by running the missing ticks at once, saved, and only more than 8 late or 20 early make it
   jump (its saves lost until snapshots of the new ticks come).
 - **Snapshots**, per client, every tick (`Server::SendSnapshot`): every player and the car each sits in, wherever they
-  are, and everything within the client's interest area (24 blocks around its player; a camera sees 6 to 8). Each
+  are, and everything within the client's interest area (24 blocks around its player's foci; a camera sees 6 to 8). Each
   entity is a delta against the state that client acknowledged for it (per-entity baselines, so a snapshot can carry
   part of the world and nothing waits for a lost packet). What doesn't fit the budget goes with the state the client
   already has and its age, a few bits. New state goes by priority: the age plus one over one plus a sixth of the
@@ -365,7 +369,7 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   punch (`ShowServerHit`, `engine/players.cpp`), which the client's own hits on an invulnerable ped don't give.
 - **The client's world** (`engine/replica.cpp`, `RemoveUnsent`, `EvictOwn`): a snapshot is all the client knows of the
   server's world. It carries every player, the car each sits in and every train wherever they are, and everything
-  within the reach (the interest area, 24 blocks around the client's player as the server has it), each entity the
+  within the reach (the interest area, 24 blocks around the client's player's foci as the server has them), each entity the
   client has acknowledged at least as its last state and its age when the budget is short: so nothing the client has
   inside the reach is ever left out, and what a snapshot lacks is gone on the server or out of the client's area,
   where nothing more will come for it. Hence:
@@ -427,6 +431,22 @@ the police's), not from the deaths the client's prediction starts. A client goes
 results, starts again with each round), and takes a player's count as it finds it the first time it sees the player. Scores (with the money and multiplier) are set before the resimulation, so its ticks and saves carry the server's
 (the HUD's rolling digits roll towards them), and again after it with power-up timers and the tag game's "it";
 a new round sets them all back to a game's start.
+
+**The interest follows the view** (`engine::PlayerFoci`): a player's foci are what its view camera follows and its own
+ped, when that is another. The game respawns a wasted or busted player's ped at once, at its restart zone, and shows its
+corpse or its arrested self (`Player::mAuxPed`, camera mode 2) until the death's countdown ends: the interest covers
+both, so the world around the death goes on in the view and the respawn's surroundings are there when the view jumps
+to them. The client's reach is the same foci of its own prediction.
+
+**The kill cam** (`engine::KillCamTicks`, `DeathCamera`; `gPortKillCamTicks`, `gPortDeathViewPed` in `Player.cpp`): a
+player wasted by another player sees its corpse zoomed in with WASTED for the original's 70 ticks, then its killer for
+90 more (the killer's own view: its corpse if it died meanwhile), then respawns. The killer is its slot, resolved each
+tick; a slot out of the game ends the kill cams on it (the corpse again). Each change of the ped followed (the start,
+the killer's respawn, a killer gone) cuts to one more than 6 blocks off, as the camera's own follow would cross the map
+slowly. Every wasted player's countdown has the 90 ticks, a killer or not, so the respawn's tick never depends on
+which killer each end found; only what the view follows does. The killer is in the rollback set, and from the death on
+the interest covers it too, so its surroundings are there at the cut. A death by anything else (the police, a fall, its
+own rocket) stays on the corpse; a busted player respawns as in the original.
 
 A ped's AI state is applied only while it is on foot on both sides (a driver in the same car gets its objectives but
 not its states), its states only when plain (walking, running, standing) on both sides, and all or nothing: if a
@@ -549,10 +569,26 @@ round trip rose) and a flush after every tick.
 Every client session is recorded (`session/recording.cpp`): the welcome, then per frame the packets, the round trip and
 the input, to `recordings/session-<n>.rec` (the newest 10, each stopped at 200 MB: one to a few hours;
 `GTA2_NET_RECORD=<file>` elsewhere, `off` none). A client does nothing but react to what arrives and to its own input,
-so `--replay <file>` plays the session again without a server, tick for tick, as fast as the game runs: a minute in
+so `--replay <file>` plays the session again without a server, tick for tick, as fast as the game runs (no wait between
+the ticks, each of the server's length for the game's timers): a minute in
 about 2 s, the same every time. **F12, or the key under Esc, marks a moment** in play: the client and its replay print
 `net: mark <n> at frame <f>`, so a bug seen in play is "the last session, mark 2". A recording replays only on a build
 of the same protocol (its welcome's version): another one's is refused with both numbers.
+
+**A server records its session too** (`session/recording.cpp`, `ServerRecorder`), to `recordings/server-<n>.rec` next to
+its data (the newest 10, each stopped at 200 MB; `GTA2_NET_RECORD=<file>` elsewhere, `off` none; a server that only
+plays its own bots, `--arena`, records only with `GTA2_NET_RECORD`). Its world is a function of what it takes in, so the
+recording is that: its command line, its `GTA2_NET_*` switches and the secret its session number and tokens are drawn
+from, then per frame the transport events it took (hellos, commands, chat and votes, connects and disconnects; the
+pings answered between frames are left out) and a checksum of its world after the frame (every entity's fields, as the
+snapshots have them). About 115 KB a minute with two players (12 bytes a tick, and some 50 KB a minute per player: a command packet a tick), 0.5 MB with ten, so 200 MB is six hours of a full server. `--replay <file>` sees a server's
+recording and plays that server again without the network, headless and as fast as it runs (two minutes in 4 s), with its command line and
+its switches (a switch set where it replays wins, so a log or a dump can be added after the fact); the stretches the
+server stood still with nobody connected aren't in it. It checks the world against the recording's at every tick and
+ends with `net: replayed <n> ticks: the world matches the recording's at every tick`, or the first tick that differs
+(exit code 1). `GTA2_NET_DUMPWORLD=<tick>[,<tick>...]` prints the server's world at those ticks (each entity's type,
+id and fields, by the snapshots' ids), live or in a replay, to set beside a client's replay by hand. The recording holds
+the secret the reconnect tokens come from: keep it as private as the server.
 
 ## Security
 
@@ -688,6 +724,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Hud.cpp` | `PortDrawPlayerNames` (`port/src/player_names.cpp`) | the names over the other players: centred over the ped (its car in one) where the frame draws it, by the drawn camera, at three quarters of the HUD's text size. The original's are placed by the game camera, which the frame doesn't draw between steps, and by the HUD's layout, whose edge anchors move them on wide screens |
 | `Hud.cpp` | `PortHudTextPalette` (`port/src/player_looks.hpp`) | the names over the players and the tag times in the port's looks' colours (the fonts have 9 remaps) |
 | `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
+| `Player.cpp` | `gPortKillCamTicks`, `gPortDeathViewPed` | the kill cam: a player wasted by another has a longer death countdown (`Player::Wasted`), whose end its view spends on the killer (`Player::Service`, camera mode 2) |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
 | `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
 | `Pool.hpp`, `Car.cpp`, `Char_Pool.cpp`, `Game.cpp` | `PortRand::Scope` (`port/src/rand/owner.hpp`) | who a random draw belongs to |
@@ -726,7 +763,8 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
 
 - **arena**: 24 bot matches of 5 minutes on the server alone (three maps, every brain, random seeds): none may crash.
 - **live**: a server and two bot clients at 100 ms, jitter and 2% loss, police on, with the grid check: no crash and
-  no `net: CHECK` line. Prints the corrections and the comparison check's worst fields.
+  no `net: CHECK` line, and the server's recording replays to the same world at every tick. Prints the corrections and
+  the comparison check's worst fields.
 - **churn**: two bot clients stay while two others join and leave four times (stopped by SIGTERM and Ctrl-C): no
   crash, no `CHECK` line, nobody turned away as the server being full.
 - **maps**: a three-map rotation, 15 s rounds at 4 times the clock: both clients follow every change.
@@ -776,7 +814,8 @@ off by default:
 
 | Variable | Where | Effect |
 |---|---|---|
-| `GTA2_NET_RECORD=<file>\|off` | client | the recording's file (default `recordings/session-<n>.rec`) |
+| `GTA2_NET_RECORD=<file>\|off` | both | the recording's file (default `recordings/session-<n>.rec`, a server's `recordings/server-<n>.rec`) |
+| `GTA2_NET_DUMPWORLD=<tick>[,<tick>...]` | server | every entity of the world at those ticks, with its fields (live or in a replay) |
 | `GTA2_NET_REPLAYON=<frames>` | replay | the game runs on that many frames after the recording ends, nothing arriving |
 | `GTA2_NET_STATS=1` | client | the connection beside the ping, over the last second: the snapshots lost (the server sends one a tick), received per second, the ticks the game runs ahead of the newest, and the ticks resimulated per rollback |
 | `GTA2_NET_NOFORWARD=1` | client | other players predicted by their repeated input only, not the forwarded controls |
@@ -790,7 +829,7 @@ off by default:
 | `GTA2_NET_JERKLOG=1\|2` | both | how jerky what is shown moves (2: and each jump), and how far its way is from its facing and how fast it turns (on a client also where the newest snapshots have the two agree) |
 | `GTA2_NET_MARKER=1` | client | a square where the newest snapshot has the local player |
 | `GTA2_NET_SFXLOG=1` (client), `=<slot>` (server) | both | every sample the mixer starts, by tick, what made it and where; a server with it opens its audio device and listens at that slot's player (to count what a client misses or plays twice) |
-| `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death and the server's hits on players, the sound's channels and the car radio |
+| `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death (and the cars around its view, its camera) and the server's hits on players, the sound's channels and the car radio |
 | `GTA2_NET_CARDIFF=1` | client | where the prediction of the local player's car differs from the snapshot |
 | `GTA2_NET_GANGLOG=1` | both | player 0's group every 15 ticks, by the server's ids |
 | `GTA2_NET_STACKLOG=1` | both | two cars in one place (under 0.4 blocks apart), once per pair: a car the client kept that the server dropped |

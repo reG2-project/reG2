@@ -92,7 +92,7 @@ bool ReceiveAll(int, void*, size_t)
 #endif
 } // namespace
 
-bool net::Arena::Start(const std::vector<std::string>& brains, std::string* error)
+bool net::Arena::Start(const std::vector<std::string>& brains, uint32_t seed, std::string* error)
 {
     for (const std::string& kind : brains)
     {
@@ -113,6 +113,7 @@ bool net::Arena::Start(const std::vector<std::string>& brains, std::string* erro
                 *error = "no teacher brain in " + kind;
                 return false;
             }
+            bot.teacher->Seed(seed + (uint32_t)mBots.size());
             continue;
         }
         bot.brain = CreateBotBrain(kind);
@@ -121,6 +122,7 @@ bool net::Arena::Start(const std::vector<std::string>& brains, std::string* erro
             *error = "no bot brain " + kind;
             return false;
         }
+        bot.brain->Seed(seed + (uint32_t)mBots.size());
     }
     return true;
 }

@@ -519,6 +519,11 @@ class HumanBot : public net::BotBrain
         return net::kBtnForward | (v.weapon == 8 ? net::kBtnAttack : 0); // the flamethrower: into its own flames
     }
 
+    void Seed(uint32_t seed) override
+    {
+        mRandom.seed(seed);
+    }
+
     static const char* const kNames[];
     int mOnly = -1;
     std::mt19937 mRandom{std::random_device{}()}; // not the game's random: that one is part of its state
