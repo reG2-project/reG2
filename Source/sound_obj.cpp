@@ -583,7 +583,7 @@ void sound_obj::ProcessCar(Sound_Params* pParams)
             if (pPed->mCar == pCar && !pPed->mGameObject && pPed->is_player() && pPed->mVoiceEvent == 4)
             {
                 pPed->TakeVoiceEvent();
-                PortPlayerDeathCry(pParams);
+                PortPlayerDeathCry(pParams, pPed);
                 break;
             }
         }
@@ -6114,7 +6114,7 @@ void sound_obj::HandlePedVoiceEvent(Sound_Params* pParams)
     // Port: a network game's player cries out at its death as the other peds do
     else if (voice == 4 && gPortPlayersDeathCry)
     {
-        PortPlayerDeathCry(pParams);
+        PortPlayerDeathCry(pParams, pPed);
         return;
     }
 #endif
@@ -6204,8 +6204,10 @@ void sound_obj::HandlePedVoiceEvent(Sound_Params* pParams)
 #if defined(GTA2_PORT)
 // Port: a network game's players cry out at their death (gPortPlayersDeathCry) as the other peds do in HandlePedVoiceEvent,
 // first in the mixer's queue (a priority of 0) so that the shots and impacts around a kill never push it out
-void sound_obj::PortPlayerDeathCry(Sound_Params* pParams)
+void sound_obj::PortPlayerDeathCry(Sound_Params* pParams, const Ped* pPed)
 {
+    // Another player's cry over the gunfire around a kill; the local player's own as a ped's
+    const s32 volume = pPed && pPed->mPlayer && pPed->mPlayer != gGame_0x40->mLocalPlayer ? 55 : 35;
     gPortSoundStats.cryAsked++;
     if (!CalculateDistance(Fix16(81)))
     {
@@ -6216,7 +6218,7 @@ void sound_obj::PortPlayerDeathCry(Sound_Params* pParams)
         }
         return;
     }
-    if (!VolCalc(35, Fix16(9), pParams->mbHasSolidAbove))
+    if (!VolCalc(volume, Fix16(9), pParams->mbHasSolidAbove))
     {
         gPortSoundStats.crySilent++;
         if (gPortDeathCryHook)
@@ -6227,7 +6229,7 @@ void sound_obj::PortPlayerDeathCry(Sound_Params* pParams)
     }
     msQueueSample.mSampIdx = manRandomTable[static_cast<u32>(msQueueSample.mEntityIndex) % 5] % 5 + 228;
     msQueueSample.mSoundIntensity = Fix16(9);
-    msQueueSample.mnEmittingVolume = 35;
+    msQueueSample.mnEmittingVolume = volume;
     msQueueSample.mMaxDistance = 18;
     msQueueSample.mRate =
         gSampManager.GetPlayBackRate(msQueueSample.mSampIdx) + RandomDisplacement(msQueueSample.mSampIdx);

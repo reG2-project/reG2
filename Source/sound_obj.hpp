@@ -11,6 +11,9 @@ class Object;
 class gmp_map_zone;
 class CollisionEvent;
 class SoundObject;
+#if defined(GTA2_PORT)
+class Ped;
+#endif
 
 class SoundPos
 {
@@ -374,7 +377,7 @@ class sound_obj
     EXPORT void ProcessPed(Sound_Params* pParams);
     EXPORT void HandlePedVoiceEvent(Sound_Params* pParams);
 #if defined(GTA2_PORT)
-    void PortPlayerDeathCry(Sound_Params* pParams);
+    void PortPlayerDeathCry(Sound_Params* pParams, const Ped* pPed);
 #endif
 
     EXPORT void ResetRadioMessageState();
