@@ -96,6 +96,7 @@ struct MapChange
     uint16_t game = 0; // the server's game on it (its snapshots' world.game)
     uint8_t players = 0; // that game's (the map's, at most the server's slots)
     uint8_t slot = 0; // the client's player index in it: the slots are renumbered from 0 (netcode.md, "Maps and players")
+    uint32_t endTick = 0; // the server tick the old game ends at: the client's ends at the same tick of its own
 };
 
 struct InputCmd

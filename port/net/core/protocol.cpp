@@ -290,6 +290,7 @@ void net::WriteMapChange(BitWriter& w, const MapChange& m)
     w.Bits(m.game, 16);
     w.Bits(m.players, BitsFor(kMaxPlayers));
     w.Bits(m.slot, BitsFor(kMaxPlayers));
+    w.VarU(m.endTick);
 }
 
 bool net::ReadMapChange(BitReader& r, MapChange& m)
@@ -299,6 +300,7 @@ bool net::ReadMapChange(BitReader& r, MapChange& m)
     m.game = (uint16_t)r.Bits(16);
     m.players = (uint8_t)r.Bits(BitsFor(kMaxPlayers));
     m.slot = (uint8_t)r.Bits(BitsFor(kMaxPlayers));
+    m.endTick = r.VarU();
     return ok && !r.Overflow() && m.players >= 1 && m.players <= kMaxPlayers;
 }
 

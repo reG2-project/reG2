@@ -41,7 +41,7 @@ void net::engine::NewRound()
 
 namespace
 {
-int gExitTicks; // the pause left before a map change ends the game
+uint32_t gEndTick; // the netcode tick a map change ends the game after
 } // namespace
 
 std::string net::engine::MissingMapFile(const std::string& gmp, const std::string& sty, const std::string& scr)
@@ -76,20 +76,21 @@ uint32_t net::engine::DataFileCrc(const std::string& name)
     return crc;
 }
 
-void net::engine::ChangeMap(const std::string& gmp, const std::string& sty, const std::string& scr, int players, int localPlayer, int pauseTicks)
+void net::engine::ChangeMap(const std::string& gmp, const std::string& sty, const std::string& scr, int players, int localPlayer, uint32_t tick,
+                            uint32_t endTick)
 {
     SetNextMap(gmp, sty, scr, players, localPlayer);
-    gExitTicks = pauseTicks;
-    KeepMapChange();
+    gEndTick = endTick;
+    KeepMapChange(tick);
 }
 
 // The game's exit timer, set again every frame: a client's restore brings back a game that wasn't ending
-void net::engine::KeepMapChange()
+void net::engine::KeepMapChange(uint32_t tick)
 {
     if (MapChangePending() && gGame_0x40)
     {
-        gGame_0x40->ExitGameNoBonus(gExitTicks, GameExitType::MultiplayerExit_5); // only ever sooner
-        gExitTicks = gExitTicks > 1 ? gExitTicks - 1 : 1;
+        // A network game's timer counts twice a tick (Game::ExecuteGame and do_network_and_local_inputs); only ever sooner
+        gGame_0x40->ExitGameNoBonus(tick < gEndTick ? (s32)(2 * (gEndTick - tick)) : 0, GameExitType::MultiplayerExit_5);
     }
 }
 

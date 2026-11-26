@@ -338,6 +338,7 @@ void TestMessages()
     mc.game = 513;
     mc.players = (uint8_t)net::kMaxPlayers;
     mc.slot = (uint8_t)(net::kMaxPlayers - 1);
+    mc.endTick = 123456789;
     net::BitWriter mw;
     net::WriteMapChange(mw, mc);
     net::BitReader mr(mw.Data().data(), mw.ByteCount());
@@ -345,7 +346,7 @@ void TestMessages()
     net::MapChange mgot;
     CHECK(net::ReadMapChange(mr, mgot) && mgot.gmp == mc.gmp && mgot.sty == mc.sty && mgot.scr == mc.scr && mgot.game == 513 && mgot.map == mc.map &&
           mgot.print.sty == 12345 && mgot.print.gmp == 0 && mgot.players == net::kMaxPlayers &&
-          mgot.slot == net::kMaxPlayers - 1);
+          mgot.slot == net::kMaxPlayers - 1 && mgot.endTick == 123456789);
 
     // The last two have a key press: what it typed follows each (0xE9: an AZERTY's é)
     net::InputCmd cmds[5] = {{100, 1, 0}, {101, 1, 0}, {102, 0x10, 0}, {103, 0x3FFFFF, 0xE9}, {104, 0x3FFFFF, 'q'}};

@@ -128,10 +128,10 @@ class Client
     void FastForward(int ticks); // the ticks a jump forward skips, run at once, saved
     void AnnounceRound();
     void OnMapChange(BitReader& r);
-    // The server's game on <scr> (number <game>, of <players>, ours <slot>): this one ends after <pauseTicks> and that
+    // The server's game on <scr> (number <game>, of <players>, ours <slot>): this one ends after our <endTick> and that
     // one starts; false, and we left to the menu, if this machine hasn't the map's files as the server has them
     bool ChangeGame(const std::string& map, const std::string& gmp, const std::string& sty, const std::string& scr, const MapPrint& print,
-                    int game, int players, int slot, int pauseTicks);
+                    int game, int players, int slot, uint32_t endTick);
     void StartOver(); // a new game (the next map): synced again from its first snapshot
     void Resync(const Snapshot& snap);
     void Reconcile(const Snapshot& snap);

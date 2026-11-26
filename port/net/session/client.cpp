@@ -18,6 +18,7 @@ namespace
 {
 const int kSaves = 32; // ticks a snapshot may be behind and still be reconciled (about 1 s)
 const int kMaxFastForward = 8; // ticks our commands may come late and be caught up at once (FastForward); more: a jump
+const uint32_t kMaxMapChangePause = 300; // ticks a map change's end may be off; further: a bad end tick
 const int kMaxAhead = 20; // ticks our commands may be early beyond two before a jump back; from 12 on, slower pacing
 const int kStallMs = 700; // no snapshot for this long: the connection is out (ENet drops it after 5 to 10 s)
 const int kReconnectMs = 3000; // between attempts to connect again
@@ -1044,18 +1045,20 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
     }
 }
 
-// The server's next map: this game ends with the server's (after the same pause) and the next starts on it
+// The server's next map: this game ends at the server's end tick, as the server's does, and the next starts on it
 void net::Client::OnMapChange(BitReader& r)
 {
     MapChange m;
     if (ReadMapChange(r, m))
     {
-        ChangeGame(m.map, m.gmp, m.sty, m.scr, m.print, m.game, m.players, m.slot, 90);
+        // Not synced, our ticks don't run: at once
+        const uint32_t end = mSynced ? std::min(m.endTick, mTick + kMaxMapChangePause) : 0;
+        ChangeGame(m.map, m.gmp, m.sty, m.scr, m.print, m.game, m.players, m.slot, end);
     }
 }
 
 bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, const std::string& sty, const std::string& scr, const MapPrint& print,
-                             int game, int players, int slot, int pauseTicks)
+                             int game, int players, int slot, uint32_t endTick)
 {
     std::string missing;
     if (players <= slot)
@@ -1071,7 +1074,7 @@ bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, con
         return false;
     }
     printf("net: frame %u, tick %u (%lld ms), the next map: %s%s\n", mFrame, mTick, NowMs(), scr.c_str(), slot != mSlot ? (", as player " + std::to_string(slot)).c_str() : "");
-    engine::ChangeMap(gmp, sty, scr, players, slot, pauseTicks);
+    engine::ChangeMap(gmp, sty, scr, players, slot, mTick, endTick);
     mNextSlot = slot;
     mScr = scr;
     mMapTitle = MapTitle(map);
@@ -1406,7 +1409,7 @@ void net::Client::Rejoined(const Welcome& welcome)
         LeaveToMenu("the server has us back as another player");
         return;
     }
-    if (otherGame && !ChangeGame(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, welcome.game, welcome.players, welcome.slot, 1))
+    if (otherGame && !ChangeGame(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, welcome.game, welcome.players, welcome.slot, 0))
     {
         return;
     }
@@ -1549,7 +1552,7 @@ void net::Client::Frame()
 void net::Client::Step()
 {
     mFrame++;
-    engine::KeepMapChange();
+    engine::KeepMapChange(mTick);
     if (engine::GameGeneration() != mGeneration)
     {
         StartOver();

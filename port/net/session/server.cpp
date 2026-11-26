@@ -1317,6 +1317,10 @@ void net::Server::ChangeToMap(int map)
     change.scr = m.scr;
     change.game = (uint16_t)(engine::GameGeneration() + 1);
     change.players = (uint8_t)mSlots.size();
+    // A fresh game of the round flow's (its countdown next) comes after its results: a quarter second for the clients to
+    // hear of it. Else (an arena's rotation, bots only) the pause shows the winner. The new game's first tick is 1 after
+    const int pause = mRounds.State().phase == kPhaseCountdown ? 7 : 45;
+    change.endTick = mTick + (uint32_t)pause;
     for (size_t i = 0; i < mSlots.size(); i++)
     {
         if (mSlots[i].used && mSlots[i].peer != kArenaPeer)
@@ -1327,9 +1331,7 @@ void net::Server::ChangeToMap(int map)
             mTransport->Send(mSlots[i].peer, kChannelReliable, w.Data().data(), w.ByteCount(), true);
         }
     }
-    // A fresh game of the round flow's (its countdown next) comes after its results: half a second for the clients to
-    // hear of it. Else (an arena's rotation, bots only) the pause shows the winner
-    engine::ChangeMap(m.gmp, m.sty, m.scr, (int)mSlots.size(), 0, mRounds.State().phase == kPhaseCountdown ? 15 : 90);
+    engine::ChangeMap(m.gmp, m.sty, m.scr, (int)mSlots.size(), 0, mTick, change.endTick);
 }
 
 void net::Server::Shutdown()
@@ -1415,7 +1417,7 @@ void net::Server::PrintStats(const Snapshot& world)
 void net::Server::Frame()
 {
     mTick++; // the tick that just ran
-    engine::KeepMapChange();
+    engine::KeepMapChange(mTick);
     if (engine::GameGeneration() != mGeneration)
     {
         StartOver();

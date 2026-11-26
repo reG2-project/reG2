@@ -223,10 +223,10 @@ void AddChatLine(const std::string& line);
 void SetNetPanel(const std::vector<std::string>& lines);
 // One line drawn large in the middle of the frame (the game's message font) until changed; empty: none
 void SetNetBanner(const std::string& text);
-// The next map, a game of <players> with this machine's as <localPlayer>: this one ends after <pauseTicks> and that one starts at once, without the frontend
-// (winmain.cpp, gPortNextNetworkGame); KeepMapChange every frame until then. GameGeneration counts the games, for
-// the session to start over when it changes
-void ChangeMap(const std::string& gmp, const std::string& sty, const std::string& scr, int players, int localPlayer, int pauseTicks);
+// The next map, a game of <players> with this machine's as <localPlayer>: this one ends after the netcode's <endTick>
+// (<tick> now) and that one starts at once, without the frontend (winmain.cpp, gPortNextNetworkGame); KeepMapChange
+// every frame until then. GameGeneration counts the games, for the session to start over when it changes
+void ChangeMap(const std::string& gmp, const std::string& sty, const std::string& scr, int players, int localPlayer, uint32_t tick, uint32_t endTick);
 // The first of a map's files that isn't in data/ (the game's fatal error if it opened it); empty: all are
 std::string MissingMapFile(const std::string& gmp, const std::string& sty, const std::string& scr);
 // data/<name>'s CRC-32, read as the game opens it (0: it can't be read)
@@ -237,7 +237,7 @@ void LeaveForMenu();
 bool LeftForMenu();
 bool GameClosed(); // the game ended by closing (its window): the program ends
 void StopNetworkGame();
-void KeepMapChange();
+void KeepMapChange(uint32_t tick); // the netcode's tick that just ran
 int GameGeneration();
 int SnapshotGame(const Snapshot& snap); // the server's GameGeneration at it (-1: no world in it)
 bool MapChangePending();

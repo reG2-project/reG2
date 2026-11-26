@@ -6,8 +6,9 @@
 #   churn   two bot clients staying while two others join and leave, four times (stopped: SIGTERM, Ctrl-C): no
 #           crash, no CHECK line, nobody turned away as the server being full
 #   rounds  the round flow: two bot clients ready up, play a round, vote for the next map and follow; a third joins late
-#   maps    a map rotation, a round of 15 s each (the clock 4 times as fast): two bot clients follow every map change and
-#           play the resimulated ticks' sounds on a later map, no crash, no CHECK line
+#   maps    a map rotation, a round of 15 s each (the clock 4 times as fast): two bot clients follow every map change,
+#           ending the old game within 3 ticks of the server, and play the resimulated ticks' sounds on a later map, no
+#           crash, no CHECK line
 #   soak    a server and three bot clients, the clock 10 times as fast: 10 minutes of play in 60 s, no crash
 #   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown as the
 #           server has it at that tick, with its outcome, and hears a player's flying death land as the server does (no thud)
@@ -170,7 +171,7 @@ maps() {
   sleep $secs
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
-  local changes crashes checks followed=1 heard=1 gunfire=1 b
+  local changes crashes checks followed=1 heard=1 gunfire=1 aligned=1 b
   changes=$(grep -c "), the next map:" "$OUT/maps_server.log")
   crashes=$(grep -l "crashed" "$OUT"/maps_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/maps_*.log | grep -c "net: CHECK")
@@ -179,6 +180,10 @@ maps() {
     [ $(grep -c "a new game" "$OUT/maps_$b.log") -ge $((changes - 1)) ] || followed=0
     # the sound log plays the resimulated ticks' sounds on a later map too (its ticks are that map's game cycle)
     awk '/a new game/ { n++ } /net: [1-9][0-9]* sounds of the resimulated ticks played/ && n { ok = 1 } END { exit !ok }' "$OUT/maps_$b.log" || heard=0
+    # Each map change's old game ends on the client within 3 ticks of the server's (its tick, which runs its lead ahead)
+    awk 'NR == FNR { if (/\), a new game/) { s[++n] = $3 + 0 } next } /\), a new game/ { c = $5 + 1; d = c - s[++m]; if (m <= n && (d > 3 || d < -3)) {
+           bad = 1; print "  maps: m_'$b' started map change " m " at tick " c ", the server at " s[m] } } END { exit bad || !m }' \
+      "$OUT/maps_server.log" "$OUT/maps_$b.log" || aligned=0
   done
   # On every later map m_rammer hears the others' gunfire as the server's listener at its place does: at least half
   # the shots' samples of a map the server heard 20 of (the last map's, maybe cut short, not counted)
@@ -190,10 +195,10 @@ maps() {
     awk 'NR == FNR { s[$1] = $2; next } ($1 in s) && s[$1] >= 20 && $2 * 2 < s[$1] { bad = 1; print "  maps: map " $1 + 1 ", the others gunfire: " $2 " samples for m_rammer, " s[$1] " for the server" }
          END { exit bad }' "$OUT/maps_gunfire_server.txt" "$OUT/maps_gunfire_client.txt" || gunfire=0
   fi
-  if [ "$changes" -lt 3 ] || [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $followed = 0 ] || [ $heard = 0 ] || [ $gunfire = 0 ]; then
-    fail "maps: $changes map changes, clients followed: $followed, resimulated sounds on a later map: $heard, the others' gunfire heard: $gunfire, $crashes crashed, $checks CHECK lines ($BUILD/net_check/maps_*.log)"
+  if [ "$changes" -lt 3 ] || [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $followed = 0 ] || [ $aligned = 0 ] || [ $heard = 0 ] || [ $gunfire = 0 ]; then
+    fail "maps: $changes map changes, clients followed: $followed, at the server's tick: $aligned, resimulated sounds on a later map: $heard, the others' gunfire heard: $gunfire, $crashes crashed, $checks CHECK lines ($BUILD/net_check/maps_*.log)"
   else
-    pass "maps: $changes map changes, both clients followed, both played the resimulated ticks' sounds on a later map, m_rammer heard the others' gunfire there as the server did"
+    pass "maps: $changes map changes, both clients followed at the server's tick, both played the resimulated ticks' sounds on a later map, m_rammer heard the others' gunfire there as the server did"
   fi
 }
 

@@ -267,7 +267,11 @@ The game's own end of a network game (its frag and time limits) can't be come ba
 game gets neither and the server ends rounds itself. A map change ends the game on the server and every client and
 starts the next at once: `winmain.cpp` asks the netcode (`gPortNextNetworkGame`) instead of going to the frontend.
 Until then the game's exit timer is set again every frame (`KeepMapChange`): a client's restore brings back a game
-that wasn't ending.
+that wasn't ending. The server's `kMsgMapChange` names the tick its game ends after (7 ticks on before a round's fresh
+game, 45 in an arena's rotation: the new game starts 8 and 46 ticks after the change), and a client's game ends after
+the same tick of its own, which runs its lead ahead: it loads the next map with the server and takes that game's first
+snapshots as they come, at its usual lead. A client that hears of it too late, or isn't synced, ends at once; one that
+loads slowly syncs later.
 
 ## How it works
 
@@ -716,7 +720,7 @@ A little-endian bitstream (`core/bitstream.cpp`), never a copy of a struct: clie
 | `kMsgLeave` | reliable | why a client leaves (its copy of the map differs) |
 | `kMsgCommands` | unreliable | the last few commands (tick and input bits, each delta-coded against the one before; a key press with the character it typed) and the newest snapshot the client has |
 | `kMsgSnapshot`, `kMsgSnapshotPart` | unreliable | server tick, the baseline it is made against, the other players' forwarded controls, entities with field masks and changed fields (`core/snapshot.cpp`) |
-| `kMsgMapChange` | reliable | the next map, after a round, with its files' CRC-32s, the players of its game and the client's slot in it |
+| `kMsgMapChange` | reliable | the next map, after a round, with its files' CRC-32s, the players of its game, the client's slot in it and the server tick the old game ends at |
 | `kMsgPing`, `kMsgPong` | unreliable | the client's clock, sent back at once, and its ping |
 | `kMsgPings` | unreliable | once a second, every player's ping for the scoreboard: the one its client reported (ENet's round trip until it has), or a bot |
 | `kMsgCommand`, `kMsgNotice` | reliable | a player's command; a line to show (a vote, a player ready) |
