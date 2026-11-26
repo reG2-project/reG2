@@ -251,16 +251,27 @@ bool net::engine::Differs(const Snapshot& snap)
     return differs || std::accumulate(missing, missing + 8, (uint64_t)0) != 0; // or one it has that this game lacks
 }
 
+namespace
+{
+void RandMarker(uint32_t tick);
+}
+
 void net::engine::ComparePrediction(const Snapshot& snap)
 {
+    RandMarker(snap.tick);
     EnsureTally(gTally);
     Snapshot here;
     Capture(here);
-    ForEachPair(snap, here, [](const EntityState& s, const EntityState& h, int group) {
+    ForEachPair(snap, here, [&snap](const EntityState& s, const EntityState& h, int group) {
         if (s.type == kEntityWorld && gStreamSnaps++) // the first: drawn before this client had any of the server's
         {
-            gStreamSame += h.f[kWorldRand] == s.f[kWorldRand];
+            const bool same = h.f[kWorldRand] == s.f[kWorldRand];
+            gStreamSame += same;
             gStreamCompared++;
+            if (!same)
+            {
+                printf("net: the game's random stream isn't the server's at tick %u\n", snap.tick);
+            }
         }
         std::vector<FieldTally>& tally = group ? gTally[NetSchema().types.size() + group - 1] : gTally[s.type];
         for (size_t f = 0; f < tally.size(); f++)
@@ -449,6 +460,19 @@ void net::engine::StartRandLog()
     gRandLog = fopen(path.c_str(), "w");
     PortRand::gLog = gRandLog ? LogRand : NULL;
 }
+
+namespace
+{
+// A client's line before the snapshot of <tick> is compared: the draws of that tick above it are the ones it compares
+void RandMarker(uint32_t tick)
+{
+    net::engine::StartRandLog();
+    if (gRandLog)
+    {
+        fprintf(gRandLog, "M %u\n", tick);
+    }
+}
+} // namespace
 
 void net::engine::PrintDivergence()
 {

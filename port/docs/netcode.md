@@ -1104,7 +1104,8 @@ tick, then runs on its own; each later snapshot is compared with its save of tha
 field after how many ticks each entity first differed. Below the fields, `GTA2_NET_DUMPPEDS` dumps every ped's bytes
 on both ends (`port/net/scripts/ped_diff.py` names the members that differ) and `GTA2_NET_RANDLOG` each `rand()` draw's
 caller and whether an owner drew it (`port/net/scripts/rand_diff.py` counts them per tick and function, `--stream` the
-game's stream's only).
+game's stream's only). With `GTA2_NET_COMPARE` a client logs them too, prints each tick at which the game's stream isn't the
+server's, and `rand_diff.py --tick <tick>` lists that tick's stream draws on both ends.
 
 ### Environment variables
 
