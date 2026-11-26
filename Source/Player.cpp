@@ -1,7 +1,10 @@
 #include "Player.hpp"
 #if defined(GTA2_PORT)
-// Port: the autosave's restore, TWIN STICK, the network players' HUD colours and the network game's kill cam.
+// Port: the autosave's restore, TWIN STICK, the network players' HUD colours, the network game's kill cam and corpses.
 #include "../port/src/net_hooks.hpp"
+#include "char.hpp"
+#include "char_anim_state_more.hpp"
+#include "char_b4_state_more.hpp"
 #include "../port/src/saves.hpp"
 #include "../port/src/twin_stick.hpp"
 #include "../port/src/player_looks.hpp"
@@ -1766,6 +1769,28 @@ static void FreeOrKeepCorpse(Ped* pCorpse)
     pCorpse->mId = gPedId++;
     gPortCorpseKept(pCorpse);
 }
+
+// Port: in a network game the corpse (a new char) falls as a ped shot dead does (Char::UpdateDead): from the side the
+// player on its feet was hit, or on with the fall it is in; one knocked down otherwise keeps the original's pose
+static void CorpseFallsAsHit(Ped* pCorpse, Ped* pPlayerPed)
+{
+    Char* pFrom = pPlayerPed->mGameObject;
+    Char* pTo = pCorpse->mGameObject;
+    if (!pFrom || !pTo || (pFrom->mCharState != Char_B4_state::Hit_From_Front_33 && pFrom->mCharState != Char_B4_state::Hit_From_Behind_34))
+    {
+        return;
+    }
+    if (pFrom->mAnimationState == Char_Anim_state::Knocked_Down_Hit_Front_15 || pFrom->mAnimationState == Char_Anim_state::Knocked_Down_Hit_Behind_16)
+    {
+        pTo->mCharState = pFrom->mCharState;
+        pTo->mAnimationState = pFrom->mAnimationState;
+        pTo->mAnimationFrame = pFrom->mAnimationFrame;
+    }
+    else if (pFrom->mPedState1 != ped_state_1::immobilized_8)
+    {
+        pTo->mCharState = pFrom->mCharState;
+    }
+}
 #endif
 
 MATCH_FUNC(0x567130)
@@ -1845,6 +1870,10 @@ void Player::Wasted()
             // A full ped pool (ClonePed): no corpse, the camera goes with the respawn
             if (mAuxPed)
             {
+            if (bStartNetworkGame)
+            {
+                CorpseFallsAsHit(mAuxPed, mPlayerPed);
+            }
 #endif
             mAuxPed->mSelectedWeapon = NULL;
             mAuxPed->mId = 0;

@@ -443,6 +443,12 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   corpse adopts a corpse). The two countdowns end a few ticks apart: a server's corpse waits while the client still has
   the player's there (made, it would die again), and a client's own waits 30 ticks for the server's before it goes as
   any of its own. A corpse in a car goes as in the original. Single player keeps the original's.
+- **A player's death falls** (`CorpseFallsAsHit` in `Player::Wasted`): the original's corpse is a new char, so a player
+  killed on its feet goes from standing to a lying pose at once, where a ped shot dead falls back first
+  (`Char::UpdateDead`: `Knocked_Down_Hit_Front_15` or `_Behind_16`, 8 frames, then a lying pose). In a network game
+  the corpse takes the player's hit side (`Char::mCharState`), or the fall it is in, and falls as a ped does, on both
+  ends; a client's resimulation starts it from the frame the server is at. One knocked down when it dies keeps the
+  original's pose. Single player keeps the original's.
 - **A player's pull out of its car is predicted** (it can be undone, unlike a death): a jacker the client predicts, its own
   player or another, pulls the seated player out at the door as the game does. While the server's jacker is still on
   its way in, the pull stands (its victim stays where the pull put it, not in the server's seat); once the server's
