@@ -16,6 +16,7 @@ const net::SessionEnv& net::Env()
         e.inputLog = getenv("GTA2_NET_INPUTLOG") != NULL;
         e.fwdLog = getenv("GTA2_NET_FWDLOG") != NULL;
         e.frameLog = getenv("GTA2_NET_FRAMELOG") != NULL;
+        e.paceLog = getenv("GTA2_NET_PACELOG") != NULL;
         e.jerkLog = getenv("GTA2_NET_JERKLOG") ? (atoi(getenv("GTA2_NET_JERKLOG")) >= 2 ? 2 : 1) : 0;
         e.noForward = getenv("GTA2_NET_NOFORWARD") && atoi(getenv("GTA2_NET_NOFORWARD"));
         e.holdFire = getenv("GTA2_NET_HOLDFIRE") && atoi(getenv("GTA2_NET_HOLDFIRE"));

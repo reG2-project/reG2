@@ -44,6 +44,7 @@ void SetPlayerTyped(int player, uint32_t buttons, uint16_t typed);
 uint16_t TypedChar(uint32_t buttons); // a client's: the character its key press in <buttons> typed here (0: none)
 // The length of a network tick (the game's own setting offers 50, 40 or 33 ms)
 void SetTickMs(int ms);
+long long GameNowUs(); // the game's clock (GTA2_SPEED's), in microseconds
 void SetPaceUs(int us); // the time between two steps, apart from their game length (0: no waiting, -1: that length)
 // The client's pause menu (port/src/pause_menu.cpp), over the game going on: Escape opens it, a key while open is its own
 // (with the character it typed), and what was chosen in it is taken once

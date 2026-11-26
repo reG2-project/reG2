@@ -19,7 +19,7 @@ namespace
 const int kSaves = 32; // ticks a snapshot may be behind and still be reconciled (about 1 s)
 const int kMaxFastForward = 8; // ticks our commands may come late and be caught up at once (FastForward); more: a jump
 const uint32_t kMaxMapChangePause = 300; // ticks a map change's end may be off; further: a bad end tick
-const int kMaxAhead = 20; // ticks our commands may be early beyond two before a jump back; from 12 on, slower pacing
+const int kMaxAhead = 20; // ticks our commands may be early beyond two before a jump back
 const int kStallMs = 700; // no snapshot for this long: the connection is out (ENet drops it after 5 to 10 s)
 const int kReconnectMs = 3000; // between attempts to connect again
 const int kGiveUpMs = 30000; // reconnecting this long: the server is gone, back to the menu
@@ -73,6 +73,7 @@ void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
     pGame->timeLimitMin = welcome.timeLimitMin;
     pGame->tickMs = welcome.tickMs;
     mTickMs = welcome.tickMs ? welcome.tickMs : 33;
+    mPacer.Reset(mTickMs * 1000);
     mGameType = welcome.gameType;
     mFragLimit = (int)welcome.fragLimit;
     pGame->police = welcome.police;
@@ -405,6 +406,11 @@ void net::Client::OnSnapshot(BitReader& r)
     mLink.snapshots++;
     mSlack = (int)h.lastCmdTick - (int)(h.tick + 1);
     mSlackKnown = mSynced && h.lastCmdTick > mJumpTick; // it has heard of the ticks since our last jump
+    mPacer.OnSnapshot(engine::GameNowUs(), h.tick);
+    if (mSlackKnown)
+    {
+        mPacer.OnSlack(mSlack);
+    }
     mNewSnapshot = true;
     mLastSnapshotMs = NowMs();
 }
@@ -1322,16 +1328,16 @@ void net::Client::PrintStats(const Snapshot& snap)
     mStats = Stats();
 }
 
-// Keep our commands about two ticks early: a little faster when they are late, slower when far ahead
-int net::Client::PacedTickMs() const
+// Our ticks at the server's measured rate, slower or faster as our commands are early or late (pacing.hpp)
+int net::Client::PacedTickUs()
 {
-    if (!mSynced || !mSlackKnown)
+    const int us = mPacer.NextUs(mSynced && mSlackKnown);
+    if (Env().paceLog && mTick % 30 == 0)
     {
-        return mTickMs;
+        printf("net: frame %u, pace: our commands %d ticks early (%.2f on average%s), the server's tick %.2f ms, ours %.2f ms\n", mFrame,
+               mSlack, mPacer.SlackAverage(), mPacer.SlackKnown() ? "" : ", not counted", mPacer.ServerTickUs() / 1000, us / 1000.0);
     }
-    // Late: a quarter faster; far ahead: a fifth slower, before it comes to a jump (kMaxAhead); 3 or more: a tenth slower,
-    // as every tick early lengthens the prediction of the others (a server that lost ticks leaves us there)
-    return mSlack < 1 ? mTickMs * 3 / 4 : mSlack - 2 > 12 ? mTickMs + mTickMs / 5 : mSlack > 2 ? mTickMs + mTickMs / 10 : mTickMs;
+    return us;
 }
 
 // The next tick's inputs: ours (predicted and sent), the others' last known
@@ -1645,7 +1651,7 @@ void net::Client::Step()
     }
     mProbe.Jerk(mFrame, mSlot, mSynced, mReceived[mLatestTick % kRing], mReceived[(mLatestTick - 1) % kRing]);
     engine::SetTickMs(mTickMs); // every frame: a restore brings back the game's tick length too
-    engine::SetPaceUs(mReplay ? 0 : PacedTickMs() * 1000); // the server's tick length in the game, only the wait paced
+    engine::SetPaceUs(mReplay ? 0 : PacedTickUs()); // the server's tick length in the game, only the wait paced
     SetNextInputs(local);
     if (mSynced)
     {

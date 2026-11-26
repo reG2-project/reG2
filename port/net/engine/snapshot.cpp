@@ -269,6 +269,7 @@ void net::engine::OfferMenu(int ready, const std::string& vote)
 
 bool port_PadMode(); // compat/src/pad.cpp
 double port_ClockSpeed(); // compat/src/kernel.cpp: GTA2_SPEED
+unsigned long long port_NowNs(); // compat/src/video_port.cpp
 
 void net::engine::SetRoundPad(bool results)
 {
@@ -311,6 +312,11 @@ void net::engine::SetTickMs(int ms)
     {
         gGame_0x40->mNetworkFrameMs = ms; // Game::GetFrameDurationMs in network games
     }
+}
+
+long long net::engine::GameNowUs()
+{
+    return (long long)(port_NowNs() / 1000);
 }
 
 void net::engine::SetPaceUs(int us)

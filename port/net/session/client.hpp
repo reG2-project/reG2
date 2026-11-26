@@ -7,6 +7,7 @@
 #include "../dev/client_probe.hpp"
 #include "bot.hpp"
 #include "link_warning.hpp"
+#include "pacing.hpp"
 #include "recording.hpp"
 #include "round_flow.hpp"
 #include "session.hpp"
@@ -142,7 +143,7 @@ class Client
     void Blend(const std::vector<engine::Pose>& shown);
     void RecordShown(); // what this tick shows, once its snapshot's correction is blended in (the display error)
     void PrintStats(const Snapshot& snap);
-    int PacedTickMs() const;
+    int PacedTickUs();
     void SetNextInputs(uint32_t local);
     void SendCommands();
     uint32_t Lead() const; // ticks to run ahead of the newest snapshot
@@ -186,6 +187,7 @@ class Client
     uint32_t mTakenTick = 0; // the newest snapshot this game took (our ack: the server counts us in the game by it)
     int mSlack = 0; // how many ticks early our commands reach the server (newest command - next tick)
     bool mSlackKnown = false;
+    Pacer mPacer;
     uint32_t mJumpTick = 0; // our tick at the last jump
     bool mNewSnapshot = false;
 

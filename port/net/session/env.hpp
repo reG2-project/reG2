@@ -14,6 +14,7 @@ struct SessionEnv
     bool corrLog, animLog, inputLog;
     bool fwdLog; // GTA2_NET_FWDLOG: at each snapshot, the other players' controls the server forwarded
     bool frameLog; // GTA2_NET_FRAMELOG: each frame's time, its step's and its reconciliation's
+    bool paceLog; // GTA2_NET_PACELOG: every 30 ticks, a client's slack, the server's measured tick and its own pace
     bool compare; // the comparison check: the prediction against each snapshot, field by field
     bool stats; // GTA2_NET_STATS: a client shows its loss, snapshot rate, lead and resimulation with the ping
     bool snapCheck; // GTA2_NET_SNAPCHECK: the server adds each entity's hash to its snapshots, a client checks them

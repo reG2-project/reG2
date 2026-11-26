@@ -312,9 +312,11 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
 - **Commands** carry the server tick they are for and repeat the last few, so a lost packet loses no input. The server
   buffers them per tick and repeats a player's last input when one is late (its controls only: a repeated key would
   type twice), for 6 ticks at most: a client silent longer plays nothing, its player stands until it is back. It
-  reports the newest command tick it has, and the client keeps its commands about two ticks early. The client paces
-  its ticks to keep them there (a quarter faster when late, a tenth or a fifth slower when early: only the wait between
-  them, the game's timers still count the server's tick length); commands a few
+  reports the newest command tick it has, and the client keeps its commands one to two ticks early. The client paces
+  its ticks to keep them there (`session/pacing.cpp`): at the server's tick rate as its snapshots' least delayed
+  arrivals measure it (a slow or loaded server, a clock drift), 5% slower per tick of lead above that band (20% at
+  most), 15% faster per tick below it (25% at most), each change ramped over a few ticks. Only the wait between them: the game's timers still count the
+  server's tick length. Commands a few
   ticks late are caught up by running the missing ticks at once, saved, and only more than 8 late or 20 early make it
   jump (its saves lost until snapshots of the new ticks come).
 - **Snapshots**, per client, every tick (`Server::SendSnapshot`): every player and the car each sits in, gets into or is pulled out of, wherever they
@@ -1167,6 +1169,7 @@ off by default:
 | `GTA2_NET_HITLOG=1` | both | every tick, each player in a car: its place (`DRIVE`); on a client also each impact of the local player's car on a ped as it happens (`CARHIT`, live ticks only) |
 | `GTA2_NET_FWDLOG=1` | client | at each snapshot, every other player's controls the server forwarded for the ticks after it (`FWD`): what it pressed, for the ticks the client guessed |
 | `GTA2_NET_FRAMELOG=1` | client | each frame: the time since the last one, its step's, its reconciliation's and the ticks resimulated (`FRAME`) |
+| `GTA2_NET_PACELOG=1` | client | every 30 ticks: how early its commands reach the server, their average, the server's measured tick length and its own pace (`pace:`) |
 | `GTA2_NET_GANGLOG=1` | both | player 0's group every 15 ticks, by the server's ids |
 | `GTA2_NET_STACKLOG=1` | both | two cars in one place (under 0.4 blocks apart), once per pair: a car the client kept that the server dropped |
 | `GTA2_NET_PICKUPLOG=1` | client | pickups made and removed |
