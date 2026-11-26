@@ -323,6 +323,8 @@ void DumpNavMap(const NavMap& map, const char* path); // as a picture (PGM): gre
 // from <snap> right now, before it is applied: the drift of one tick of the client's own sim
 void ReplicaStats(const Snapshot& snap, int* pCars, int* pPeds, float* pMaxDrift);
 void PoolUse(int* pCars, int* pPeds, int* pChars); // live cars, peds, chars in this game
+// Sprites in use, sprite shapes in use, and those no sprite in use holds (a leak; a few static sprites hold some too)
+void ShapeUse(int* pSprites, int* pShapes, int* pUnheld);
 void PrintReplicaLog(); // what the replicas did since the last call (explosions carried out, wrecks and corpses made again...)
 // The sound since the last call, from the game's requests to the mixer, and its state: one line, <when> its start
 void PrintSoundDiag(const char* when);

@@ -1271,9 +1271,11 @@ void net::Client::PrintStats(const Snapshot& snap)
     printf("net: frame %u, drivers: %d peds in the snapshot, %d of their cars driven here, %d by the same ped; %d traffic cars, %d "
            "with the traffic driver here\n",
            mFrame, sent, driven, same, traffic, trafficHere);
-    printf("net: frame %u, this game has %d cars, %d peds, %d chars; in or out of a car differently from the newest snapshot: "
-           "%.1f%% of player frames\n",
-           mFrame, poolCars, poolPeds, poolChars, st.carFrames ? 100.0 * st.carMismatch / st.carFrames : 0.0);
+    int sprites = 0, shapes = 0, unheld = 0;
+    engine::ShapeUse(&sprites, &shapes, &unheld);
+    printf("net: frame %u, this game has %d cars, %d peds, %d chars, %d sprites, %d of 5031 sprite shapes (%d held by no sprite); in "
+           "or out of a car differently from the newest snapshot: %.1f%% of player frames\n",
+           mFrame, poolCars, poolPeds, poolChars, sprites, shapes, unheld, st.carFrames ? 100.0 * st.carMismatch / st.carFrames : 0.0);
     if (mBot)
     {
         printf("net: frame %u, bot %s\n", mFrame, mBot->Describe().c_str());
