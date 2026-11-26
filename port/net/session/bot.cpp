@@ -837,6 +837,12 @@ class RamBot : public DecidingBot
                  mReversals, mButtons);
         return line;
     }
+    // Blocks to the nearest car it would walk to and get into, 1e9 for none
+    float CarDistance(const net::BotView& v) const
+    {
+        float d = 0;
+        return Nearest(v, net::BotView::Seen::kCar, &d, false, &mWalker) ? d : 1e9f;
+    }
 
   private:
     uint32_t Decide(const net::BotView& v) override
@@ -866,7 +872,7 @@ class RamBot : public DecidingBot
         float d = 0;
         const net::BotView::Seen* target = Nearest(v, net::BotView::Seen::kPlayer, &d);
         // Stuck: hardly moved over the last second: back out. Wedged with nobody within 6 blocks (a fight there moves
-        // little): out, and that car left alone for a while.
+        // little), or with a gun to fight on foot: out, and that car left alone for a while.
         if (v.frame % 30 == 0)
         {
             const bool still = hypotf(v.x - mLastX, v.y - mLastY) < 0.5f;
@@ -878,7 +884,7 @@ class RamBot : public DecidingBot
                 mReversals++;
             }
         }
-        const bool wedged = mWedge.Wedged(v) && (!target || d > 6);
+        const bool wedged = mWedge.Wedged(v) && (!target || d > 6 || v.guns > 0);
         if (wedged && !mWedged)
         {
             mWalker.GiveUp(v, v.car);
@@ -907,6 +913,36 @@ class RamBot : public DecidingBot
     net::BotWalker mWalker;
     CarCommit mCommit;
     FireEscape mFire;
+};
+// The rammer: in a car whenever it has one, ramming; on foot it takes the nearest car, unless it has a gun and
+// someone is near (or was within the last 5 s), or no car is at hand: then it fights on foot as the simple bot does
+class RammerBot : public DecidingBot
+{
+  public:
+    std::string Describe() const override
+    {
+        return (mDriving ? "driving: " + mCar.Describe() : "on foot: " + mFoot.Describe());
+    }
+
+  private:
+    uint32_t Decide(const net::BotView& v) override
+    {
+        float enemy = 0;
+        Nearest(v, net::BotView::Seen::kPlayer, &enemy);
+        mCommit.See(v);
+        const bool armed = v.guns > 0;
+        mNearAt = !v.car && armed && enemy <= 8 ? v.frame : mNearAt;
+        mDriving = v.car != 0 || (mCar.CarDistance(v) < (armed ? 12.0f : 30.0f) && mCommit.Settled(v) && v.frame - mNearAt > 150);
+        // Both see every tick, so their timers and stuck checks stay right whichever decides
+        const uint32_t foot = mFoot.Think(v), drive = mCar.Think(v);
+        return mDriving ? drive : foot;
+    }
+
+    SimpleBot mFoot;
+    RamBot mCar;
+    bool mDriving = false;
+    uint32_t mNearAt = 0;
+    CarCommit mCommit;
 };
 // The fighter on foot and the rammer in a car: takes a car when one is near, nobody is close and it has the weapon it
 // wants, drives at people, and fights on foot otherwise (a teacher for the trained bots: one brain, so what it shows is consistent)
@@ -1154,7 +1190,7 @@ std::unique_ptr<net::BotBrain> net::CreateBotBrain(const std::string& kind)
     }
     if (kind == "rammer")
     {
-        return std::unique_ptr<BotBrain>(new RamBot());
+        return std::unique_ptr<BotBrain>(new RammerBot());
     }
     if (kind.compare(0, 5, "human") == 0)
     {
