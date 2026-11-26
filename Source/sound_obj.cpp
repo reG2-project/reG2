@@ -4319,7 +4319,13 @@ void sound_obj::AddReleasingSounds()
                     --pSound.mReleasingVolumeDivider;
                     if (mVocals.mFifthFrameFlag)
                     {
+#if defined(GTA2_PORT)
+                        // Port: a player's death cry keeps the queue's first place to its end: a full mixer's louder
+                        // sounds would otherwise take its channel
+                        if (pSound.mReleasingVolumeModificator < 20 && !IsPortDeathCry(pSound))
+#else
                         if (pSound.mReleasingVolumeModificator < 20)
+#endif
                         {
                             ++pSound.mReleasingVolumeModificator;
                         }
