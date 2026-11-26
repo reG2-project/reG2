@@ -201,6 +201,7 @@ void net::ClientProbe::FrameEnd()
     engine::InstallSpriteCheck();
     engine::InstallSfxLog(false);
     engine::DebugDeathLog(false);
+    engine::DebugCheckShown("at the frame's end");
 }
 
 void net::ClientProbe::PrintStats(uint32_t frame)

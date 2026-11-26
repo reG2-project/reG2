@@ -120,6 +120,9 @@ void DebugCheckTurrets(const char* where, uint32_t snapTick);
 void DebugCheckGridLists(const char* where, uint32_t snapTick);
 // GTA2_NET_CHECKSTALE: no sprite grid links a freed sprite (id 0); each one printed with where its sprite was freed
 void DebugCheckStaleLinks(const char* where, uint32_t snapTick);
+// GTA2_NET_CHECKGRID: every player alive on foot is drawn: not as a body waiting to respawn, not invisible without the
+// power-up, not inside a block (under its top); each one printed when it goes wrong
+void DebugCheckShown(const char* where);
 void DebugOnCrash(); // from the crash handler (port/compat/src/main.cpp): the local player's ped, car and camera
 void DebugSetFrame(uint32_t frame); // the client's frame, for the debug checks' messages
 // GTA2_NET_MARKER: a square drawn where the newest snapshot has the local player (raw Fix16), over the frame

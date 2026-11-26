@@ -639,6 +639,44 @@ void net::engine::DebugCheckStaleLinks(const char* where, uint32_t snapTick)
     }
 }
 
+void net::engine::DebugCheckShown(const char* where)
+{
+    static uint8_t sWrong[MAX_PLAYERS];
+    static int sInside[MAX_PLAYERS]; // frames in a row
+    if (!Debug().checkGrid || !gGame_0x40 || !gMap_0x370)
+    {
+        return;
+    }
+    for (int i = 0; i < PlayerCount() && i < MAX_PLAYERS; i++)
+    {
+        Player* p = GetPlayer(i);
+        Ped* ped = p && p->mInUse ? p->mPlayerPed : NULL;
+        Sprite* s = ped && !ped->mCar && !ped->isDead() ? CharSprite(ped) : NULL;
+        if (!s)
+        {
+            sWrong[i] = 0;
+            sInside[i] = 0;
+            continue;
+        }
+        // Sprite::Draw's reasons to leave it out, and a place inside a plain block, whose top is drawn over it: for a
+        // frame it can be a slope's height carried onto a flat block, which the next tick rounds to its level
+        const gmp_block_info* block = gMap_0x370->GetBlock(s->mXy.x.ToInt(), s->mXy.y.ToInt(), s->mZpos.ToInt());
+        sInside[i] = block && GET_BLOCK_TYPE(block->mSlopeType) != AIR && GET_SLOPE_BITS(block->mSlopeType) == 0 ? sInside[i] + 1 : 0;
+        const bool waiting = p->IsWaitingToRespawn(ped);
+        const bool invisible = ped->mBf21C.bInvisible && !p->mPowerUpTimers[power_up_indices::Invisibility_11] && !p->IsUser();
+        const bool inside = sInside[i] >= 2;
+        const uint8_t wrong = (waiting ? 1 : 0) | (invisible ? 2 : 0) | (inside ? 4 : 0);
+        if (wrong & ~sWrong[i])
+        {
+            printf("net: CHECK frame %u %s: player %d alive but not shown:%s%s%s, at (%.2f, %.2f, %.3f), ped state %d/%d\n", gDebugFrame,
+                   where, i, waiting ? " drawn as its body waiting to respawn" : "", invisible ? " invisible without the power-up" : "",
+                   inside ? " inside a block" : "", s->mXy.x.ToFloat(), s->mXy.y.ToFloat(), s->mZpos.ToFloat(), (int)ped->mPedState1,
+                   (int)ped->mPedState2);
+        }
+        sWrong[i] = wrong;
+    }
+}
+
 void net::engine::DebugCheckTurrets(const char* where, uint32_t snapTick)
 {
     static std::set<const Car*> sSaid; // each car once (a pool slot reused for another car is said again only once)
