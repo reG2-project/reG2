@@ -123,7 +123,14 @@ bool AmbulanceService::TryAddPatient(Ped* pPed)
         return false;
     }
 
+#if defined(GTA2_PORT)
+    if (!mPatientQueue.AddPedToFront(pPed))
+    {
+        return false; // a full PedListNode pool: the count stays the list's
+    }
+#else
     mPatientQueue.AddPedToFront(pPed);
+#endif
     mCorpseCount++;
 
     return true;
@@ -271,7 +278,14 @@ void AmbulanceTask::ClearTask()
 MATCH_FUNC(0x4fa800)
 void AmbulanceTask::AddPatient(Ped* pPed)
 {
+#if defined(GTA2_PORT)
+    if (!mPatients.AddPedToFront(pPed))
+    {
+        return; // a full PedListNode pool: the count stays the list's
+    }
+#else
     mPatients.AddPedToFront(pPed);
+#endif
     mPatientCount++;
 }
 
