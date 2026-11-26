@@ -293,6 +293,7 @@ throws() {
   local result
   result=$(awk '
     /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) { burn[$6]++} }
+    function val(name, i) { for (i = 1; i < NF; i++) if ($i == name) return $(i + 1) + 0; return -1 }
     # The tick each server throw started at: a client that has no snapshot of it yet shows its own prediction
     /THROW server tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { t = $5 + 0; prev = (t - 1) ":" $6; sstart[$5 $6] = (prev in sstart) ? sstart[prev] : t }
     # Not the throw that ends a jack the client predicted ahead of the server (checked below): the ticks in a row after
@@ -300,8 +301,8 @@ throws() {
     /THROW client tick [0-9]+: p[01] / { t = $5 + 0; if ($12 == "8/17" && t > 830) { door[$6] = t; drun[$6] = 1 } else if (t != last[$6] + 1 || $12 !~ /^8\//) drun[$6] = 0; last[$6] = t }
     # And the tick each client throw started at, by its char timeout (500 at the start, 2 less a tick; a fatal one 300
     # after the first): one predicted after the newest snapshot, predicted again from there at each snapshot or not
-    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { t = $5 + 0; o = $(NF - 2) + 0; cstart[$5 $6] = t - (o > 300 ? (500 - o) / 2 : 1 + (300 - o) / 2) }
-    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ && !(drun[$6] && ($5 + 0 - door[$6] <= 12 || ($6 == victim && $5 + 0 < sfirst))) { c[$5 $6] = $12; csnap[$5 $6] = $NF + 0 }
+    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { t = $5 + 0; o = val("timeout"); cstart[$5 $6] = t - (o > 300 ? (500 - o) / 2 : 1 + (300 - o) / 2) }
+    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ && !(drun[$6] && ($5 + 0 - door[$6] <= 12 || ($6 == victim && $5 + 0 < sfirst))) { c[$5 $6] = $12; csnap[$5 $6] = val("snap") }
     /THROW server tick [0-9]+: p1 / { sp[$5 + 0] = $12 }
     # The client player jacks p0 or p1 (from 830), twice: the server calls the first off at the door, pulls on the second
     # 10 ticks after its jacker got there. The client predicts both pulls at once: the first back in its seat soon after
@@ -309,7 +310,7 @@ throws() {
     /test phase 4: player 2 jacks player/ { victim = "p" $NF }
     /test phase 4: jack called off at tick/ { calloff = $NF + 0 }
     /THROW server tick [0-9]+: p[01] / && $5 + 0 > 830 && $6 == victim && $12 == "8/17" { jackServer++; if (!sfirst) sfirst = $5 + 0 }
-    /THROW client tick [0-9]+: p[01] / && $5 + 0 > 830 && $6 == victim && $12 ~ /^8\// { cv[$5 + 0] = $12; if ($12 == "8/17") jackClient++ }
+    /THROW client tick [0-9]+: p[01] / && $5 + 0 > 830 && $6 == victim && $12 ~ /^8\// { cv[$5 + 0] = $12; cvsnap[$5 + 0] = val("snap"); if ($12 == "8/17") jackClient++ }
     /THROW client tick [0-9]+: p1 / { cp[$5 + 0] = $12; cstored[$5 + 0] = $14 }
     /THROW server tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ { delete own[$5 + 0]; sown[$5 + 0] = 1 }
     /THROW client tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ && !(($5 + 0) in sown) { own[$5 + 0] = 1 }
@@ -327,9 +328,13 @@ throws() {
       # Pulled out of its car (8/17): the client starts it from the server alone, never while the server has it seated or walking
       for (t in sp) if (sp[t] == "8/17") pulled++
       for (t in cp) if (cp[t] == "8/17") { pullShown++; if ((t in sp) && sp[t] != "8/17" && t < 830) pullWrong++ }
-      # The jacks: the cancelled pull shown before the call-off, none of it 12 ticks after until the second pull here
+      # The jacks: the cancelled pull shown before the call-off, none of it 12 ticks after until the second pull here, once
+      # a snapshot 7 ticks past the call-off came (a client running further ahead of the server learns of it later)
       cfirst = 0; for (t in cv) if (t + 0 > calloff + 12 && cv[t] == "8/17" && (!cfirst || t + 0 < cfirst)) cfirst = t + 0
-      for (t in cv) { if (t + 0 <= calloff + 4 && cv[t] == "8/17") cancelShown++; if (t + 0 >= calloff + 12 && (!cfirst || t + 0 < cfirst)) cancelLate++ }
+      for (t in cv) {
+        if (t + 0 <= calloff + 4 && cv[t] == "8/17") cancelShown++
+        if (t + 0 >= calloff + 12 && cvsnap[t] >= calloff + 7 && (!cfirst || t + 0 < cfirst)) cancelLate++
+      }
       lead = calloff && sfirst && cfirst ? sfirst - cfirst : -1
       # The own player of the client (p2) drowned or electrocuted there alone: cancelled by the next snapshots
       for (t in own) { ownTicks++; run = 0; for (u = t; u in own; u--) run++; if (run > ownRun) ownRun = run }

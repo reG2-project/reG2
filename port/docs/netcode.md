@@ -1082,7 +1082,8 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
   server has it there, never seated or walking; then the client's player jacks a player out of a car twice
   (server's `GTA2_NET_TESTPHASE` code 4, `HeldPull`): the server calls the first jack off at the door, and pulls on the
   second after 10 ticks there. The client shows both pulls at once, the first back in its seat within 12 ticks of the
-  call-off, the second no later than the server. The client's own player is drowned and electrocuted at times
+  call-off and of a snapshot 7 ticks past it (a client running further ahead learns of it later), the second no later
+  than the server. The client's own player is drowned and electrocuted at times
   where the server never has it (`GTA2_NET_TESTLOCALPHASE`, on every run of that tick, live and resimulated): the
   snapshots cancel it within 20 ticks.
 - **peds**: the ambient ped nearest the client's player drowned, electrocuted, knocked down or blown up in turns
