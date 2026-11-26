@@ -1257,6 +1257,14 @@ void Ped::SpawnCharInZone(gmp_map_zone* pZone)
 MATCH_FUNC(0x45c310)
 void Ped::PoolDeallocate()
 {
+#if defined(GTA2_PORT)
+    // Port: a ped despawned while knocked down takes its body object along; else each one leaks an Object_3C (385)
+    if (mpObj2C && mpObj2C->mSprite && mpObj2C->mModel == objects::ped_pushed_110)
+    {
+        mpObj2C->RequestRemoval();
+    }
+    mpObj2C = NULL;
+#endif
     if (mGameObject)
     {
         gChar_B4_Pool->DeAllocate(mGameObject);
@@ -1300,7 +1308,14 @@ void Ped::ResetForPlayerRespawn()
 
     PutOutFire();
     const u8 remap = this->mRemap;
+#if defined(GTA2_PORT)
+    const u8 pedRefIdx = this->mPedRefIdx;
+#endif
     Reset();
+#if defined(GTA2_PORT)
+    // Port: the same ped keeps its PedRefTable slot; else each respawn leaks one, and with all 254 taken bullets hit nobody
+    this->mPedRefIdx = pedRefIdx;
+#endif
 
     this->mRemap = remap;
     this->mGameObject = pChar;

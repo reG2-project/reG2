@@ -156,7 +156,7 @@ float PlayerViewRadius(int player);
 void SetSpawnPlayers(int players);
 void SetSpawnLead(int player, int ticks);
 int SpawnLead(int player);
-std::string SpawnStats(); // for the log: the ambient traffic and peds, and their limits
+std::string SpawnStats(); // for the log: the ambient traffic and peds, the moving objects, and their limits
 // A slot's name as the game shows it (over the player, in kill messages): Player::mPlayerName, up to 15
 void SetPlayerName(int slot, const char* name);
 std::string PlayerName(int slot); // as the game shows it
