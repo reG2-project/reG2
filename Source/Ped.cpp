@@ -11454,6 +11454,12 @@ void Ped::ForceWeapon(s32 weapon_kind)
     {
         Weapon* pWeapon = gWeapon_8->allocate_ped_weapon(weapon_kind, this, 99u);
         this->mSelectedWeapon = pWeapon;
+#if defined(GTA2_PORT)
+        if (!pWeapon)
+        {
+            return; // a full weapon pool: unarmed
+        }
+#endif
         pWeapon->SetTargetHit(1);
         if (mSelectedWeapon->IsExplosiveWeapon())
         {
@@ -11468,6 +11474,12 @@ void Ped::GiveWeapon(s32 weapon_kind)
     RemoveSecondaryWeapon();
     Weapon* pWeapon = gWeapon_8->allocate_ped_weapon(weapon_kind, this, 99u);
     this->mpWeapon = pWeapon;
+#if defined(GTA2_PORT)
+    if (!pWeapon)
+    {
+        return; // a full weapon pool
+    }
+#endif
     pWeapon->SetTargetHit(1);
 }
 

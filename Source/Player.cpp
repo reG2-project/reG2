@@ -260,6 +260,12 @@ void Player::SetKFCarWeapon(Car* pCar, s32 weapon_kind)
     {
         this->mPreKfAmmo = 0;
         pWeapon = gWeapon_8->allocate_car_weapon(weapon_kind, pCar, 0);
+#if defined(GTA2_PORT)
+        if (!pWeapon)
+        {
+            return; // a full weapon pool: no kill frenzy car weapon
+        }
+#endif
     }
 
     this->mKfWeaponKind = weapon_kind;
