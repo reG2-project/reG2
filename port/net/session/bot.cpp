@@ -822,8 +822,9 @@ class PulseBot : public DecidingBot
     int mPulses = 0;
     net::BotWalker mWalker;
 };
-// Gets into the nearest car and drives at the nearest other player, to hit it; backs out with the wheel turned the
-// other way when it hasn't moved for a second. Gets out when wedged or when it has to (a wreck, a death), then the next car.
+// Gets into the nearest car and rams a player: one it keeps until another is much nearer (people on foot first),
+// along its route when far, at where it will be when near; backs off and rams again after a hit, and backs out with
+// the wheel turned the other way when it hasn't moved for a second. Gets out when wedged or when it has to.
 class RamBot : public DecidingBot
 {
   public:
@@ -832,9 +833,9 @@ class RamBot : public DecidingBot
     }
     std::string Describe() const override
     {
-        char line[128];
-        snprintf(line, sizeof(line), "%s, %d cars entered, %d times backing out, buttons 0x%x", mInCar ? "driving" : "on foot", mEntered,
-                 mReversals, mButtons);
+        char line[160];
+        snprintf(line, sizeof(line), "%s, target %.1f blocks away, %d cars entered, %d times backing out, %d rams, buttons 0x%x",
+                 mInCar ? "driving" : "on foot", mTargetDist, mEntered, mReversals, mRams, mButtons);
         return line;
     }
     // Blocks to the nearest car it would walk to and get into, 1e9 for none
@@ -849,8 +850,10 @@ class RamBot : public DecidingBot
     {
         mFire.See(v);
         mCommit.See(v);
+        mMotions.See(v);
         if (!v.hasBody || v.health <= 0)
         {
+            mTarget = 0;
             return 0;
         }
         const bool inCar = v.car != 0;
@@ -859,6 +862,9 @@ class RamBot : public DecidingBot
             mInCar = inCar;
             mEntered += inCar;
         }
+        const uint32_t ticks = v.frame > mLastFrame ? v.frame - mLastFrame : 1;
+        mSpeed = 0.7f * mSpeed + 0.3f * hypotf(v.x - mSpeedX, v.y - mSpeedY) / ticks;
+        mSpeedX = v.x, mSpeedY = v.y, mLastFrame = v.frame;
         if (!inCar)
         {
             mWedged = false;
@@ -870,9 +876,9 @@ class RamBot : public DecidingBot
             return Press(v, net::kBtnEnterExit); // whatever it was doing: out before it blows up
         }
         float d = 0;
-        const net::BotView::Seen* target = Nearest(v, net::BotView::Seen::kPlayer, &d);
-        // Stuck: hardly moved over the last second: back out. Wedged with nobody within 6 blocks (a fight there moves
-        // little), or with a gun to fight on foot: out, and that car left alone for a while.
+        const net::BotView::Seen* target = Target(v, &d);
+        mTargetDist = target ? d : -1;
+        // Stuck: hardly moved over the last second: back out
         if (v.frame % 30 == 0)
         {
             const bool still = hypotf(v.x - mLastX, v.y - mLastY) < 0.5f;
@@ -884,6 +890,8 @@ class RamBot : public DecidingBot
                 mReversals++;
             }
         }
+        // Wedged with nobody within 6 blocks (a fight there moves little), or with a gun to fight on foot: out, and
+        // that car left alone for a while
         const bool wedged = mWedge.Wedged(v) && (!target || d > 6 || v.guns > 0);
         if (wedged && !mWedged)
         {
@@ -895,22 +903,76 @@ class RamBot : public DecidingBot
         const bool outToShoot = mShoots && mCommit.Settled(v) && WellArmed(v) && target && (target->inCar ? (v.gunMask >> 2 & 1) && d < 8 : d < 6);
         if (wedged || outToShoot)
         {
-            return v.frame % 20 < 2 ? net::kBtnEnterExit : 0;
+            return Press(v, net::kBtnEnterExit);
         }
-        const int err = target ? TurnTo(v.rot, target->x - v.x, target->y - v.y) : (v.frame / 60 % 2 ? 200 : -200); // none in sight: wander
+        if (!target)
+        {
+            return net::kBtnForward | (v.frame / 60 % 2 ? net::kBtnLeft : net::kBtnRight); // nobody in sight: about
+        }
+        const int err = TurnTo(v.rot, target->x - v.x, target->y - v.y);
+        // Hit it and stopped against it: back off a second for a run-up, then at it again
+        if (d < 2.5f && mSpeed < 0.04f && v.frame >= mBackUntil && v.frame >= mRunUpUntil)
+        {
+            mBackUntil = v.frame + 24, mRunUpUntil = v.frame + 75;
+            mRams++;
+        }
         if (v.frame < mBackUntil)
         {
             return net::kBtnBack | (err > 0 ? net::kBtnRight : net::kBtnLeft); // backing, the wheel the other way
         }
-        return net::kBtnForward | Steer(err);
+        float wx = target->x, wy = target->y;
+        if (d > 10 || !InLine(v, *target))
+        {
+            mRoute.Next(v, target->x, target->y, &wx, &wy, target->z); // far or round a block: along the route
+        }
+        else
+        {
+            float vx = 0, vy = 0;
+            mMotions.Velocity(target->id, &vx, &vy);
+            const float t = fminf(d / fmaxf(mSpeed, 0.1f), 30); // where it will be when the car gets there
+            wx += vx * t, wy += vy * t;
+        }
+        const int aim = TurnTo(v.rot, wx - v.x, wy - v.y);
+        // Near and well off its nose: the handbrake, for a tight turn back at it
+        const bool spin = d < 8 && abs(aim) > 360 && mSpeed > 0.08f;
+        return net::kBtnForward | Steer(aim) | (spin ? net::kBtnJump : 0);
+    }
+
+    // The player it rams: the last one while alive, unless another is much nearer; someone on foot counts as nearer
+    const net::BotView::Seen* Target(const net::BotView& v, float* pDist)
+    {
+        const net::BotView::Seen *best = NULL, *kept = NULL;
+        float bestScore = 1e9f, keptScore = 1e9f;
+        for (const net::BotView::Seen& s : v.seen)
+        {
+            if (s.kind != net::BotView::Seen::kPlayer || s.health <= 0)
+            {
+                continue;
+            }
+            const float score = hypotf(s.x - v.x, s.y - v.y) * (s.inCar ? 1.5f : 1.0f);
+            if (score < bestScore)
+            {
+                best = &s, bestScore = score;
+            }
+            if (s.id == mTarget)
+            {
+                kept = &s, keptScore = score;
+            }
+        }
+        const net::BotView::Seen* t = kept && keptScore < bestScore * 1.6f + 3 ? kept : best;
+        mTarget = t ? t->id : 0;
+        *pDist = t ? hypotf(t->x - v.x, t->y - v.y) : 0;
+        return t;
     }
 
     bool mShoots, mInCar = false, mWedged = false;
-    int mEntered = 0, mReversals = 0;
+    int mEntered = 0, mReversals = 0, mRams = 0;
     CarWedge mWedge;
-    float mLastX = 0, mLastY = 0;
-    uint32_t mBackUntil = 0;
+    float mLastX = 0, mLastY = 0, mSpeed = 0, mSpeedX = 0, mSpeedY = 0, mTargetDist = -1;
+    uint32_t mBackUntil = 0, mRunUpUntil = 0, mLastFrame = 0, mTarget = 0;
     net::BotWalker mWalker;
+    net::BotRoute mRoute;
+    Motions mMotions;
     CarCommit mCommit;
     FireEscape mFire;
 };
