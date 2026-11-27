@@ -482,7 +482,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
                 engine::SetPlayerName(slot, name.c_str());
             }
             printf("net: %s %s player %d%s\n", name.c_str(), back >= 0 ? "is back as" : "joined as", slot,
-                   name != hello.name ? (" (asked for \"" + hello.name + "\")").c_str() : "");
+                   name != hello.name ? (" (asked for \"" + Printable(hello.name) + "\")").c_str() : "");
             Notice(-1, name + (back >= 0 ? " is back" : " joined"), slot);
         }
     }
