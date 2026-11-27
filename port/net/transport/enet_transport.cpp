@@ -166,6 +166,14 @@ void Limit(ENetHost* host)
     host->maximumPacketSize = net::kMaxPacket;
     host->maximumWaitingData = 4 * net::kMaxPacket;
 }
+
+// Before ENet reads a packet: one address gets at most 4 of a server's peers, the loopback any number (local tests' bots)
+int ENET_CALLBACK PeersPerAddress(ENetHost* host, ENetEvent*)
+{
+    const bool loopback = ENET_NET_TO_HOST_32(host->receivedAddress.host) >> 24 == 127;
+    host->duplicatePeers = loopback ? ENET_PROTOCOL_MAXIMUM_PEER_ID : 4;
+    return 0; // not intercepted: ENet goes on with the packet
+}
 } // namespace
 
 net::Transport* net::CreateServerTransport(uint16_t port, uint32_t maxPeers, std::string* error)
@@ -184,6 +192,7 @@ net::Transport* net::CreateServerTransport(uint16_t port, uint32_t maxPeers, std
         return NULL;
     }
     Limit(host);
+    host->intercept = PeersPerAddress;
     return new EnetTransport(host);
 }
 
