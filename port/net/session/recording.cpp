@@ -10,12 +10,35 @@
 #include <direct.h>
 #define environ _environ
 #else
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 extern char** environ;
 #endif
 
 namespace
 {
+// A recording has the secret its tokens come from (a server's) or a token (a client's welcome): for its owner only
+FILE* CreatePrivate(const char* path)
+{
+#if defined(_WIN32)
+    return fopen(path, "wb");
+#else
+    const int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd < 0)
+    {
+        return NULL;
+    }
+    fchmod(fd, 0600);
+    FILE* f = fdopen(fd, "wb");
+    if (!f)
+    {
+        close(fd);
+    }
+    return f;
+#endif
+}
+
 const char kMagic[8] = {'G', 'T', 'A', '2', 'N', 'E', 'T', 'R'};
 const uint32_t kVersion = 1;
 const char kServerMagic[8] = {'G', 'T', 'A', '2', 'N', 'E', 'T', 'S'};
@@ -169,7 +192,7 @@ net::ClientRecorder::~ClientRecorder()
 
 bool net::ClientRecorder::Open(const char* path, const Welcome& welcome)
 {
-    mFile = fopen(path, "wb");
+    mFile = CreatePrivate(path);
     if (!mFile)
     {
         return false;
@@ -269,7 +292,7 @@ net::ServerRecorder::~ServerRecorder()
 
 bool net::ServerRecorder::Open(const char* path, const ServerStart& start)
 {
-    mFile = fopen(path, "wb");
+    mFile = CreatePrivate(path);
     if (!mFile)
     {
         return false;
