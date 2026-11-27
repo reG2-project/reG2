@@ -916,6 +916,15 @@ void Hud_Arrow::UpdateScreenPos()
 MATCH_FUNC(0x5d0c60)
 void Hud_Arrow::Service()
 {
+#if defined(GTA2_PORT)
+    // Port: no arrow to a player during the death countdown, when its ped waits hidden at the restart zone
+    const ArrowTrace& t = mTargets.mPrimaryTarget;
+    if (t.mTargetType == ArrowTargetType::Player_6 && t.mPlayer->GetInUse() && t.mPlayer->IsWaitingToRespawn(t.mPlayer->mPlayerPed))
+    {
+        mTargets.mGangInfo.mIsVisible = false;
+        return;
+    }
+#endif
     if (!UpdateTargets())
     {
         char_type bVisible = CheckVisibility();
