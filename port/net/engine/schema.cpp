@@ -7,6 +7,16 @@
 #include <stdio.h>
 #include <string>
 
+void net::engine::PhaseRecordFields(std::vector<net::FieldDesc>& out)
+{
+    static const net::FieldDesc kFields[net::engine::kPhaseFieldCount] = {
+        {"phase", 4, false}, {"phase_timer", 16, false}, {"phase_car", 25, false}, {"throw", 5, false}, {"throw_x", 22, false},
+        {"throw_y", 22, false}, {"throw_z", 17, false}, {"throw_rot", 11, false}, {"throw_angle", 11, false},
+        {"throw_speed", 18, true}, // Fix16 raw: up to 8 blocks a tick either way
+        {"throw_zspeed", 18, true}, {"throw_zaccel", 18, true}, {"throw_friction", 18, true}};
+    out.insert(out.end(), kFields, kFields + net::engine::kPhaseFieldCount);
+}
+
 namespace
 {
 using net::FieldDesc;
@@ -33,7 +43,7 @@ net::Schema BuildSchema()
                                          {"frags", 12, true}, {"points", 32, true}}};
     AppendNumbered(player.fields, "ammo", kPlayerWeapons, 16);
     player.fields.push_back(FieldDesc{"car", 25, false}); // kPlayerCar
-    player.fields.push_back(FieldDesc{"state", 4, false}); // kPlayerState
+    player.fields.push_back(FieldDesc{"state", 6, false}); // kPlayerState
     player.fields.push_back(FieldDesc{"target", 25, false}); // kPlayerTarget
     AppendNumbered(player.fields, "name", kPlayerNameEnd - kPlayerName, 32);
     AppendNumbered(player.fields, "power", kPowerUps, 16);
@@ -44,6 +54,8 @@ net::Schema BuildSchema()
     player.fields.push_back(FieldDesc{"multiplier", 8, false}); // kPlayerMultiplier
     player.fields.push_back(FieldDesc{"death_events", 8, false}); // kPlayerDeathEvents
     player.fields.push_back(FieldDesc{"bonus", 12, false}); // kPlayerBonus
+    player.fields.push_back(FieldDesc{"invulnerable", 16, false}); // kPlayerInvulnerable
+    PhaseRecordFields(player.fields); // kPlayerPhase
     net::EntityType car = {"car", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"model", 8, false},
                                    {"driver", 2, false}, {"damage", 16, false}, {"areas", 32, false}, {"wrecked", 2, false},
                                    {"lights", 8, false}, {"flash", 8, false}, {"horn", 8, false}, {"horn_cooldown", 8, false}, {"remap", 16, true},
@@ -54,6 +66,7 @@ net::Schema BuildSchema()
     net::EntityType ped = {"ped", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"remap", 8, false},
                                    {"car", 25, false}, {"state", 1, false}}};
     PedStateFields(ped.fields);
+    PhaseRecordFields(ped.fields); // kPedPhase
     // The last field of cars, peds and pickups: how many ticks old its state is (0: this snapshot's; a busy area's far
     // entities get theirs less often, AgeField)
     car.fields.push_back(FieldDesc{"age", 6, false});
@@ -101,12 +114,18 @@ net::Schema BuildSchema()
     AppendNumbered(train.fields, "carriage", kTrainCarriages, 25);
     AppendNumbered(train.fields, "damage", kTrainCarriages, 16);
     AppendNumbered(train.fields, "explosion", kTrainCarriages, 8);
+    // Fixed at its first tick: both ends simulate it on from there (shots.cpp)
+    // (z 18 bits: thrown from a roof's top, a grenade starts above 8 blocks)
+    net::EntityType shot = {"shot", {{"x", 22, false}, {"y", 22, false}, {"z", 18, false}, {"rot", 11, false}, {"model", 9, false},
+                                     {"kind", 6, false}, {"timer", 16, false}, {"owner", 32, false}, {"born", 16, false}}};
+    ShotMotionFields(shot.fields);
     s.types.push_back(player); // kEntityPlayer
     s.types.push_back(car); // kEntityCar
     s.types.push_back(ped); // kEntityPed
     s.types.push_back(world); // kEntityWorld
     s.types.push_back(object); // kEntityObject
     s.types.push_back(train); // kEntityTrain
+    s.types.push_back(shot); // kEntityShot
     return s;
 }
 } // namespace

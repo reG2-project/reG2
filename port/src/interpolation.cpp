@@ -85,6 +85,13 @@ struct Saved
 Pose sPoses[kNumSprites];
 Pose sResimPoses[kNumSprites];
 bool sResimValid;
+
+struct Corrected
+{
+    const Sprite* mpSprite;
+    Pose mPose;
+};
+std::vector<Corrected> sCorrected;
 Camera* spCamera;
 CameraPos sCameraPos;
 bool sValid;
@@ -347,6 +354,19 @@ void ApplyAttached(const std::vector<Owner>& owners)
     }
 }
 
+// Where the step left an owner, the place the objects on it were put at
+Pose StepPose(const Sprite& sprite)
+{
+    for (size_t i = 0; i < sCorrected.size(); i++)
+    {
+        if (sCorrected[i].mpSprite == &sprite)
+        {
+            return sCorrected[i].mPose;
+        }
+    }
+    return PoseOf(sprite);
+}
+
 bool IsCarOrPed(const Sprite& sprite)
 {
     return sprite.mSpriteTypeEnum == sprite_types_enum::car_2 || sprite.mSpriteTypeEnum == sprite_types_enum::ped_3;
@@ -405,6 +425,7 @@ void Snapshot()
         sPoses[i] = PoseOf(gSpritePool->mPool.mPool[i]);
     }
     sResimValid = false;
+    sCorrected.clear();
     spCamera = ViewCamera();
     sCameraPos = spCamera->mCurPos;
     for (s32 i = 0; gHud_2B00 && i < kNumArrows; i++)
@@ -416,6 +437,7 @@ void Snapshot()
 void SnapshotResim()
 {
     sResimValid = sValid && gSpritePool;
+    sCorrected.clear();
     for (s32 i = 0; sResimValid && i < kNumSprites; i++)
     {
         sResimPoses[i] = PoseOf(gSpritePool->mPool.mPool[i]);
@@ -438,9 +460,31 @@ void LaidMoving(Sprite* pSprite, s32 dx, s32 dy)
     {
         return;
     }
-    sPoses[i] = PoseOf(*pSprite);
-    sPoses[i].mX -= dx;
-    sPoses[i].mY -= dy;
+    Pose from = PoseOf(*pSprite);
+    from.mX -= dx;
+    from.mY -= dy;
+    sPoses[i] = from;
+    // After a rollback an object is drawn from the corrected game's place (FromPose)
+    if (sResimValid)
+    {
+        sResimPoses[i] = from;
+    }
+}
+
+void Correcting(const Sprite* pSprite)
+{
+    for (size_t i = 0; pSprite && i < sCorrected.size(); i++)
+    {
+        if (sCorrected[i].mpSprite == pSprite)
+        {
+            return;
+        }
+    }
+    if (pSprite)
+    {
+        Corrected c = {pSprite, PoseOf(*pSprite)};
+        sCorrected.push_back(c);
+    }
 }
 
 void Apply(f32 alpha)
@@ -479,7 +523,7 @@ void Apply(f32 alpha)
     {
         if (pCar->mCarSprite && pCar->mAttachments.mP18)
         {
-            Owner owner = {pCar->mCarSprite, &pCar->mAttachments, PoseOf(*pCar->mCarSprite)};
+            Owner owner = {pCar->mCarSprite, &pCar->mAttachments, StepPose(*pCar->mCarSprite)};
             owners.push_back(owner);
         }
     }
@@ -489,7 +533,7 @@ void Apply(f32 alpha)
         Char* pChar = sprite.mInstanceId ? sprite.AsCharB4() : NULL;
         if (pChar && pChar->mObj2c.mP18)
         {
-            Owner owner = {&sprite, &pChar->mObj2c, PoseOf(sprite)};
+            Owner owner = {&sprite, &pChar->mObj2c, StepPose(sprite)};
             owners.push_back(owner);
         }
     }

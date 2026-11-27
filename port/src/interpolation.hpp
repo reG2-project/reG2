@@ -22,6 +22,9 @@ void Clear();
 // A sprite laid this step by something that moved (dx, dy) in it, a skid mark under its wheel: drawn moving
 // with it, so it ends where that is drawn.
 void LaidMoving(Sprite* pSprite, s32 dx, s32 dy);
+// A network client's correction is about to move this car's or ped's sprite off the place the step put the objects
+// on it at: they are still drawn on it.
+void Correcting(const Sprite* pSprite);
 // Around a draw; alpha in [0, 1] is the fraction of the next step already elapsed.
 void Apply(f32 alpha);
 void Restore();

@@ -31,6 +31,9 @@ void net::ServerProbe::Start()
     Parse(Env().testTrain, TestEvent::kTrain, 2, 0, v); // <tick>:<player>[:<train>] at the wheel of that train
     Parse(Env().testStreak, TestEvent::kStreak, 2, 0, v); // <tick>:<player>: a kill streak's bonus (its 20th kill)
     Parse(Env().testFire, TestEvent::kFire, 2, 0, v); // <tick>:<player>: set on fire
+    Parse(Env().testBlast, TestEvent::kBlast, 2, 0, v); // <tick>:<player>[:<tenths of a block>]: an explosion beside it
+    Parse(Env().testPhase, TestEvent::kPhase, 2, 0, v); // <tick>:<player>[:<what>]: a phase (DebugPhase)
+    Parse(Env().testShot, TestEvent::kShot, 3, 0, v); // <tick>:<player>:<model>: a rocket (128), molotov (138) or grenade (183) beside it
     // <tick>:<player>:<n>[:<blocks>]: the n ambient peds nearest it (at least that far) set on fire
     for (const char* k = Env().testPatients; k && *k; k = strchr(k, ','), k = k ? k + 1 : NULL)
     {
@@ -94,6 +97,18 @@ void net::ServerProbe::Tests(uint32_t tick, int players)
                 printf("net: test fire on player %d at tick %u\n", e.player, tick);
                 engine::DebugFire(e.player);
                 break;
+            case TestEvent::kBlast:
+                printf("net: test blast %d tenths of a block from player %d at tick %u\n", e.arg, e.player, tick);
+                engine::DebugBlast(e.player, e.arg);
+                break;
+            case TestEvent::kPhase:
+                printf("net: test phase %d of player %d at tick %u\n", e.arg, e.player, tick);
+                engine::DebugPhase(e.player, e.arg);
+                break;
+            case TestEvent::kShot:
+                printf("net: test shot %d beside player %d at tick %u\n", e.arg, e.player, tick);
+                engine::DebugShot(e.player, e.arg);
+                break;
             case TestEvent::kPatients:
                 printf("net: test fire on %d ambient peds %d blocks or more from player %d at tick %u\n", e.arg % 1000, e.arg / 1000, e.player, tick);
                 engine::DebugPatients(e.player, e.arg % 1000, e.arg / 1000);
@@ -123,6 +138,9 @@ void net::ServerProbe::Captured(uint32_t tick, const Snapshot& world)
     engine::StackLog(true);
     engine::TrainLog(true);
     engine::FireLog(true);
+    engine::ThrowLog(true);
+    engine::ShotLog(true);
+    engine::PedLog("server");
     if (Env().snapCheck)
     {
         Snapshot copy = world;

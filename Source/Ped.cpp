@@ -1038,12 +1038,7 @@ void Ped::ManageBurning()
 {
     if (mBf21C.bOnFire)
     {
-#if defined(GTA2_PORT)
-        // Port: a network client's players burn as on the server; their health is the server's.
-        if (PortReactsInvulnerable(mInvulnerability, mPlayer != NULL))
-#else
         if (mInvulnerability > 0)
-#endif
         {
             PutOutFire();
         }
@@ -1702,6 +1697,13 @@ void Ped::HandleClosePedInteraction()
 MATCH_FUNC(0x45ce50)
 void Ped::TakeDamage(s16 damage)
 {
+#if defined(GTA2_PORT)
+    // Port: a network client's players lose health by the server's snapshots only
+    if (gPortProtectsPlayers && mPlayer)
+    {
+        return;
+    }
+#endif
     if (mInvulnerability <= 0)
     {
 #if defined(GTA2_PORT)
@@ -2658,6 +2660,13 @@ static inline PedFlags32 ClearActive(PedFlags32 bf)
 MATCH_FUNC(0x45eb60)
 void Ped::Deallocate()
 {
+#if defined(GTA2_PORT)
+    // Port: a network client's peds of the server go by the snapshots only (port/net/engine/replica.cpp)
+    if (gPortPedMayGo && !gPortPedMayGo(this))
+    {
+        return;
+    }
+#endif
     switch (mOccupation)
     {
         case ped_ocupation_enum::mugger:
@@ -11595,6 +11604,13 @@ void Ped::UpdateStatsForKiller()
 MATCH_FUNC(0x46f9d0)
 void Ped::Kill()
 {
+#if defined(GTA2_PORT)
+    // Port: a network client's peds on foot die by the server's death only (port/net/engine/players.cpp)
+    if (gPortPedMayDie && !gPortPedMayDie(this))
+    {
+        return;
+    }
+#endif
     if (mBf21C.bOnFire)
     {
         if (mGameObject)

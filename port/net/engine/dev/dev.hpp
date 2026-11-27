@@ -47,8 +47,17 @@ class GridCheck
 void DebugKill(int victim, int killer);
 void DebugArm(int player, int weapon, int ammo); // Player::AddWeaponWithAmmo
 void DebugFire(int player); // the player's ped set on fire (Ped::SetOnFire)
+// On foot, the player's ped drowned (Char::DrownPed, 0) or electrocuted (1); seated in a car beside it (2), pulled out of the
+// car it sits in (3, StartPulledOut), jacking another player seated in a car beside it, from where that one stood (4);
+// 10 + 0..3: the nearest ambient ped on foot drowned, electrocuted, knocked down, or thrown by a blast at its feet
+void DebugPhase(int player, int what);
+// GTA2_NET_TESTLOCALPHASE=<tick>:<what>[,...] on a client, before each run of that tick (live and resimulated): its own
+// player drowned (0), electrocuted (1) or knocked down (2), which the server never has
+void DebugLocalPhase();
 // That many ambient peds nearest the player, at least that many blocks from it, set on fire: their corpses call the ambulance
 void DebugPatients(int player, int count, int fromBlocks);
+void DebugBlast(int player, int tenths); // an explosion (a grenade's) that far east of the player
+void DebugShot(int player, int model); // a rocket, grenade or molotov (objects::) thrown east from beside the player (shots.cpp)
 void DebugStreak(int player); // a kill streak's bonus (PlayerScoreTracker::Service: 20 kills in a row)
 void DebugWanted(int player, int points); // at least that many wanted points (Ped::mWantedPoints)
 void DebugPowerUp(int player, int powerUp); // Player::CollectPowerUp (power_up_indices, e.g. 12 instant gang)
@@ -62,6 +71,11 @@ void InstallSpriteCheck(); // GTA2_NET_CHECKGRID: a sprite moved off the map is 
 void StackLog(bool server); // GTA2_NET_STACKLOG: two cars in one place (under 0.4 blocks apart in x and y), once per pair
 void TrainLog(bool server); // GTA2_NET_TRAINLOG: every train's place and state at every 150th tick of the game's cycle
 void FireLog(bool server); // GTA2_NET_FIRELOG: every fire (cars', loose, peds on fire) at every 30th tick of the game's cycle
+void ThrowLog(bool server); // GTA2_NET_THROWLOG: every tick, the players thrown, down, dead or on fire, and new explosions
+void ShotLog(bool server); // GTA2_NET_SHOTLOG: every tick, the rockets, grenades, molotovs and blasts by key (shots.cpp)
+// GTA2_NET_PEDLOG=<player>: the peds within 12 blocks of that player, their states and phase; end "server", "client" (a live
+// tick) or "applied" (a snapshot's tick, as its apply left them)
+void PedLog(const char* end);
 // GTA2_NET_CARDIFF: where this game's prediction of the local player's car differs from the snapshot's (call after
 // restoring the snapshot's tick, before applying it)
 void DebugOwnCarDiff(const Snapshot& snap);
@@ -75,7 +89,7 @@ void PrintDivergence();
 // GTA2_NET_DUMPPEDS=<file>[:<from>:<to>]: every ped's Ped, Char and Sprite as bytes, by the server's ids, at a tick
 // (port/net/scripts/ped_diff.py compares a server's dump with a client's)
 void DumpPeds(uint32_t tick, bool server);
-// GTA2_NET_RANDLOG=<file>:<from>:<to>: each rand() draw's caller (an offset in the program) at those ticks (the game's
+// GTA2_NET_RANDLOG=<file>:<from>:<to>: each rand() draw's caller (an offset in the program) and owner flag at those ticks (the game's
 // cycle), from when StartRandLog is called; port/net/scripts/rand_diff.py compares two
 void StartRandLog();
 // GTA2_NET_SFXLOG: the samples the mixer starts printed; on a server, its listener at slot <value>'s camera (every tick)

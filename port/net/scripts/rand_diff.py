@@ -2,9 +2,11 @@
 """Compares two GTA2_NET_RANDLOG logs (a server's and a client's, port/docs/netcode.md "Checks"): per function that drew,
 the rand() draws per tick on each side.
 
-usage: port/net/scripts/rand_diff.py <program> <server log> <client log>
+usage: port/net/scripts/rand_diff.py [--stream] <program> <server log> <client log>
+  --stream  only the game's stream's draws (the world entity carries it), not the owners' (port/src/rand/owner.hpp)
 
-Each log line is: cycle, the caller of rand(), and the two above it, as offsets in the program. A function is named
+Each log line is: cycle, o (an owner drew) or s (the stream), the caller of rand(), and the two above it, as offsets in
+the program. A function is named
 by the first frame that isn't an rng wrapper (rng::get_int and the like). Names come from atos (macOS) or
 addr2line (Linux).
 """
@@ -26,16 +28,20 @@ def symbolize(program, offsets):
     return {o: n.split("(")[0] for o, n in zip(offsets, names)}
 
 
-def read(path):
+def read(path, stream):
     rows = []
     for line in open(path):
-        cycle, *frames = line.split()
-        rows.append((int(cycle), [int(f, 16) for f in frames]))
+        cycle, kind, *frames = line.split()
+        if kind == "s" or not stream:
+            rows.append((int(cycle), [int(f, 16) for f in frames]))
     return rows
 
 
 def main():
-    program, server, client = sys.argv[1], read(sys.argv[2]), read(sys.argv[3])
+    args = sys.argv[1:]
+    stream = "--stream" in args
+    args = [a for a in args if a != "--stream"]
+    program, server, client = args[0], read(args[1], stream), read(args[2], stream)
     names = symbolize(program, {f for _, frames in server + client for f in frames})
     ticks = sorted({c for c, _ in client} & {c for c, _ in server})
 

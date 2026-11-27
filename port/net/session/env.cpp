@@ -26,6 +26,11 @@ const net::SessionEnv& net::Env()
         e.testKill = getenv("GTA2_NET_TESTKILL");
         e.testArm = getenv("GTA2_NET_TESTARM");
         e.compare = getenv("GTA2_NET_COMPARE") != NULL;
+        e.botIdleFrom = e.botIdleTo = 0;
+        if (const char* d = getenv("GTA2_NET_BOTIDLE"))
+        {
+            sscanf(d, "%u:%u", &e.botIdleFrom, &e.botIdleTo);
+        }
         e.divergeTick = 0, e.divergeTicks = 300;
         if (const char* d = getenv("GTA2_NET_DIVERGE")) // <server tick>[:<ticks>]
         {
@@ -34,7 +39,10 @@ const net::SessionEnv& net::Env()
         e.testPowerUp = getenv("GTA2_NET_TESTPOWERUP");
         e.testStreak = getenv("GTA2_NET_TESTSTREAK");
         e.testFire = getenv("GTA2_NET_TESTFIRE");
+        e.testBlast = getenv("GTA2_NET_TESTBLAST");
+        e.testPhase = getenv("GTA2_NET_TESTPHASE");
         e.testPatients = getenv("GTA2_NET_TESTPATIENTS");
+        e.testShot = getenv("GTA2_NET_TESTSHOT");
         e.testCar = getenv("GTA2_NET_TESTCAR");
         e.testTrain = getenv("GTA2_NET_TESTTRAIN");
         e.snapCheck = getenv("GTA2_NET_SNAPCHECK") != NULL;

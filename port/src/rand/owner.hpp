@@ -9,6 +9,7 @@
 #pragma once
 
 class Car;
+class Object;
 class Ped;
 
 namespace PortRand
@@ -30,6 +31,7 @@ enum Service
 // Set by the netcode: the owner key of a ped or a car, the server's net id (0: none, the game's stream)
 extern unsigned int (*gPedKey)(const Ped* p);
 extern unsigned int (*gCarKey)(const Car* c);
+extern unsigned int (*gObjectKey)(const Object* o); // an object's prediction key (NextObjectKey), 0: none
 extern bool gOwned; // a network game: services own their draws too
 // The last ped and car whose update started (PedPool and CarPool: Pool::UpdatePool), for the crash report
 extern const Ped* gLastPed;
@@ -42,16 +44,22 @@ class Scope
     explicit Scope(unsigned int serviceKey);
     explicit Scope(const Ped* p);
     explicit Scope(const Car* c);
-    template <class T> explicit Scope(const T*) : mActive(false), mSavedKey(0), mSavedDraws(0)
+    explicit Scope(const Object* o); // a predicted object's (with a key) draws are its own; one without, the game's stream
+    template <class T> explicit Scope(const T*) : mActive(false), mCreating(false), mSavedKey(0), mSavedDraws(0), mSavedCreator(0), mSavedMade(0)
     {
     } // other pools: whoever owns the draws already
     ~Scope();
 
   private:
     void Enter(unsigned int key);
-    bool mActive;
-    unsigned int mSavedKey, mSavedDraws;
+    void Create(unsigned int key);
+    bool mActive, mCreating;
+    unsigned int mSavedKey, mSavedDraws, mSavedCreator, mSavedMade;
 };
+
+// A predicted object's key (port/net/engine/shots.cpp), 24 bits, never 0: from the seed, the creator (the scope's
+// entity, or the object whose update runs), the tick and how many keyed objects it made this update
+unsigned int NextObjectKey();
 
 // The tick that starts (Game::UpdateGame_4B9410, the game's cycle): the owners' draws are numbered per tick
 void TickStart(unsigned int cycle);

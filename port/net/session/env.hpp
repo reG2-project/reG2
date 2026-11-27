@@ -31,12 +31,16 @@ struct SessionEnv
     const char* testPowerUp; // <tick>:<player>:<power-up>[,...]: server test power-ups
     const char* testStreak; // <tick>:<player>[,...]: server test kill streaks
     const char* testFire; // <tick>:<player>[,...]: server test players set on fire
+    const char* testPhase; // <tick>:<player>[:<what>][,...]: server test phases (engine/dev/dev.hpp, DebugPhase)
+    const char* testBlast; // <tick>:<player>:<tenths of a block>[,...]: an explosion that far east of a server test player
+    const char* testShot; // <tick>:<player>:<model>[,...]: a rocket, molotov or grenade thrown from beside a server test player
     const char* testPatients; // <tick>:<player>:<n>[:<blocks>][,...]: the n ambient peds nearest the player (that far at least) set on fire
     const char* testCar; // <tick>:<player>:<model>[,...]: server test cars beside players (11: a bus)
     const char* testTrain; // <tick>:<player>:<train>[,...]: server players put at the wheel of a train (train + 10: it reverses)
     const char* say; // <frame>:<command>[;...]: a client's test commands to the server ("/kick r_b")
     uint32_t fuzz, fuzzRate; // GTA2_NET_FUZZ=<seed>[:<per mille>]: a client turns that many of each snapshot's fields to random values (20)
     bool botVoteMap2; // GTA2_NET_BOTMAP2: a bot client votes map 2 in the results (a test sees the map change)
+    uint32_t botIdleFrom, botIdleTo; // GTA2_NET_BOTIDLE=<tick>:<tick>: a client bot presses nothing in those ticks (a test drives its player)
     bool scoreboard; // GTA2_NET_SCOREBOARD=1: a client shows the scoreboard as if its key were held (captures)
 };
 const SessionEnv& Env();

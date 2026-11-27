@@ -891,6 +891,9 @@ static inline Fix16 BeamLength_5DE910(Fix16_Point& d)
 // The EH state is 0xA at entry and never changes: 11 Fix16_Point locals, two of them unused
 // (likely the original's by-value start_pos is one of them). `d` is reused for the rest of the way and
 // `len` for the straight segment count, as the original's frame shows.
+#if defined(GTA2_PORT)
+#include "../port/src/rand/particle.hpp" // the arc's kinks, on the particles' stream in a network game (port/docs/netcode.md)
+#endif
 MATCH_FUNC(0x5de910)
 void __stdcall DrawElectricArc(Fix16_Point_POD start_pos, PORT_CONST Fix16_Point& end_pos, Fix16 z_pos)
 {
@@ -984,6 +987,9 @@ void __stdcall DrawElectricArc(Fix16_Point_POD start_pos, PORT_CONST Fix16_Point
         }
     }
 }
+#if defined(GTA2_PORT)
+#undef gRng
+#endif
 
 // MaxAbsDistance as ShockPedsAroundSprite inlines it: past the inline budget, Max is the named out-of-line copy
 // Max_44E540 (the Abs calls and the y subtraction go out of line by themselves)

@@ -13,15 +13,16 @@
 #include "Source/Game.hpp"
 #include "Source/GameSession.hpp"
 #include "Source/Hud.hpp"
-#include "Source/ParticleManager.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
 #include "Source/TextTable.hpp"
 #include "Source/TrafficLights.hpp"
 #include "Source/root_sound.hpp"
+#include "Source/voice_line.hpp"
 #include "Source/Weapon.hpp"
 #include "Source/WeaponManager.hpp"
 #include "Source/char.hpp"
+#include "Source/char_anim_state_more.hpp"
 #include "Source/network_data.hpp"
 #include "Source/rng.hpp"
 #include "Source/sprite.hpp"
@@ -63,38 +64,6 @@ uint8_t gKillCamKiller[MAX_PLAYERS];
 uint8_t gBonusCount[MAX_PLAYERS];
 uint8_t gBonusVoice[MAX_PLAYERS];
 int gBonusSeen = -1;
-// Each player's health as the last snapshot had it, and its ped then: a hit is a drop on the same ped
-struct SeenHealth
-{
-    s32 mPedId = -1;
-    int32_t mHealth = 0;
-};
-SeenHealth gSeenHealth[MAX_PLAYERS];
-
-// A hit the server had on a player, shown here: its blood and its grunt, which the client's own hits on players don't
-// give (players take no damage on a client: Ped::HandlePedHitByObject returns before the blood)
-void ShowServerHit(int i, Ped* ped, const EntityState& e)
-{
-    SeenHealth& seen = gSeenHealth[i];
-    const int32_t health = e.f[net::engine::kPlayerHealth], was = seen.mHealth;
-    const bool hit = seen.mPedId == ped->mId && health < seen.mHealth && seen.mHealth > 0 && !ped->mCar && !ped->isDead();
-    seen.mPedId = ped->mId;
-    seen.mHealth = health;
-    Sprite* s = hit ? net::engine::CharSprite(ped) : NULL;
-    if (!s)
-    {
-        return;
-    }
-    gParticle_8->EmitBloodBurst(s->mXy.x, s->mXy.y, s->mZpos, s->mRotation);
-    if (health > 0)
-    {
-        ped->SetVoiceEventIfNotOnFire(25); // Ped::TriggerVoiceEventRateLimited's, a punch's
-    }
-    if (Debug().selfLog)
-    {
-        printf("net: player %d hit on the server: health %d -> %d, its blood shown\n", i, was, health);
-    }
-}
 const int kBonusVoices = 12;
 const char* const kBonusText[kBonusVoices] = {NULL, "fly_car", "stl_all", "dst_all", "excutin", "gencide", "copkill", "carjaka",
                                               "elvis_d", "accurcy", "wrngway", "em_dest"}; // by voice_line
@@ -254,7 +223,7 @@ void ApplyPowerUps(Player* p, Ped* ped, const net::EntityState& e)
             }
             else if (k == power_up_indices::Invulnerability_6)
             {
-                now ? ped->SetInvulnerable() : ped->ClearInvulnerable(); // ProtectPlayers keeps it above 0 after
+                now ? ped->SetInvulnerable() : ped->ClearInvulnerable();
             }
         }
         p->mPowerUpTimers[k] = now;
@@ -439,6 +408,8 @@ void net::engine::CapturePlayer(int i, Snapshot& out)
     {
         e.f[kPlayerPowerUp + k] = p->mPowerUpTimers[k];
     }
+    e.f[kPlayerInvulnerable] = ped->mInvulnerability;
+    CapturePhases(ped, e, kPlayerPhase);
     out.entities.push_back(e);
 }
 
@@ -466,6 +437,16 @@ void net::engine::ApplySlots(const Snapshot& snap)
     }
 }
 
+// Again once the snapshot's cars are here (ApplyCarsAndPeds): a car new to this game wasn't when its player was applied
+void net::engine::SettlePlayerCar(const EntityState& e)
+{
+    Player* p = GetPlayer((int)e.id - 1);
+    if (p && p->mPlayerPed)
+    {
+        SettleCar(p, p->mPlayerPed, e);
+    }
+}
+
 void net::engine::ApplyPlayer(const EntityState& e)
 {
     const int i = (int)e.id - 1;
@@ -482,6 +463,7 @@ void net::engine::ApplyPlayer(const EntityState& e)
     }
     ApplyWeapons(p, e);
     ApplyPowerUps(p, ped, e);
+    ped->mInvulnerability = (u16)e.f[kPlayerInvulnerable];
     ApplyFire(ped, (e.f[kPlayerState] & kPlayerOnFire) != 0);
     // Its wanted points, the server's: the HUD's cop heads, and the cops' AI here, which gave up the chase at 0 stars
     ped->mWantedPoints = (s16)e.f[kPlayerWanted];
@@ -503,7 +485,8 @@ void net::engine::ApplyPlayer(const EntityState& e)
             gBonusSeen = count;
         }
     }
-    ShowServerHit(i, ped, e);
+    // First: a death carried out on a thrown ped takes at its landing, as the server's
+    ApplyPhases(ped, e, kPlayerPhase, (e.f[kPlayerState] & kPlayerDead) != 0, e.f[kPlayerInCar] ? RefCar(e.f[kPlayerCar]) : NULL);
     if (CarryOutDeath(i, p, ped, e))
     {
         return;
@@ -558,16 +541,78 @@ void net::engine::KillCredited(Ped* ped, int killerSlot)
     KillNow(ped);
 }
 
+namespace
+{
+bool gServerDeath; // in KillNow
+} // namespace
+
+int net::engine::gDeathsHeld;
+
 void net::engine::KillNow(Ped* ped)
 {
+    // Electrocuted or sinking to its death, it ends as the game ends them (Char::UpdateImmobilized): a charred corpse, a
+    // sunk one, neither dropping its weapon
+    Char* c = ped->mGameObject;
+    const int32_t phase = PhaseOf(ped);
+    if (phase == kPhaseShocked || phase == kPhaseSinking)
+    {
+        ped->mBf224.bDropsWeaponOnDeath = false;
+    }
+    if (phase == kPhaseShocked)
+    {
+        ped->mPedState1 = ped_state_1::walking_0;
+        ped->mPedState2 = ped_state_2::ped2_walking_0;
+        if (ped->mPlayer)
+        {
+            gRoot_sound.PlayVoice(voice_line::shocking_25);
+            ped->mPlayer->SetDeathType(4);
+        }
+    }
+    gServerDeath = true;
     ped->Kill();
+    gServerDeath = false;
     // Knocked down (a blast threw it), the game keeps the ped's state until it gets up (Ped::ChangeNextPedState1), so
-    // the server's death didn't take and the next snapshot carried it out again: its cry, its killer's points
-    if (!ped->isDead())
+    // the server's death didn't take and the next snapshot carried it out again: its cry, its killer's points. A
+    // thrown ped's death takes when it lands: the landing restores the dead_9 Ped::Kill stored
+    if (!ped->isDead() && !ThrowOf(ped))
     {
         ped->mPedState1 = ped_state_1::dead_9;
         ped->mPedState2 = ped_state_2::ped2_dead_15;
     }
+    if (c && phase == kPhaseShocked)
+    {
+        c->Set_F8_ped_state_1_433910(ped_state_1::dead_9);
+        c->mPedState2 = ped_state_2::ped2_dead_15;
+        c->mAnimationState = Char_Anim_state::Charred_Corpse_21;
+        c->mCharState = Char_B4_state::Walking_1;
+    }
+    if (c && c->mSpritePtr && phase == kPhaseSinking)
+    {
+        c->mSpritePtr->set_z_lazy(Fix16(0));
+    }
+}
+
+bool net::engine::ClientPedMayDie(Ped* ped)
+{
+    if (gServerDeath || ped->mCar || !ped->mGameObject || ped->isDead())
+    {
+        return true; // in a car, its car's state (an explosion) is the server's
+    }
+    // Held: alive, and on its feet knocked down until the server's state says what became of it
+    gDeathsHeld++;
+    ped->mHealth = ped->mHealth > 0 ? ped->mHealth : 1;
+    if (ped->mPedState1 != ped_state_1::immobilized_8)
+    {
+        ped->ChangeNextPedState1(ped_state_1::immobilized_8);
+        ped->ChangeNextPedState2(ped_state_2::lying_on_floor_22);
+        ped->SetStateInitPending();
+    }
+    return false;
+}
+
+bool net::engine::InServerDeath()
+{
+    return gServerDeath;
 }
 
 void net::engine::SnapCamera(Player* p)

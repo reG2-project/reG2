@@ -62,8 +62,8 @@ const int kOccupation = net::engine::MemberIndex(kValues, kValueCount, offsetof(
 const u32 kOnFire = 1u << 24;
 const u32 kFlagsSent = ~((1u << 0) | (1u << 10) | (1u << 14) | kOnFire);
 
-// Its states (Ped::mPedState1 ..): set only when both sides have it on foot and alive; in, into and out of cars and
-// deaths go their own ways (replica.cpp, below)
+// Its states (Ped::mPedState1 ..): set when both sides have it on foot and alive, in the same phase; in, into and out of
+// cars and deaths go their own ways (replica.cpp, below)
 enum
 {
     kState1,
@@ -114,12 +114,11 @@ const Member kCharValues[] = {CM(mCharState, 4, true),      CM(mTargetRotation, 
                               CM(mRepulsionTimer, 1, false), CM(mRepulsionRotation, 2, true)};
 #undef CM
 const size_t kCharCount = sizeof(kCharValues) / sizeof(kCharValues[0]);
-const int kCharState = net::engine::MemberIndex(kCharValues, kCharCount, offsetof(Char, mCharState));
-const int kCharAnimation = net::engine::MemberIndex(kCharValues, kCharCount, offsetof(Char, mAnimationState));
+const int kCharAnim = net::engine::MemberIndex(kCharValues, kCharCount, offsetof(Char, mAnimationState));
 const int kGroup = kChar + (int)kCharCount; // its group: leader (net id), its index (99: the leader), type, counts
 const int kWeapons = kGroup + 5; // its weapon and its second one: weapon_type + 1, 0 none
-const int kEnd = kWeapons + 2;
-static_assert(kEnd + 1 <= net::kMaxFields, "a ped's fields and its age (snapshot.cpp)");
+const int kEnd = kWeapons + 2; // then its phase (PhaseField)
+static_assert(kEnd + net::engine::kPhaseFieldCount + 1 <= net::kMaxFields, "a ped's fields, its phase and its age (snapshot.cpp)");
 
 int32_t WeaponRef(const Weapon* w) // weapon_type + 1, 0 none
 {
@@ -213,6 +212,8 @@ void net::engine::PedStateRefFields(std::vector<int>* peds, std::vector<int>* ca
     }
 }
 
+const int net::engine::kPedPhase = kEnd;
+
 uint32_t net::engine::PedNetId(const Ped* p)
 {
     return PedId(p);
@@ -255,6 +256,7 @@ void net::engine::CapturePedState(const Ped* p, EntityState& e)
         e.f[kGroup + 3] = g->mCount34;
         e.f[kGroup + 4] = (u8)g->mCount36;
     }
+    CapturePhases(p, e, kEnd);
 }
 
 namespace
@@ -287,28 +289,6 @@ Car* LocalCar(uint32_t id, bool* pResolved)
     Car* c = net::engine::ReplicaCar(id);
     *pResolved = c && c->mCarSprite;
     return *pResolved ? c : NULL;
-}
-
-// A char's states that go with those: not jumping or colliding with a car (Char_B4_state 15, 27), not jumping, at a car
-// door, carjacking or falling (animations 5-9, 11, 12)
-bool CharPlain(int32_t charState, int32_t anim)
-{
-    return charState != Char_B4_state::Jumping_15 && charState != Char_B4_state::Colliding_With_Car_27 && !(anim >= 5 && anim <= 9) && anim != 11 &&
-           anim != 12;
-}
-
-// States that stand on their own: walking, running (or fleeing), standing. The others go with something only the side
-// that played them has (a ped pulled out of a car, 8/17, uses its char's car: Char::UpdateImmobilized), so they stay here
-bool Plain(int32_t state1, int32_t state2)
-{
-    return (state1 == ped_state_1::walking_0 || state1 == ped_state_1::flee_or_running_1 || state1 == ped_state_1::standing_still_7) &&
-           (state2 == ped_state_2::ped2_walking_0 || state2 == ped_state_2::ped2_staying_14);
-}
-
-// The stored states (Ped::ChangeNextPedState1's): plain ones, or none yet (11/28, as Ped's constructor sets them)
-bool PlainStored(int32_t state1, int32_t state2)
-{
-    return Plain(state1, state2) || (state1 == 11 && state2 == ped_state_2::initial_28);
 }
 
 // The targets the objectives' code reads without a check (Ped::KillCharOnFoot, FollowCarInCurrCar, FleeFromPedTillSafe,
@@ -540,24 +520,46 @@ bool StartCarTransition(Ped* p, const net::EntityState& e)
 }
 } // namespace
 
+int net::engine::gPedsRevived;
+
 bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
 {
-    const bool deadThere = e.f[kStates + kState1] == ped_state_1::dead_9;
+    // Knocked down, a ped the server killed dies as it gets up (Ped::Kill stored its dead_9): thrown, it is carried out
+    // here at once to die at its landing; lying or sinking, the server's death comes then
+    const bool dyingThere = e.f[kStates + kState1] == ped_state_1::immobilized_8 && e.f[kStates + kStored1] == ped_state_1::dead_9;
+    const bool deadThere = e.f[kStates + kState1] == ped_state_1::dead_9 || (dyingThere && (e.f[kEnd + kPhase] & 7) == kPhaseThrown);
     const bool deadHere = p->isDead();
     if (deadThere && !deadHere)
     {
-        if (p->mCar && !p->mEnterCarAsPassenger)
+        ApplyPhases(p, e, kEnd, true, NULL); // a throw on to its landing, or over
+        if (!ThrowOf(p) || p->mStoredPedState1 != ped_state_1::dead_9)
         {
-            ForceOutOfCar(p, Raw(e.f[kPedX]), Raw(e.f[kPedY]), Raw(e.f[kPedZ]), Angle(e.f[kPedRot]));
+            if (p->mCar && !p->mEnterCarAsPassenger)
+            {
+                ForceOutOfCar(p, Raw(e.f[kPedX]), Raw(e.f[kPedY]), Raw(e.f[kPedZ]), Angle(e.f[kPedRot]));
+            }
+            KillNow(p); // the server's death, the game's own way (as a player's, snapshot.cpp)
         }
-        KillNow(p); // the server's death, the game's own way (as a player's, snapshot.cpp)
         return true;
     }
     if (deadHere && !deadThere)
     {
-        return false; // a death of this game's own: it can't be undone, the ped is made again
+        if (dyingThere)
+        {
+            return true; // the server's death to come, carried out a tick early here
+        }
+        if (!p->mGameObject || !p->IsActive())
+        {
+            return false; // gone here: the ped is made again
+        }
+        // Alive there (revived by the paramedics, AmbulanceService, or a death of this game's own): revived here as the
+        // paramedics do it, then the server's state below
+        p->mPedState1 = ped_state_1::walking_0;
+        p->mPedState2 = ped_state_2::ped2_walking_0;
+        p->mHealth = (s16)(e.f[kHealth] > 0 ? e.f[kHealth] : 1);
+        gPedsRevived++;
     }
-    if (deadHere)
+    else if (deadHere)
     {
         return true; // a corpse on both sides
     }
@@ -585,12 +587,50 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
     {
         p->CancelEnterCarObjective();
     }
+    // On foot on both sides: its phase as the server's, whether it goes to a car or not (thrown on its way, it goes on
+    // after its landing)
+    if (!p->mCar && !e.f[kPedCar] && p->mGameObject)
+    {
+        ApplyPhases(p, e, kEnd, false, NULL);
+    }
     if (!driving && (p->mCar || InCarTransition(p) || e.f[kPedCar] || e.f[kPedState]))
     {
         // In a car, or on its way into or out of one, on either side: that is replica.cpp's (ForceIntoCar, ForceOutOfCar
         // when both have settled). The AI's objectives and targets then belong to the entering and leaving: set from the
         // server's, the char's walk to a door read a car the client had no part in (Char::UpdateImmobilized)
         return true;
+    }
+    // Then its states and its char's movement and animation, whatever they are, in the same phase: one this game couldn't
+    // take (a thrown ped getting up here) or a state of no phase on one side only (a fall) is left for a later snapshot
+    if (p->mGameObject)
+    {
+        const int32_t there = e.f[kEnd + kPhase] & 7;
+        // Jacking a driver (Ped::PullDriverOutOfCarStateMachine): its char reads the victim's car, unchecked
+        Car* jacked = NULL;
+        if (e.f[kChar + kCharAnim] == Char_Anim_state::Carjacking_9)
+        {
+            bool ok;
+            Ped* victim = LocalPed((uint32_t)e.f[kPedRefs + kRefInternalPed], &ok);
+            jacked = victim && victim->mCar && victim->mCar->mCarSprite ? victim->mCar : NULL;
+        }
+        if (PhaseOf(p) == there && (jacked || e.f[kChar + kCharAnim] != Char_Anim_state::Carjacking_9) &&
+            (there || (e.f[kStates + kState1] != ped_state_1::immobilized_8 && p->mPedState1 != ped_state_1::immobilized_8)))
+        {
+            if (jacked)
+            {
+                p->mGameObject->mTargetCar = jacked;
+                p->mTargetCarDoor = (u8)e.f[kFirst + kDoor];
+            }
+            p->mPedState1 = e.f[kStates + kState1];
+            p->mPedState2 = e.f[kStates + kState2];
+            if (e.f[kStates + kStored1] != ped_state_1::dead_9)
+            {
+                p->mStoredPedState1 = e.f[kStates + kStored1]; // a death to come is the server's to carry out (KillNow)
+            }
+            p->mStoredPedState2 = e.f[kStates + kStored2];
+            GuardThrow(p); // its fatal outcome the server's death's
+            ApplyMembers(p->mGameObject, kCharValues, kCharCount, e, kChar);
+        }
     }
     // The references first: one its objective acts on that this game doesn't have (out of its area) keeps the ped as it
     // is here for this snapshot, whole. Its AI runs by its occupation as much as by its objective (a robbed driver reads
@@ -642,21 +682,6 @@ bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
     }
     p->mBf21C.bBusted = false;
     p->mHealth = (s16)(e.f[kHealth] > 0 ? e.f[kHealth] : 1); // a death comes from the server's state, whole
-    if (!driving && Plain(e.f[kStates + kState1], e.f[kStates + kState2]) && Plain(p->mPedState1, p->mPedState2) &&
-        PlainStored(e.f[kStates + kStored1], e.f[kStates + kStored2]) && p->mGameObject)
-    {
-        p->mPedState1 = e.f[kStates + kState1];
-        p->mPedState2 = e.f[kStates + kState2];
-        p->mStoredPedState1 = e.f[kStates + kStored1];
-        p->mStoredPedState2 = e.f[kStates + kStored2];
-        // ... and its char's movement and animation, as the server's (with only the ped's states, a gang member could
-        // run on the spot: the char kept its own state and speed)
-        Char* c = p->mGameObject;
-        if (CharPlain(e.f[kChar + kCharState], e.f[kChar + kCharAnimation]) && CharPlain(c->mCharState, c->mAnimationState))
-        {
-            ApplyMembers(c, kCharValues, kCharCount, e, kChar);
-        }
-    }
     Ped** pedMembers[kPedRefCount] = {&p->mAttacker,         &p->mObjectiveTargetPed, &p->mInternalTargetPed,
                                       &p->mCarThief,        &p->mLastCharPunched,    &p->mHitTargetPed,
                                       &p->mPedKiller};

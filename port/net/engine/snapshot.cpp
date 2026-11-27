@@ -3,9 +3,11 @@
 // (pickups.cpp) do the parts. Also the helpers the engine's files share, the game's controls the session uses
 // (running, the player count, the inputs, the tick) and a client's view of what is shown.
 #include "internal.hpp"
+#include "dev/dev.hpp"
 #include <algorithm>
 #include "port/src/rand/owner.hpp"
 #include "port/src/menu.hpp"
+#include "port/src/interpolation.hpp"
 #include "port/src/net_hooks.hpp"
 #include "port/src/pause_menu.hpp"
 #include "port/src/rand/state.hpp"
@@ -100,10 +102,15 @@ net::engine::ReachArea::ReachArea(const Snapshot& snap, float margin) : mFoci(Pl
 
 float net::engine::ReachArea::DistanceTo(const Sprite* s) const
 {
+    return DistanceTo(s->mXy.x.ToFloat(), s->mXy.y.ToFloat());
+}
+
+float net::engine::ReachArea::DistanceTo(float x, float y) const
+{
     float d = 1e9f;
     for (int k = 0; k < mFoci.count; k++)
     {
-        const float dx = s->mXy.x.ToFloat() - mFoci.x[k], dy = s->mXy.y.ToFloat() - mFoci.y[k];
+        const float dx = x - mFoci.x[k], dy = y - mFoci.y[k];
         d = std::min(d, sqrtf(dx * dx + dy * dy));
     }
     return d;
@@ -375,6 +382,7 @@ void net::engine::Capture(Snapshot& out)
     }
     CapturePickups(out);
     CaptureTrains(out);
+    CaptureShots(out);
     SortById(out);
 }
 
@@ -395,7 +403,16 @@ void net::engine::Apply(const Snapshot& snap)
         }
     }
     ApplyCarsAndPeds(snap);
+    for (const EntityState& e : snap.entities)
+    {
+        if (e.type == kEntityPlayer)
+        {
+            SettlePlayerCar(e);
+        }
+    }
     ApplyPickups(snap);
+    ApplyShots(snap); // after the cars and peds: owners and what a catch-up hits are the server's
+    PedLog("applied");
 }
 
 // --- A client's view ---
@@ -433,8 +450,14 @@ void net::engine::SetPose(const Pose& pose)
         return;
     }
     Ped* ped = InGamePed((int)pose.id - 1);
-    if (ped && !ped->mCar && !AtCarDoor(ped) && !ped->isDead())
+    if (ped && !ped->mCar && !AtCarDoor(ped) && PhaseOf(ped) != kPhaseDoor && !ped->isDead())
     {
+        // Thrown, its char follows the throw's object: the object goes the same way
+        if (const Sprite* s = CharSprite(ped))
+        {
+            PortInterp::Correcting(s);
+            MoveThrow(ped, pose.x - s->mXy.x.mValue, pose.y - s->mXy.y.mValue);
+        }
         MovePed(ped, Raw(pose.x), Raw(pose.y), Raw(pose.z), Angle(pose.rot));
     }
 }

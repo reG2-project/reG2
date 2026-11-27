@@ -577,6 +577,7 @@ void net::Client::Reconcile(const Snapshot& snap)
     mStats.staleRestores += mStale[s % kSaves];
     engine::RestoreGame(*saved);
     mProbe.AfterRestore(snap);
+    mStats.changed += engine::Differs(snap);
     engine::Apply(snap);
     engine::ApplyScores(snap); // the resimulated ticks and their saves carry the server's scores
     mProbe.AfterApply(snap, mTick);
@@ -618,8 +619,8 @@ void net::Client::Reconcile(const Snapshot& snap)
     const double total = us(start, mark);
     mStats.reconcileWorstUs = total > mStats.reconcileWorstUs ? total : mStats.reconcileWorstUs;
     engine::PutLocalChat(chat);
-    mStats.rollbacks++;
-    mLink.rollbacks++;
+    mStats.reconciles++;
+    mLink.reconciles++;
     engine::ApplyScores(snap);
     Blend(before);
 }
@@ -783,7 +784,9 @@ uint32_t net::Client::ChooseInput(uint32_t recordedInput)
         }
         FillBotView(mBotView, mReceived[mLatestTick % kRing], mSlot, mFrame, mNavMap.get());
         // The keyboard's key events go with a bot's controls: Escape and the leave prompt, the chat (GTA2_INPUT in tests)
-        local = (mBot ? mBot->Think(mBotView) : 0) | (local & kKeyEventBits);
+        const uint32_t bot = mBot ? mBot->Think(mBotView) : 0;
+        const bool idle = mTick >= Env().botIdleFrom && mTick < Env().botIdleTo;
+        local = (idle ? 0 : bot) | (local & kKeyEventBits);
     }
     local &= 0x3FFFFF;
     // F12, or the key under Esc (` or §: keyboards without F12), keys the game doesn't use (here as their DirectInput
@@ -1170,18 +1173,19 @@ void net::Client::PrintStats(const Snapshot& snap)
     const Stats& st = mStats;
     // Until the server answers our commands for the ticks since the sync, its slack is about older ones (none at a join)
     const std::string slack = mSlackKnown ? std::to_string(mSlack) + " ticks early" : "not answered yet";
-    printf("net: frame %u, tick %u (server %u, our commands %s), %zu entities (%d cars, %d peds), %u rollbacks, "
-           "%.1f ticks resimulated each, prediction error up to %.2f blocks, cars and peds shown %.2f blocks off (up to %.2f)\n",
-           mFrame, mTick, mLatestTick, slack.c_str(), snap.entities.size(), cars, peds, st.rollbacks, st.rollbacks ? (float)st.resimTicks / st.rollbacks : 0.0f,
+    printf("net: frame %u, tick %u (server %u, our commands %s), %zu entities (%d cars, %d peds), %u snapshots reconciled "
+           "(%u changed, %u unchanged), %.1f ticks resimulated each, prediction error up to %.2f blocks, cars and peds shown %.2f blocks off (up to %.2f)\n",
+           mFrame, mTick, mLatestTick, slack.c_str(), snap.entities.size(), cars, peds, st.reconciles, st.changed, st.reconciles - st.changed,
+           st.reconciles ? (float)st.resimTicks / st.reconciles : 0.0f,
            st.maxError, st.shownErrorCount ? (float)(st.shownErrorSum / st.shownErrorCount) : 0.0f, st.shownErrorMax);
     printf("net: frame %u, players shown off the server's: the others %.3f blocks on average (up to %.2f), ourselves %.3f (up to %.2f)\n",
            mFrame, st.others.Mean(), st.others.max, st.self.Mean(), st.self.max);
-    if (st.rollbacks)
+    if (st.reconciles)
     {
-        printf("net: frame %u, a rollback takes %.2f ms on average (worst %.2f): restore and apply %.2f, %.1f ticks resimulated %.2f, "
+        printf("net: frame %u, a reconciliation takes %.2f ms on average (worst %.2f): restore and apply %.2f, %.1f ticks resimulated %.2f, "
                "their saves %.2f\n",
-               mFrame, (st.restoreUs + st.resimUs + st.saveUs) / st.rollbacks / 1000, st.reconcileWorstUs / 1000, st.restoreUs / st.rollbacks / 1000,
-               (float)st.resimTicks / st.rollbacks, st.resimUs / st.rollbacks / 1000, st.saveUs / st.rollbacks / 1000);
+               mFrame, (st.restoreUs + st.resimUs + st.saveUs) / st.reconciles / 1000, st.reconcileWorstUs / 1000, st.restoreUs / st.reconciles / 1000,
+               (float)st.resimTicks / st.reconciles, st.resimUs / st.reconciles / 1000, st.saveUs / st.reconciles / 1000);
     }
     if (st.jumps || st.fastForwards || st.plainApplies || st.staleRestores)
     {
@@ -1383,7 +1387,7 @@ void net::Client::ShowStatus()
             const uint32_t lost = sent > mLink.snapshots ? sent - mLink.snapshots : 0;
             char text[64];
             snprintf(text, sizeof(text), "loss %u%%  snap %u/s  ahead %d  resim %.1f", sent ? (lost * 100 + sent / 2) / sent : 0,
-                     mLink.snapshots, (int)(mTick - mLatestTick), mLink.rollbacks ? (float)mLink.resimTicks / mLink.rollbacks : 0.0f);
+                     mLink.snapshots, (int)(mTick - mLatestTick), mLink.reconciles ? (float)mLink.resimTicks / mLink.reconciles : 0.0f);
             mLinkShown = std::string(text) + "\n";
             mLink = LinkStats();
             mLink.fromTick = mLatestTick;

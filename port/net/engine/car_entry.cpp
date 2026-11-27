@@ -8,6 +8,7 @@
 #include "internal.hpp"
 #include "Source/Car.hpp"
 #include "Source/Char_Pool.hpp"
+#include "Source/Object_5C.hpp"
 #include "Source/Ped.hpp"
 #include "Source/char.hpp"
 #include "Source/sprite.hpp"
@@ -33,6 +34,28 @@ bool net::engine::AtCarDoor(Ped* ped)
     return (s1 == ped_state_1::entering_car_3 && s2 != ped_state_2::ped2_following_a_car_4) || s1 == ped_state_1::exiting_car_4 ||
            s2 == ped_state_2::ped2_entering_a_car_6 || s2 == ped_state_2::ped2_getting_out_a_car_7;
 }
+
+namespace
+{
+// Its char back to the pool, and a throw's object no char lands any more
+void DropChar(Ped* ped)
+{
+    if (Object* o = ped->mpObj2C)
+    {
+        o->RequestRemoval();
+        ped->mpObj2C = NULL;
+    }
+    if (Char* c = ped->mGameObject)
+    {
+        if (c->mObj2c.mP18)
+        {
+            c->mObj2c.DestroyAllSprites();
+        }
+        gChar_B4_Pool->DeAllocate(c);
+        ped->mGameObject = NULL;
+    }
+}
+} // namespace
 
 bool net::engine::LeavingCar(Ped* ped)
 {
@@ -129,15 +152,7 @@ void net::engine::ForceIntoCar(Ped* ped, Car* car)
             ForceOutBesideCar(driver, car);
         }
     }
-    if (Char* c = ped->mGameObject)
-    {
-        if (c->mObj2c.mP18)
-        {
-            c->mObj2c.DestroyAllSprites();
-        }
-        gChar_B4_Pool->DeAllocate(c);
-        ped->mGameObject = NULL;
-    }
+    DropChar(ped);
     ped->mCar = car;
     ped->mEnterCarAsPassenger = 0;
     // Nothing left to do on foot: both its objective and the internal one (a walk to a point would run on without
@@ -168,16 +183,53 @@ void net::engine::ForceIntoCarAsPassenger(Ped* ped, Car* car)
     {
         ForceOutBesideCar(ped, ped->mCar); // in another car, or this one's driver
     }
-    if (Char* c = ped->mGameObject)
-    {
-        if (c->mObj2c.mP18)
-        {
-            c->mObj2c.DestroyAllSprites();
-        }
-        gChar_B4_Pool->DeAllocate(c);
-        ped->mGameObject = NULL;
-    }
+    DropChar(ped);
     ped->SetObjective(objectives_enum::no_obj_0, 9999); // as ForceIntoCar: nothing left to do on foot
     ped->SetObjective2(objectives_enum::no_obj_0);
     ped->EnterCarAsPassenger(car);
+}
+
+// As the jacker's char pulls a driver out (Char::UpdateCharB4), without what it decides for the driver (its occupation,
+// voice, the police's call: the snapshot's AI state). Out of a train's carriage walking; without char room it stays
+void net::engine::StartPulledOut(Ped* ped, Car* car, int door, const Fix16& x, const Fix16& y, const Fix16& z)
+{
+    if (ped->mCar != car || !car->mCarSprite || IsSpareDriver(ped))
+    {
+        return;
+    }
+    if (car->IsTrainModel())
+    {
+        ForceOutOfCar(ped, x, y, z, car->mCarSprite->mRotation);
+        return;
+    }
+    if (!ped->AllocCharB4(x, y, z))
+    {
+        return;
+    }
+    ped->ChangeNextPedState1(ped_state_1::immobilized_8);
+    ped->ChangeNextPedState2(ped_state_2::ped2_at_car_door_17);
+    if (car->mDriver == ped)
+    {
+        car->ClearDriver();
+    }
+    if (ped->mEnterCarAsPassenger)
+    {
+        car->mPassengersList.RemovePed_471240(ped);
+        ped->mEnterCarAsPassenger = 0;
+    }
+    Char* c = ped->mGameObject;
+    c->set_rotation(car->mCarSprite->mRotation);
+    c->Set_F8_ped_state_1_433910(ped_state_1::immobilized_8);
+    ped->set_target_car_door((char_type)door);
+    c->SetPedState2(ped_state_2::ped2_at_car_door_17);
+    c->mTargetCar = car;
+    c->mSpritePtr->SetDrawLayer(6);
+    ped->SetRemap(ped->get_remap());
+    ped->mCar = NULL;
+    ped->SetStateInitPending();
+}
+
+bool net::engine::ClientMayPullOut(Ped* victim)
+{
+    return !victim->mPlayer;
 }

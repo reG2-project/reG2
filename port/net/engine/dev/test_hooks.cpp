@@ -4,6 +4,7 @@
 #include "dev.hpp"
 #include "Source/Car.hpp"
 #include "Source/Char_Pool.hpp"
+#include "Source/char.hpp"
 #include "Source/Game.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
@@ -11,9 +12,15 @@
 #include "Source/Weapon.hpp"
 #include "Source/WeaponManager.hpp"
 #include "Source/map_0x370.hpp"
+#include "Source/Object_5C.hpp"
+#include "Source/explosion_type.hpp"
+#include "Source/sprite.hpp"
+#include "Source/rng.hpp"
+#include "port/src/net_hooks.hpp"
 #include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <string>
 #include <vector>
 
@@ -178,10 +185,187 @@ void net::engine::DebugStreak(int player)
     }
 }
 
+void net::engine::DebugBlast(int player, int tenths)
+{
+    Ped* ped = InGamePed(player);
+    Sprite* s = ped ? PedSprite(ped) : NULL;
+    // None on a player just respawned: invulnerable, it would walk into the blast again and again, which no client has
+    if (s && ped->mInvulnerability <= 0)
+    {
+        const Fix16 x = s->mXy.x + Fix16(tenths * 16384 / 10, 0);
+        gObject_5C->CreateExplosion(x, s->mXy.y, s->mZpos, Ang16((s16)0, (u8)0), explosion_type::small_18, 0);
+    }
+}
+
 void net::engine::DebugFire(int player)
 {
     if (Ped* ped = InGamePed(player))
     {
         ped->SetOnFire();
+    }
+}
+
+namespace
+{
+// Drowned (0), electrocuted (1) or knocked down (2), as the game starts them
+void StartPhase(Ped* ped, int what)
+{
+    if (!ped || !ped->mGameObject || ped->mCar || ped->isDead() || ped->mPedState1 == ped_state_1::immobilized_8)
+    {
+        return;
+    }
+    if (what == 0)
+    {
+        ped->mGameObject->DrownPed();
+        return;
+    }
+    ped->ChangeNextPedState1(ped_state_1::immobilized_8);
+    ped->ChangeNextPedState2(what == 1 ? ped_state_2::electrocuted_27 : ped_state_2::lying_on_floor_22);
+    ped->SetStateInitPending();
+}
+
+Ped* NearestAmbient(Ped* to)
+{
+    Ped* best = NULL;
+    s32 bestD = 10 << 14;
+    for (Ped* p = gPedPool->mPool.mpPrev; to && p; p = p->mpNext)
+    {
+        if (!p->mPlayer && !p->mCar && p->mGameObject && !p->isDead() && p->mPedState1 != ped_state_1::immobilized_8)
+        {
+            const s32 d = Fix16::MaxAbsDistance(p->get_cam_x(), p->get_cam_y(), to->get_cam_x(), to->get_cam_y()).mValue;
+            if (d < bestD)
+            {
+                best = p, bestD = d;
+            }
+        }
+    }
+    return best;
+}
+
+// Code 4's jack: the server's pull waits its first 10 ticks at the door, which a client's prediction has to wait for too
+int gPullAsks;
+bool HeldPull(Ped*)
+{
+    return ++gPullAsks > 10;
+}
+} // namespace
+
+void net::engine::DebugPhase(int player, int what)
+{
+    Ped* ped = InGamePed(player);
+    if (!ped)
+    {
+        return;
+    }
+    if (what >= 10)
+    {
+        Ped* p = NearestAmbient(ped);
+        Sprite* s = p ? CharSprite(p) : NULL;
+        if (!s)
+        {
+            return;
+        }
+        printf("net: test phase %d on ped %u\n", what - 10, PedNetId(p));
+        if (what == 13)
+        {
+            gObject_5C->CreateExplosion(s->mXy.x, s->mXy.y, s->mZpos, Ang16((s16)0, (u8)0), explosion_type::small_18, 0);
+        }
+        else
+        {
+            StartPhase(p, what - 10);
+        }
+        return;
+    }
+    if (what == 0)
+    {
+        StartPhase(ped, 0);
+    }
+    else if (what == 1 && ped->mGameObject && !ped->mCar && ped->mPedState1 != ped_state_1::immobilized_8)
+    {
+        ped->mShockCounter = ped->mElectrocutionThreshold; // Ped::PoolUpdate electrocutes it
+    }
+    else if (what == 2 && !ped->mCar && gCarManager_6C)
+    {
+        Fix16 scale;
+        scale.mValue = 0x4000;
+        Car* car = gCarManager_6C->SpawnCarAt(ped->get_cam_x() + Fix16(2 << 14, 0), ped->get_cam_y(), ped->get_cam_z(), 0, car_model_enum::MERC, scale);
+        if (car)
+        {
+            car->IncrementCarStats(car_kind::recycled_1);
+            ForceIntoCar(ped, car);
+        }
+    }
+    else if (what == 3 && ped->mCar && ped->mCar->mCarSprite)
+    {
+        const Sprite* cs = ped->mCar->mCarSprite;
+        StartPulledOut(ped, ped->mCar, 0, cs->mXy.x + Fix16(1), cs->mXy.y, cs->mZpos);
+    }
+    // Code 4: tried at several ticks, the jacker sent again while its victim still sits in the car made for it
+    static Ped* sVictim;
+    static Car* sCar;
+    static Fix16 sX, sY, sZ;
+    if (what != 4 || ped->isDead() || !gCarManager_6C)
+    {
+        return;
+    }
+    if (ped->mCar && ped->mCar->mCarSprite && ped->mCar->mDriver == ped && ped->mCar != sCar)
+    {
+        const Sprite* cs = ped->mCar->mCarSprite;
+        ForceOutOfCar(ped, cs->mXy.x + Fix16(1), cs->mXy.y, cs->mZpos, cs->mRotation); // on foot for the next try
+        return;
+    }
+    if (ped->mCar || !ped->mGameObject || InCarTransition(ped))
+    {
+        return;
+    }
+    if (sVictim)
+    {
+        if (sVictim->mCar == sCar && sCar->mDriver == sVictim && sCar->mCarSprite)
+        {
+            Fix16 x, y;
+            sCar->GetDoorWorldPosition(0, &x, &y); // its bot may have driven off
+            MovePed(ped, x, y, sCar->mCarSprite->mZpos, Angle(0));
+            StartEntering(ped, sCar);
+        }
+        return;
+    }
+    for (int i = 0; i < PlayerCount(); i++)
+    {
+        Ped* victim = InGamePed(i);
+        if (victim && victim != ped && !victim->mCar && victim->mGameObject && !victim->isDead())
+        {
+            Fix16 scale;
+            scale.mValue = 0x4000;
+            sX = victim->get_cam_x(), sY = victim->get_cam_y(), sZ = victim->get_cam_z();
+            Car* car = gCarManager_6C->SpawnCarAt(sX + Fix16(2 << 14, 0), sY, sZ, 0, car_model_enum::MERC, scale);
+            if (car)
+            {
+                printf("net: test phase 4: player %d jacks player %d\n", player, i);
+                car->IncrementCarStats(car_kind::recycled_1);
+                ForceIntoCar(victim, car);
+                MovePed(ped, sX, sY, sZ, Angle(0)); // where the victim stood
+                StartEntering(ped, car);
+                sVictim = victim;
+                sCar = car;
+                gPullAsks = 0;
+                gPortMayPullOut = HeldPull;
+            }
+            return;
+        }
+    }
+}
+
+void net::engine::DebugLocalPhase()
+{
+    static const char* spec = getenv("GTA2_NET_TESTLOCALPHASE");
+    const uint32_t tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+    for (const char* k = spec; k && *k; k = strchr(k, ','), k = k ? k + 1 : NULL)
+    {
+        unsigned t = 0;
+        int what = 0;
+        if (sscanf(k, "%u:%d", &t, &what) == 2 && t == tick)
+        {
+            StartPhase(InGamePed(LocalPlayer()), what);
+        }
     }
 }

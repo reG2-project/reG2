@@ -1033,6 +1033,14 @@ void Char::UpdateAnimState()
                     frame_limit = 2;
                     newId = mAnimationFrame + baseId + 19;
                     Ped* pDriver = pCar->mDriver;
+#if defined(GTA2_PORT)
+                    // Port: a network client's player is pulled out by the server's jack only; the jacker waits here
+                    if (pDriver && gPortMayPullOut && !gPortMayPullOut(pDriver))
+                    {
+                        pDriver = NULL;
+                        mFrameTimer = 0;
+                    }
+#endif
                     if (pDriver)
                     {
                         switch (pDriver->get_occupation())
@@ -6596,12 +6604,7 @@ void Char::HandleCarImpact(Car* pCar, u8 not_used, Fix16 x, Fix16 y)
     Ang16 impact_angle;
     impact_angle = p.GetAngle();
 
-#if defined(GTA2_PORT)
-    // Port: a network client's players are knocked down as on the server; their health is the server's.
-    if (PortReactsInvulnerable(mpPed->mInvulnerability, mpPed->mPlayer != NULL))
-#else
     if (this->mpPed->mInvulnerability > 0)
-#endif
     {
         DoJump();
     }
@@ -6755,12 +6758,7 @@ MATCH_FUNC(0x553E00)
 void Char::HandleGenericImpact(Ang16 ang, Fix16 impact_x, Fix16 impact_z, char_type impact_type)
 {
 
-#if defined(GTA2_PORT)
-    // Port: a network client's players are thrown by a blast as on the server; their health is the server's.
-    if (PortReactsInvulnerable(mpPed->mInvulnerability, mpPed->mPlayer != NULL))
-#else
     if (mpPed->mInvulnerability > 0)
-#endif
     {
         impact_type = 0;
     }

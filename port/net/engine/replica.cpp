@@ -4,6 +4,7 @@
 // Local cars and peds the server doesn't know (other than the players' own) are removed.
 #include "internal.hpp"
 #include "dev/dev.hpp"
+#include "port/src/interpolation.hpp"
 #include "port/src/rand/owner.hpp"
 #include "Source/Car.hpp"
 #include "Source/Char_Pool.hpp"
@@ -47,6 +48,8 @@ int gRefusedCars;
 int gEvicted;
 int gOccupiedKept;
 int gPedsRemade;
+int gPedsRemadeTotal; // for the first ones' log
+int gPedsKept; // deallocations of the server's peds refused (ClientPedMayGo)
 
 template <class T> int FreeSlots(T* head)
 {
@@ -223,6 +226,16 @@ bool RemoveCar(const Pass& a, Car* car)
     return true;
 }
 
+bool gFreeing; // in Free
+
+// A server's ped this game lets go (gPortPedMayGo)
+void Free(Ped* p)
+{
+    gFreeing = true;
+    p->Deallocate();
+    gFreeing = false;
+}
+
 // A ped goes, once (Deallocate undoes counters and groups, and marks it inactive)
 void RemovePed(Ped* p)
 {
@@ -232,7 +245,7 @@ void RemovePed(Ped* p)
     }
     if (p->IsActive() && !p->mCar)
     {
-        p->Deallocate();
+        Free(p);
     }
 }
 
@@ -430,7 +443,8 @@ void ApplyPed(Pass& a, const EntityState& e)
     }
     else if (ped->mCar)
     {
-        if (settled)
+        ApplyPhases(ped, e, kPedPhase, false, NULL); // pulled out there: at its car's door here
+        if (settled && ped->mCar)
         {
             ForceOutOfCar(ped, Raw(e.f[kPedX]), Raw(e.f[kPedY]), Raw(e.f[kPedZ]), Angle(e.f[kPedRot]));
         }
@@ -443,6 +457,11 @@ void ApplyPed(Pass& a, const EntityState& e)
     {
         // A corpse of this game's own (a death predicted that the server didn't have): it goes, and the next snapshot
         // makes the ped again
+        if (gPedsRemadeTotal++ < 20)
+        {
+            printf("net: ped %u dead here only (%s, cause %d, %s, objective %d)\n", e.id, ped->mBf21C.bActive ? "killed" : "removed",
+                   (int)ped->mDeathCause, ped->mCar ? "in a car" : "on foot", (int)ped->mObjective);
+        }
         RemovePed(ped);
         gPeds.erase(e.id);
         a.mapped.erase(ped);
@@ -520,7 +539,7 @@ void RemoveUnsent(const Pass& a, const Snapshot& snap)
             q->mCar->mPassengersList.RemovePed_471240(q);
             q->mEnterCarAsPassenger = 0;
             q->mCar = NULL;
-            q->Deallocate();
+            Free(q);
         }
         else if (it->second->IsActive())
         {
@@ -529,7 +548,7 @@ void RemoveUnsent(const Pass& a, const Snapshot& snap)
             {
                 p->mCar = NULL; // not that car's driver (any more): Deallocate would clear whoever is (a player)
             }
-            p->Deallocate();
+            Free(p);
         }
         it = gPeds.erase(it);
     }
@@ -656,10 +675,31 @@ void net::engine::PrintReplicaLog()
         printf("net: %d pickups made as the server's, %d removed\n", gPickupsMade, gPickupsRemoved);
         gPickupsMade = gPickupsRemoved = 0;
     }
+    if (gShotsMade + gShotsRemoved + gShotsBeyond)
+    {
+        printf("net: shots against the snapshots: %d kept, %d made as the server's, %d removed, %d beyond the reach\n", gShotsKept, gShotsMade,
+               gShotsRemoved, gShotsBeyond);
+    }
+    gShotsKept = gShotsMade = gShotsRemoved = gShotsBeyond = 0;
     if (gPedsRemade)
     {
         printf("net: %d corpses of this game's own made again\n", gPedsRemade);
         gPedsRemade = 0;
+    }
+    if (gPedsKept)
+    {
+        printf("net: %d removals of the server's peds by this game refused\n", gPedsKept);
+        gPedsKept = 0;
+    }
+    if (gPedsRevived)
+    {
+        printf("net: %d corpses of this game's alive on the server, revived\n", gPedsRevived);
+        gPedsRevived = 0;
+    }
+    if (gDeathsHeld)
+    {
+        printf("net: %d deaths of this game's own held for the server's\n", gDeathsHeld);
+        gDeathsHeld = 0;
     }
     if (gOccupiedKept)
     {
@@ -734,6 +774,8 @@ namespace
 {
 std::unordered_map<const Ped*, uint32_t> gPedKeys; // a client's: this game's ped -> the server's id, made each tick
 std::unordered_map<const Car*, uint32_t> gCarKeys;
+// A client's own peds and cars (the server has none of them) own their draws too: the game's stream is the server's
+const uint32_t kOwnPedKey = 0x7C000000, kOwnCarKey = 0x7D000000;
 
 unsigned int ServerPedKey(const Ped* p)
 {
@@ -752,17 +794,20 @@ unsigned int ClientPedKey(const Ped* p)
         return 1 + p->mPlayer->mPlayerIdx;
     }
     auto it = gPedKeys.find(p);
-    return it != gPedKeys.end() ? it->second : 0; // one of this game's own: the game's stream
+    return it != gPedKeys.end() ? it->second : kOwnPedKey + p->mId; // one of this game's own: not the game's stream either
 }
 
 unsigned int ClientCarKey(const Car* c)
 {
     auto it = gCarKeys.find(c);
-    return it != gCarKeys.end() ? it->second : 0;
+    return it != gCarKeys.end() ? it->second : kOwnCarKey + c->mCarId;
 }
 
 void ClientTickStart()
 {
+    ProtectPlayers(); // before every tick, live or resimulated: a frame may run several
+    ShotsTickStart();
+    DebugLocalPhase();
     // Made again every tick (a few hundred entries); the maps change with every apply and restore
     gPedKeys.clear();
     gCarKeys.clear();
@@ -783,6 +828,7 @@ void net::engine::SetRandOwners(bool client)
     PortRand::gPedKey = client ? ClientPedKey : ServerPedKey;
     PortRand::gCarKey = client ? ClientCarKey : ServerCarKey;
     PortRand::gTickHook = client ? ClientTickStart : NULL;
+    InstallShots(true, client);
 }
 
 void net::engine::ClearRandOwners()
@@ -791,6 +837,7 @@ void net::engine::ClearRandOwners()
     PortRand::gPedKey = NULL;
     PortRand::gCarKey = NULL;
     PortRand::gTickHook = NULL;
+    InstallShots(false, false);
 }
 
 const std::unordered_map<uint32_t, Car*>& net::engine::ReplicaCars()
@@ -801,6 +848,23 @@ const std::unordered_map<uint32_t, Car*>& net::engine::ReplicaCars()
 const std::unordered_map<uint32_t, Ped*>& net::engine::ReplicaPeds()
 {
     return gPeds;
+}
+
+bool net::engine::ClientPedMayGo(Ped* ped)
+{
+    if (gFreeing || ped->mCar || InServerDeath())
+    {
+        return true; // in a car, it goes with its car (Car::KillContainedPeds), whose state is the server's
+    }
+    for (const auto& it : gPeds)
+    {
+        if (it.second == ped)
+        {
+            gPedsKept++;
+            return false;
+        }
+    }
+    return true;
 }
 
 namespace
@@ -862,8 +926,13 @@ void net::engine::SetReplicaPose(const Pose& p)
     if (p.id >= kPedIdBase)
     {
         Ped* ped = ReplicaPed(p.id);
-        if (ped && !ped->mCar)
+        if (ped && !ped->mCar && !AtCarDoor(ped) && PhaseOf(ped) != kPhaseDoor && !ped->isDead())
         {
+            if (const Sprite* s = CharSprite(ped))
+            {
+                PortInterp::Correcting(s);
+                MoveThrow(ped, p.x - s->mXy.x.mValue, p.y - s->mXy.y.mValue); // its char follows the throw's object
+            }
             MovePed(ped, Raw(p.x), Raw(p.y), Raw(p.z), Angle(p.rot));
         }
     }
@@ -871,6 +940,7 @@ void net::engine::SetReplicaPose(const Pose& p)
     {
         if (car->mCarSprite)
         {
+            PortInterp::Correcting(car->mCarSprite);
             MoveCar(car, Raw(p.x), Raw(p.y), Raw(p.z), Angle(p.rot));
         }
     }

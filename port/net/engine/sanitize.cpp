@@ -55,10 +55,29 @@ const Rule kRules[] = {
     {kEntityObject, "y", kRange, kMapMin, kMapMax},
     {kEntityTrain, "x", kRange, kMapMin, kMapMax},
     {kEntityTrain, "y", kRange, kMapMin, kMapMax},
+    {kEntityShot, "x", kRange, kMapMin, kMapMax},
+    {kEntityShot, "y", kRange, kMapMin, kMapMax},
     // The input's key event: a DirectInput code of 0..255 (KeyboardLayout::mKeys[256], read by the chat), its press bit
     {kEntityPlayer, "buttons", kMask, 0x2FFFFF, 0},
     {kEntityPlayer, "money", kRange, 0, 999999999}, // the HUD's "%09d" into its 10 bytes (RollingDigitCounter)
     {kEntityPlayer, "frags", kRange, -999, 999},
+    // A throw's object (throws.cpp): made on the map, its motion within a ped's speeds, its friction a brake
+    {kEntityPlayer, "throw_x", kZeroOrRange, kMapMin, kMapMax},
+    {kEntityPlayer, "throw_y", kZeroOrRange, kMapMin, kMapMax},
+    {kEntityPlayer, "throw_rot", kAngle, 0, 0},
+    {kEntityPlayer, "throw_angle", kAngle, 0, 0},
+    {kEntityPlayer, "throw_speed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPlayer, "throw_zspeed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPlayer, "throw_zaccel", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPlayer, "throw_friction", kRange, -kSpeedMax, 0},
+    {kEntityPed, "throw_x", kZeroOrRange, kMapMin, kMapMax},
+    {kEntityPed, "throw_y", kZeroOrRange, kMapMin, kMapMax},
+    {kEntityPed, "throw_rot", kAngle, 0, 0},
+    {kEntityPed, "throw_angle", kAngle, 0, 0},
+    {kEntityPed, "throw_speed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPed, "throw_zspeed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPed, "throw_zaccel", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityPed, "throw_friction", kRange, -kSpeedMax, 0},
     {kEntityPlayer, "multiplier", kRange, 0, 99},
     {kEntityWorld, "zone_turn", kRange, -1, 39}, // Map_0x370::GetNextZoneOfTypeRoundRobin's zone_stack[40]
     {kEntityWorld, "police_level", kRange, 0, 6},
@@ -127,6 +146,20 @@ const Rule kRules[] = {
     {kEntityPed, "mVelocityVector.x", kRange, -kSpeedMax, kSpeedMax},
     {kEntityPed, "mVelocityVector.y", kRange, -kSpeedMax, kSpeedMax},
     {kEntityPed, "mAnimationFrame", kRange, 0, 31}, // added to the animation's first sprite: within a ped's 158
+    // A shot (shots.cpp): its angles, a ped's speeds at most, its friction a brake, Object_3C's collision modes
+    {kEntityShot, "rot", kAngle, 0, 0},
+    {kEntityShot, "mAngle", kAngle, 0, 0},
+    {kEntityShot, "mSpeed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityShot, "mZSpeed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityShot, "mSavedSpeed", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityShot, "mZAccel", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityShot, "mFriction", kRange, -kSpeedMax, kSpeedMax},
+    {kEntityShot, "mSpriteCollideMode", kRange, 0, 2},
+    // Its states, written as they come (ped_state.cpp): within ped_state_1 and ped_state_2 (initial_28 the last)
+    {kEntityPed, "state1", kRange, 0, ped_state_1::in_car_10 + 1},
+    {kEntityPed, "state2", kRange, 0, ped_state_2::initial_28},
+    {kEntityPed, "stored1", kRange, 0, ped_state_1::in_car_10 + 1},
+    {kEntityPed, "stored2", kRange, 0, ped_state_2::initial_28},
     {kEntityTrain, "speed", kRange, 0, kTrainSpeedMax},
     {kEntityTrain, "state", kRange, 0, 5},
     {kEntityTrain, "stop_phase", kRange, 0, 11},
@@ -256,6 +289,16 @@ void net::engine::SanitizeSnapshot(Snapshot& snap)
         if (e.type == kEntityPed && e.f[kPedRemapField] != 0xFF && e.f[kPedRemapField] >= pedRemaps)
         {
             Set(e, kPedRemapField, 0xFF);
+        }
+        // A phase is a PhaseCode (else none), a throw's outcome 1..3 (0: not thrown, its other bits with it)
+        const int phase = e.type == kEntityPlayer ? kPlayerPhase : e.type == kEntityPed ? kPedPhase : -1;
+        if (phase >= 0 && (e.f[phase + kPhase] & 7) > kPhaseDoor)
+        {
+            Set(e, phase + kPhase, 0);
+        }
+        if (phase >= 0 && (e.f[phase + kThrow] & 3) == 0)
+        {
+            Set(e, phase + kThrow, 0);
         }
         if (e.type == kEntityPed)
         {

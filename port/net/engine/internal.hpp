@@ -23,6 +23,37 @@ namespace engine
 const int kPlayerWeapons = 28; // Player::mWeapons: its own (0..14) and its car weapons (15..27)
 const int kPowerUps = 17; // Player::mPowerUpTimers
 const int kKillerLaw = 63; // kPlayerKiller: killed by the police
+const int kLyingMax = 60; // Char::mLyingOnFloorTimer's start, a ped's (a player's: 20)
+// A ped's phase (phases.cpp, throws.cpp), the same record in the player and the ped entity from its first field on
+enum PhaseField
+{
+    kPhase, // PhaseCode | kPhaseInit
+    kPhaseTimer, // what ends it: thrown Char::mTimeout, lying mLyingOnFloorTimer, sinking and electrocuted mTimer, at a car
+                 // door mAnimationFrame | Ped::mTargetCarDoor << 2 | Char::mFrameTimer << 4
+    kPhaseCar, // at a car door: the car (CarRef)
+    kThrow, // thrown: the outcome (1 back on its feet, 2 knocked down, 3 dead) | airborne << 2 | the object's collision mode
+            // (Object_3C::mSpriteCollideMode) << 3, 0 not thrown; then the throw's object:
+    kThrowX, // its place
+    kThrowY,
+    kThrowZ,
+    kThrowRot,
+    kThrowAngle, // and its motion (Object_3C): the way it goes, its speed, its height's speed and gain, its friction
+    kThrowSpeed,
+    kThrowZSpeed,
+    kThrowZAccel,
+    kThrowFriction,
+    kPhaseFieldCount,
+};
+enum PhaseCode
+{
+    kPhaseNone,
+    kPhaseThrown, // ped_state_2::knocked_recover_24 .. knocked_fatal_26 on its object (Ped::mpObj2C)
+    kPhaseLying, // lying_on_floor_22, not an arrest's
+    kPhaseSinking, // sinking_20
+    kPhaseShocked, // electrocuted_27
+    kPhaseDoor, // ped2_at_car_door_17: pulled out of a car
+    kPhaseInit = 8, // its char is yet to start it (Char::mStateInitPending)
+};
 enum PlayerField
 {
     kPlayerX,
@@ -39,7 +70,7 @@ enum PlayerField
     kPlayerPoints,
     kPlayerAmmo0, // each weapon's ammo
     kPlayerCar = kPlayerAmmo0 + kPlayerWeapons, // the car it drives (CarRef)
-    kPlayerState, // kPlayerTransition | kPlayerDead | kPlayerLeaving | kPlayerOnFire
+    kPlayerState, // PlayerState bits
     kPlayerTarget, // the car it is going to get into (Ped::mTargetObjectiveCar, CarRef)
     kPlayerName, // its name (Player::mPlayerName), 4 characters a field
     kPlayerNameEnd = kPlayerName + 4,
@@ -53,6 +84,8 @@ enum PlayerField
     kPlayerMultiplier, // and its multiplier (Player::mMultipliers)
     kPlayerDeathEvents, // how often it died this game (wraps at 256): what a client carries out (kPlayerDeaths: the round's)
     kPlayerBonus, // its scoring bonuses this game (wraps at 256) << 4 | the last one's voice line (ScoreBonus)
+    kPlayerInvulnerable, // Ped::mInvulnerability: how it reacts to cars and blasts (a client's takes no damage either way)
+    kPlayerPhase, // its phase (PhaseField)
 };
 enum PlayerState
 {
@@ -157,6 +190,19 @@ enum ObjectField
     kObjModel, // Object::mModel (objects::)
     kObjIdx, // Object::mPedRefIdx (what kind, for some)
 };
+enum ShotField
+{
+    kShotX, // where it was at the end of its first tick (born), as it was then
+    kShotY,
+    kShotZ,
+    kShotRot,
+    kShotModel, // Object::mModel: a rocket, grenade or molotov, or an explosion
+    kShotKind, // an explosion's type (explosion_type), 0 for the others
+    kShotTimer, // a grenade's fuse (Object_8::mTimer), an explosion's Explosion::mTimer
+    kShotOwner, // who fired it (a ped as a field, PedNetId), 0 nobody
+    kShotBorn, // the game's cycle of that first tick, low 16 bits
+    kShotMotion, // then its Object_3C's motion (shots.cpp)
+};
 const int kTrainCarriages = 11; // Train::mCarriages: the lead and up to 10 wagons
 const int kTrainDriverPlayer = 3;
 enum TrainField
@@ -230,6 +276,7 @@ class ReachArea
     bool Inside(const Sprite* s) const;
     bool Beyond(const Sprite* s) const;
     float DistanceTo(const Sprite* s) const; // to the nearer focus
+    float DistanceTo(float x, float y) const; // from a place in blocks
 
   private:
     Foci mFoci;
@@ -259,9 +306,36 @@ void CaptureWorld(Snapshot& out); // the world entity (world_entity.cpp)
 void ApplyWorld(const EntityState& w);
 void ApplySlots(const Snapshot& snap); // the slots in the game: the snapshot's
 void ApplyPlayer(const EntityState& e);
+void SettlePlayerCar(const EntityState& e);
 void KillCredited(Ped* ped, int killerSlot); // the game's own death, credited to a player (-1: nobody)
-void KillNow(Ped* ped);
-void ApplyFire(Ped* p, bool onFire); // on fire or not as the server has it, the game's own way // the game's own death (Ped::Kill), dead at once even when knocked down
+void KillNow(Ped* ped); // the game's own death (Ped::Kill), dead at once even when knocked down, at its landing when thrown
+void ApplyFire(Ped* p, bool onFire); // on fire or not as the server has it, the game's own way
+// A ped's phase (phases.cpp, throws.cpp) at the record from field <base> (kPlayerPhase, kPedPhase). Captured; applied as
+// the server's: started the game's way, its timer written, or cancelled to walking; deadThere: the server's ped is dead
+// (the death ends it, KillNow), seat: the car the server has it in
+void PhaseRecordFields(std::vector<FieldDesc>& out);
+extern const int kPedPhase;
+int32_t PhaseOf(const Ped* ped); // PhaseCode, without kPhaseInit
+void CapturePhases(const Ped* ped, EntityState& e, int base);
+void ApplyPhases(Ped* ped, const EntityState& e, int base, bool deadThere, Car* seat);
+void CancelPhase(Ped* ped); // on its feet, walking
+// Before each tick on a client, every ped: thrown, sinking or electrocuted to death only by KillNow
+void GuardPhases(Ped* ped);
+// Its throw's object while thrown (NULL: not thrown), moved across by as much as the ped's shown place (the blend; not in
+// height: below its floor it would fall through)
+Object* ThrowOf(const Ped* ped);
+void CaptureThrow(const Ped* ped, EntityState& e, int base);
+void ApplyThrow(Ped* ped, const EntityState& e, int base);
+void MoveThrow(Ped* ped, int32_t dx, int32_t dy); // raw Fix16
+void GuardThrow(Ped* ped);
+// gPortPedMayDie on a client: only the server's death (KillNow), or one in a car; another is held, the ped knocked down
+bool ClientPedMayDie(Ped* ped);
+// gPortPedMayGo on a client: a server's ped goes by the snapshots (RemoveUnsent), a death of the server's or with its car
+bool ClientPedMayGo(Ped* ped);
+bool InServerDeath(); // inside KillNow
+bool ClientMayPullOut(Ped* victim); // gPortMayPullOut on a client: a player is pulled out of its car by the server only
+extern int gDeathsHeld; // for the log
+extern int gPedsRevived; // for the log: corpses here the server has alive (ApplyPedState)
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there
 void EndDeath(Player* p); // a death's or an arrest's countdown over at once, the player's part (slots.cpp)
 void InstallStarts(bool on); // the players' peds past the script's and their start blocks (starts.cpp)
@@ -277,7 +351,7 @@ void ResetHudScores(Player* p); // the HUD's money, frags and multiplier as at a
 void SoundLogRestored(uint32_t tick);
 void SoundLogResimTick(bool applied);
 void SoundLogStop();
-void ProtectPlayers(); // player peds take no damage on a client: their health and deaths are the server's
+void ProtectPlayers(); // the cars of player peds kept, every ped's fatal phase steps held (GuardPhases)
 void SeenByAll(); // every ped and car counts as seen: no removal off screen on a client
 
 // Cars (cars.cpp, car_ai.cpp)
@@ -336,6 +410,8 @@ void ForceOutOfCar(Ped* ped, const Fix16& x, const Fix16& y, const Fix16& z, con
 void ForceOutBesideCar(Ped* ped, Car* car); // out at the car's side (a car's driver needn't point back to it)
 void StartEntering(Ped* ped, Car* car);
 void StartLeaving(Ped* ped);
+// Pulled out at its door as the jacker's char does it (Char::UpdateCharB4), its char made at x, y, z
+void StartPulledOut(Ped* ped, Car* car, int door, const Fix16& x, const Fix16& y, const Fix16& z);
 
 // A client's cars and peds (replica.cpp)
 void ApplyCarsAndPeds(const Snapshot& snap);
@@ -369,6 +445,17 @@ void ApplyPickups(const Snapshot& snap);
 std::unordered_map<uint32_t, Object*>& PickupMap(); // for the rollback (ReplicaState)
 void ClearPickups(); // a new game: none mapped
 extern int gPickupsMade, gPickupsRemoved; // for the log
+
+// Shots (shots.cpp): rockets, grenades, molotovs and blasts both ends simulate, keyed by prediction
+// (port/src/rand/owner.hpp). The server's are sent by how they started; a client makes the ones it lacks and removes
+// those the server doesn't have at the snapshot's tick
+void ShotMotionFields(std::vector<FieldDesc>& out);
+void CaptureShots(Snapshot& out);
+void ApplyShots(const Snapshot& snap);
+void InstallShots(bool on, bool client); // the game's hooks for the keys and a client's blasts
+void ShotsTickStart(); // a client's, before each tick (GTA2_NET_TESTGHOSTSHOT)
+void ClearShots(); // a new game
+extern int gShotsKept, gShotsMade, gShotsRemoved, gShotsBeyond; // for the log
 
 // This game's live cars and peds (a mapped one may have been removed by the game since; stats.cpp)
 void LiveEntities(std::set<Car*>& cars, std::set<Ped*>& peds);

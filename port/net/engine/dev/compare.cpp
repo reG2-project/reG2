@@ -24,8 +24,9 @@
 #include "Source/sound_obj.hpp"
 #include "Source/sprite.hpp"
 #include <math.h>
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 #include <dlfcn.h>
+#include <execinfo.h>
 #endif
 #include "port/src/rand/state.hpp"
 #include "Source/rng.hpp"
@@ -33,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <numeric>
 #include <set>
 #include <string.h>
 #include <string>
@@ -58,6 +60,7 @@ struct FieldTally
 std::vector<std::vector<FieldTally>> gTally; // [type][field]
 uint64_t gMissing[8]; // per type: in the snapshot, mapped, but not captured here
 uint64_t gAsleepHere, gAsleepThere; // cars with physics on one side only (asleep on the other)
+uint64_t gStreamSnaps, gStreamSame, gStreamCompared; // the world's random state (kWorldRand) against the server's
 
 bool IsCop(Ped* p)
 {
@@ -127,9 +130,9 @@ template <class Fn> void ForEachPair(const Snapshot& snap, Fn fn)
             local = p ? kPedIdBase + p->mId : 0;
             group = p && IsCop(p) ? 1 : p && IsParamedic(p) ? 2 : 0;
         }
-        else if (s.type == kEntityObject || s.type == kEntityTrain)
+        else if (s.type == kEntityObject || s.type == kEntityTrain || s.type == kEntityShot)
         {
-            continue; // Pickups are matched by place (pickups.cpp), not compared here; nor trains (their carriages go by each end's own car ids)
+            continue; // Pickups are matched by place (pickups.cpp), not compared here; nor trains (their carriages go by each end's own car ids), nor shots (their start)
         }
         if (EntityAge(s))
         {
@@ -190,16 +193,46 @@ void EnsureTally(std::vector<std::vector<FieldTally>>& tally)
 }
 } // namespace
 
+namespace
+{
+// Not the client's to predict: a player's deaths (a client counts its own, only to carry out each once), its points,
+// money and multiplier (set from the snapshot after this comparison), the world's reach (the server's area)
+bool Predicted(uint32_t type, size_t f)
+{
+    return !((type == kEntityPlayer && (f == kPlayerDeaths || f == kPlayerPoints || f == kPlayerMoney || f == kPlayerMultiplier || f == kPlayerDeathEvents)) ||
+             (type == kEntityWorld && f == kWorldReach));
+}
+} // namespace
+
+bool net::engine::Differs(const Snapshot& snap)
+{
+    const uint64_t missing = std::accumulate(gMissing, gMissing + 8, (uint64_t)0);
+    bool differs = false;
+    ForEachPair(snap, [&](const EntityState& s, const EntityState& h, int) {
+        const size_t fields = NetSchema().types[s.type].fields.size();
+        for (size_t f = 0; f < fields && !differs; f++)
+        {
+            differs = Predicted(s.type, f) && h.f[f] != s.f[f];
+        }
+    });
+    return differs || std::accumulate(gMissing, gMissing + 8, (uint64_t)0) != missing; // or one it has that this game lacks
+}
+
 void net::engine::ComparePrediction(const Snapshot& snap)
 {
     EnsureTally(gTally);
     ForEachPair(snap, [](const EntityState& s, const EntityState& h, int group) {
+        if (s.type == kEntityWorld && gStreamSnaps++) // the first: drawn before this client had any of the server's
+        {
+            gStreamSame += h.f[kWorldRand] == s.f[kWorldRand];
+            gStreamCompared++;
+        }
         std::vector<FieldTally>& tally = group ? gTally[NetSchema().types.size() + group - 1] : gTally[s.type];
         for (size_t f = 0; f < tally.size(); f++)
         {
             // Not the client's to predict: a player's deaths (a client counts its own, only to carry out each once),
             // its points, money and multiplier (set from the snapshot after this comparison), the world's reach (the server's area)
-            if ((s.type == kEntityPlayer && (f == kPlayerDeaths || f == kPlayerPoints || f == kPlayerMoney || f == kPlayerMultiplier || f == kPlayerDeathEvents)) || (s.type == kEntityWorld && f == kWorldReach))
+            if (!Predicted(s.type, f))
             {
                 continue;
             }
@@ -343,19 +376,23 @@ namespace
 {
 FILE* gRandLog;
 uint32_t gRandFrom, gRandTo;
-void LogRand(void* caller)
+void LogRand(void* caller, bool owned)
 {
     const uint32_t cycle = (uint32_t)gpRng->get_cur_rng();
     if (cycle >= gRandFrom && cycle <= gRandTo)
     {
         uintptr_t base = 0;
-#if !defined(_WIN32)
+        // the caller, and two above it (past the rng wrappers: rng::get_int and the like)
+        void* up[5] = {NULL, NULL, caller, NULL, NULL};
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
         Dl_info info;
         base = dladdr(caller, &info) ? (uintptr_t)info.dli_fbase : 0;
+        backtrace(up, 5); // not __builtin_return_address(n > 0): it follows frame pointers the game's code leaves out
+#else
+        up[3] = __builtin_return_address(2), up[4] = __builtin_return_address(3);
 #endif
-        // the caller, and two above it (past the rng wrappers: rng::get_int and the like)
-        fprintf(gRandLog, "%u 0x%lx 0x%lx 0x%lx\n", cycle, (unsigned long)((uintptr_t)caller - base),
-                (unsigned long)((uintptr_t)__builtin_return_address(2) - base), (unsigned long)((uintptr_t)__builtin_return_address(3) - base));
+        fprintf(gRandLog, "%u %c 0x%lx 0x%lx 0x%lx\n", cycle, owned ? 'o' : 's', (unsigned long)((uintptr_t)caller - base),
+                (unsigned long)((uintptr_t)up[3] - base), (unsigned long)((uintptr_t)up[4] - base));
     }
 }
 } // namespace
@@ -456,6 +493,10 @@ void net::engine::PrintPredictionStats(uint32_t frame)
         }
         printf("%s\n", medics.empty() ? " none" : "");
     }
+    // The shots check's: anything that draws from the game's stream here and not there (a cosmetic) shows here
+    printf("net: frame %u, the game's random stream as the server's at %llu of %llu snapshots\n", frame, (unsigned long long)gStreamSame,
+           (unsigned long long)gStreamCompared);
+    gStreamSame = gStreamCompared = 0;
     printf("net: frame %u, prediction against the server, the fields that differ most:", frame);
     for (size_t i = 0; i < rows.size() && i < 12; i++)
     {
