@@ -261,19 +261,21 @@ class Response
             Pending& p = mPending[i];
             const uint32_t late = frame - p.frame;
             const bool moved = p.bit == 0x1 ? speed > (inCar ? 0.001f : 0.005f) : p.bit == 0x4 ? drot > p.drot : drot < p.drot;
-            Stat& s = mStats[p.inCar];
+            Stat& s = mStats[p.inCar ? p.bit == 0x1 ? 1 : 2 : 0];
             if (!cont || p.inCar != inCar)
             {
                 mPending.erase(mPending.begin() + i); // the player changed (dead, into a car): not a response
             }
             else if (moved)
             {
+                Press(frame, p, (int)late);
                 s.n++;
                 s.hist[late < 6 ? late : 6]++;
                 mPending.erase(mPending.begin() + i);
             }
             else if (late >= 15)
             {
+                Press(frame, p, -1);
                 s.timeouts++; // blocked (a wall, a car at rest turning)
                 mPending.erase(mPending.begin() + i);
             }
@@ -305,10 +307,11 @@ class Response
     }
     void Print(uint32_t frame) const
     {
-        for (int c = 0; c < 2; c++)
+        static const char* const kNames[3] = {"foot", "carfwd", "carturn"};
+        for (int c = 0; c < 3; c++)
         {
             const Stat& s = mStats[c];
-            printf("comfort: C resp %u %s %u %u %u %u %u %u %u %u %u\n", frame, c ? "car" : "foot", s.n, s.timeouts, s.hist[0], s.hist[1],
+            printf("comfort: C resp %u %s %u %u %u %u %u %u %u %u %u\n", frame, kNames[c], s.n, s.timeouts, s.hist[0], s.hist[1],
                    s.hist[2], s.hist[3], s.hist[4], s.hist[5], s.hist[6]);
         }
     }
@@ -320,12 +323,20 @@ class Response
         bool inCar;
         int drot;
     };
+    // One line a press in a car, for comfort.py's breakdown by car model: its frames to motion, -1 none
+    void Press(uint32_t frame, const Pending& p, int late) const
+    {
+        if (p.inCar && mCar)
+        {
+            printf("comfort: C press %u %s %d %d\n", frame, p.bit == 0x1 ? "fwd" : "turn", late, (int)mCar->mCarInfoIdx);
+        }
+    }
     struct Stat
     {
         uint32_t n = 0, timeouts = 0, hist[7] = {0, 0, 0, 0, 0, 0, 0};
     };
     std::vector<Pending> mPending;
-    Stat mStats[2];
+    Stat mStats[3]; // on foot, in a car forward from still, in a car turning
     bool mValid = false, mInCar = false;
     const Car* mCar = NULL;
     uint32_t mFrame = 0, mInput = 0;
@@ -346,6 +357,7 @@ Corrections gCorr[3]; // others, the local player and its car, another player pl
 uint32_t gSyncedFrames;
 uint32_t gSeen[3]; // frames of other players, cars and peds within kSeen of the local player
 int gSlot = -1;
+uint32_t gTurns[2]; // car updates in another order; those with the local player's car among the cars moved later
 
 uint32_t ServerOwner(const Object* o)
 {
@@ -512,6 +524,7 @@ void net::engine::ComfortClientFrame(uint32_t frame, uint32_t tick, int slot, ui
             printf("comfort: C corr %u %s %u %u %u\n", frame, i == 2 ? "placed" : i ? "self" : "others", gCorr[i].n, gCorr[i].over[0], gCorr[i].over[1]);
         }
         printf("comfort: C seen %u %u %u %u\n", frame, gSeen[0], gSeen[1], gSeen[2]);
+        printf("comfort: C turns %u %u %u\n", frame, gTurns[0], gTurns[1]);
         printf("comfort: C synced %u %u\n", frame, gSyncedFrames);
         fflush(stdout);
     }
@@ -544,5 +557,24 @@ void net::engine::ComfortCorrection(uint32_t id, float blocks, float x, float y)
         printf("comfort: C cv %u %u %.2f %d %d %d %d %d %d %.1f\n", gSyncedFrames, id, blocks, kind, p ? p->mPedState1 : -1,
                p ? p->mPedState2 : -1, p ? PhaseOf(p) : -1, car && car->mDriver ? (car->mDriver->mPlayer ? 2 : 1) : 0,
                car ? car->IsTrainModel() : 0, sqrtf(dx * dx + dy * dy));
+    }
+}
+
+void net::engine::ComfortCarTurns(const std::vector<Car*>& cars, const std::vector<int>& order)
+{
+    if (!ComfortOn() || gSlot < 0)
+    {
+        return;
+    }
+    gTurns[0]++;
+    Ped* me = InGamePed(gSlot);
+    for (size_t k = 0, last = 0; k < order.size() && me && me->mCar; k++)
+    {
+        if (cars[order[k]] == me->mCar)
+        {
+            gTurns[1] += (size_t)order[k] < last; // after a car the pool has after it
+            break;
+        }
+        last = (size_t)order[k] > last ? order[k] : last;
     }
 }

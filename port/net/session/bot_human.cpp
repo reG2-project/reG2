@@ -103,6 +103,7 @@ class HumanBot : public net::BotBrain
             case kPickup: b = Pickup(v); break;
             case kWater: b = Water(v); break;
             case kBlast: b = Blast(v); break;
+            case kCharge: b = Fight(v, 0.0f); break;
         }
         mFastExits += mInCar && !v.car && mFastExit;
         mInCar = v.car != 0;
@@ -118,6 +119,7 @@ class HumanBot : public net::BotBrain
         kPickup,
         kWater,
         kBlast,
+        kCharge, // only as human:charge: the fight, running at the target all the way, firing
         kActs
     };
 
@@ -128,7 +130,7 @@ class HumanBot : public net::BotBrain
 
     void Choose(const net::BotView& v)
     {
-        static const int kWeights[kActs] = {6, 4, 5, 2, 1, 2};
+        static const int kWeights[kActs] = {6, 4, 5, 2, 1, 2, 0};
         int total = 0;
         for (int w : kWeights)
         {
@@ -403,7 +405,7 @@ class HumanBot : public net::BotBrain
     }
 
     // Every weapon in turn at the nearest player, or ahead when nobody is near
-    uint32_t Fight(const net::BotView& v)
+    uint32_t Fight(const net::BotView& v, float closeTo = 3.0f)
     {
         if (v.car)
         {
@@ -428,7 +430,7 @@ class HumanBot : public net::BotBrain
         if (target && best < 12)
         {
             const int err = TurnTo(v.rot, target->x - v.x, target->y - v.y);
-            b |= Steer(err) | (best > 3 ? net::kBtnForward : 0);
+            b |= Steer(err) | (best > closeTo ? net::kBtnForward : 0);
             return b | (abs(err) < 120 && Roll(3) ? net::kBtnAttack : 0);
         }
         if (target)
@@ -553,7 +555,7 @@ class HumanBot : public net::BotBrain
     float mX = 0, mY = 0, mZ = 0, mGoalDist = -1, mWagonDist = 999;
     int mCars = 0, mSpecials = 0, mFastExits = 0, mTrains = 0, mWeaponsTried = 0, mDeaths = 0;
 };
-const char* const HumanBot::kNames[] = {"drive", "train", "fight", "pickup", "water", "blast"};
+const char* const HumanBot::kNames[] = {"drive", "train", "fight", "pickup", "water", "blast", "charge"};
 } // namespace
 
 std::unique_ptr<net::BotBrain> net::CreateHumanBrain(const std::string& only)

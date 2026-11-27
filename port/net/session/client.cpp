@@ -514,6 +514,15 @@ void net::Client::TakePlayerStates(const Snapshot& snap)
         const uint32_t last = n ? mKnown.controls[player][n - 1] : buttons;
         const uint32_t before = n > 1 ? mKnown.controls[player][n - 2] : n ? buttons & 0xFFF : mRemoteSeen[player];
         mRemote[player] = (last & ~turn) | (last & before & turn);
+        if (Env().fwdLog && player != mSlot)
+        {
+            printf("net: FWD snap %u at %u p%d buttons 0x%x n %d:", snap.tick, mTick, player, buttons, n);
+            for (int i = 0; i < n; i++)
+            {
+                printf(" 0x%x", mKnown.controls[player][i]);
+            }
+            printf("\n");
+        }
         mRemoteSeen[player] = buttons;
         if (player == mSlot)
         {
@@ -804,6 +813,7 @@ void net::Client::StartBot()
     mBot = CreateBotBrain(mConfig.bot);
     mNavMap.reset(new engine::NavMap());
     engine::BuildNavMap(*mNavMap);
+    LabelNavParts(*mNavMap);
     if (Env().navDump)
     {
         engine::DumpNavMap(*mNavMap, Env().navDump);
@@ -822,6 +832,11 @@ uint32_t net::Client::ChooseInput(uint32_t recordedInput)
             StartBot();
         }
         FillBotView(mBotView, mReceived[mLatestTick % kRing], mSlot, mFrame, mNavMap.get());
+        if (mBotPickups.empty() || mFrame % 300 == 0)
+        {
+            engine::WeaponPickups(mBotPickups);
+        }
+        mBotView.pickups = &mBotPickups;
         // The keyboard's key events go with a bot's controls: Escape and the leave prompt, the chat (GTA2_INPUT in tests)
         const uint32_t bot = mBot ? mBot->Think(mBotView) : 0;
         const bool idle = mTick >= Env().botIdleFrom && mTick < Env().botIdleTo;
@@ -1089,6 +1104,7 @@ void net::Client::StartOver()
     mBot.reset(); // and its map of the old one
     mNavMap.reset();
     printf("net: frame %u, a new game\n", mFrame);
+    engine::PrintSoundDiag(("frame " + std::to_string(mFrame) + ", the new game").c_str());
 }
 
 // Not running ahead of the server (yet, or any more), or far off: jump to where we should be
@@ -1248,6 +1264,7 @@ void net::Client::PrintStats(const Snapshot& snap)
     }
     int poolCars = 0, poolPeds = 0, poolChars = 0, sent = 0, driven = 0, same = 0, traffic = 0, trafficHere = 0;
     engine::PrintReplicaLog();
+    engine::PrintSoundDiag(("frame " + std::to_string(mFrame)).c_str());
     engine::PoolUse(&poolCars, &poolPeds, &poolChars);
     engine::DriverStats(snap, &sent, &driven, &same);
     engine::TrafficDriverStats(snap, &traffic, &trafficHere);
@@ -1489,7 +1506,22 @@ void net::Client::LeaveToMenu(const char* why)
 
 void net::Client::Frame()
 {
+    using Clock = std::chrono::steady_clock;
+    static Clock::time_point sLast;
+    const Clock::time_point start = Clock::now();
+    const double reconcileUs = mStats.restoreUs + mStats.resimUs + mStats.saveUs;
+    const uint32_t resimTicks = mStats.resimTicks;
     Step();
+    if (Env().frameLog)
+    {
+        const auto us = [](Clock::time_point a, Clock::time_point b) {
+            return (long)std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
+        };
+        printf("net: FRAME %u tick %u cycle %u: since the last %ld us, step %ld us, reconcile %.0f us, %u ticks resimulated\n", mFrame, mTick,
+               engine::GameCycle(), us(sLast, start), us(start, Clock::now()), mStats.restoreUs + mStats.resimUs + mStats.saveUs - reconcileUs,
+               mStats.resimTicks - resimTicks);
+        sLast = start;
+    }
     engine::GuardPeds(); // again: the snapshot this frame applied comes before the next tick
     engine::GuardFatalPhases(); // a fatal throw of the frame's last tick is drawn knocked down
     engine::AnchorAttachments(); // the frame is drawn next

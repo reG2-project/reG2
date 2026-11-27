@@ -3,6 +3,7 @@
 // moved before the car it chases hits it where it was a tick ago, and is stopped a tick's move short of where it is drawn.
 #include "internal.hpp"
 #include "../core/car_order.hpp"
+#include "dev/comfort.hpp"
 #include "Source/Car.hpp"
 #include "Source/CarAI.hpp"
 #include "Source/CarPhysics.hpp"
@@ -79,6 +80,7 @@ void UpdateCars()
         gCar_BC_Pool->mPool.UpdatePool();
         return;
     }
+    net::engine::ComfortCarTurns(cars, order);
     gCar_BC_Pool->mPool.field_X_count = 0;
     const std::unordered_set<Car*> before(cars.begin(), cars.end());
     for (int i : order)

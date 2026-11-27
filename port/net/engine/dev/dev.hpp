@@ -78,6 +78,7 @@ void PoseLog(bool server); // GTA2_NET_POSELOG: every tick, each player on foot:
 // GTA2_NET_THROWLOG: every tick, the players thrown, down, dead or on fire, and new explosions; snap: the newest
 // snapshot applied (a client), each player line ends with it
 void ThrowLog(bool server, uint32_t snap);
+void DriveLog(bool server); // GTA2_NET_HITLOG: every tick, each player in a car: its place
 void ShotLog(bool server); // GTA2_NET_SHOTLOG: every tick, the rockets, grenades, molotovs and blasts by key (shots.cpp)
 // GTA2_NET_PEDLOG=<player>: the peds within 12 blocks of that player, their states and phase; end "server", "client" (a live
 // tick) or "applied" (a snapshot's tick, as its apply left them)

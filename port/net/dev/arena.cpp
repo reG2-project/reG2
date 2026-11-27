@@ -8,6 +8,7 @@
 //   teacher would press (a scripted brain, "hunter" by default: for kickstarting), its features
 // and the trainer answers each slot's buttons. With done (the last message, at --ticks) there is no answer.
 #include "arena.hpp"
+#include <algorithm>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +24,7 @@
 namespace
 {
 const float kNear = 50; // blocks: closer than this to the nearest other player counts towards "near"
+const float kClientArea = 24; // blocks: a client's area (ServerConfig::interestRadius)
 const uint32_t kRemoteHead = 4; // slot, alive, reward, teacher
 
 // The trainer's reward: frags and deaths most, then damage, pickups and being near someone to fight
@@ -133,8 +135,18 @@ void net::Arena::Think(const Snapshot& world, uint32_t tick)
     {
         mNavMap.reset(new engine::NavMap());
         engine::BuildNavMap(*mNavMap);
+        LabelNavParts(*mNavMap);
     }
     Score(world);
+    if (mPickups.empty() || tick % 300 == 0)
+    {
+        engine::WeaponPickups(mPickups);
+    }
+    uint64_t expanded = 0;
+    for (const Bot& bot : mBots)
+    {
+        expanded += bot.nav.expanded;
+    }
     std::vector<float> message;
     for (size_t i = 0; i < mBots.size(); i++)
     {
@@ -142,16 +154,34 @@ void net::Arena::Think(const Snapshot& world, uint32_t tick)
         if (bot.brain || tick % kBotDecisionTicks == 0)
         {
             FillBotView(mView, world, (int)i, tick, mNavMap.get());
+            mView.stats = &bot.nav;
+            mView.pickups = &mPickups;
+            // What a client's snapshots would have: every player and train, the rest within its area (server.hpp)
+            const float x = mView.x, y = mView.y;
+            mView.seen.erase(std::remove_if(mView.seen.begin(), mView.seen.end(),
+                                            [&](const BotView::Seen& s) {
+                                                return s.kind != BotView::Seen::kPlayer && s.kind != BotView::Seen::kTrain &&
+                                                       hypotf(s.x - x, s.y - y) > kClientArea;
+                                            }),
+                             mView.seen.end());
         }
         if (bot.brain)
         {
             bot.buttons = bot.brain->Think(mView);
+            MeterFire(bot);
         }
         else if (tick % kBotDecisionTicks == 0)
         {
             AddRemote((int)i, message);
         }
     }
+    uint64_t after = 0;
+    for (const Bot& bot : mBots)
+    {
+        after += bot.nav.expanded;
+    }
+    mExpanded += after - expanded;
+    mMaxExpanded = after - expanded > mMaxExpanded ? after - expanded : mMaxExpanded;
     if (!message.empty() && !Exchange(message, false))
     {
         fprintf(stderr, "net: the trainer is gone\n");
@@ -213,8 +243,24 @@ bool net::Arena::Exchange(const std::vector<float>& message, bool done)
 void net::Arena::Score(const Snapshot& world)
 {
     std::vector<Bot::Body> bodies(mBots.size());
+    std::vector<float> cars, carSpeeds; // blocks per tick since the last tick (0 for a car new to it)
+    std::vector<CarPos> carsNow;
+    std::vector<std::pair<uint32_t, int>> damage; // each car's id and Car::mDamage
     for (const EntityState& e : world.entities)
     {
+        if (e.type == engine::kEntityCar)
+        {
+            const float x = engine::Blocks(e.f[0]), y = engine::Blocks(e.f[1]);
+            cars.push_back(x), cars.push_back(y);
+            float speed = 0;
+            for (const CarPos& c : mLastCars)
+            {
+                speed = c.id == e.id ? hypotf(x - c.x, y - c.y) : speed;
+            }
+            carSpeeds.push_back(speed);
+            carsNow.push_back(CarPos{e.id, x, y});
+            damage.push_back(std::make_pair(e.id, CarDamage(e)));
+        }
         int p = 0;
         uint32_t b = 0;
         if (engine::PlayerOf(e, &p, &b) && p < (int)bodies.size())
@@ -227,13 +273,29 @@ void net::Arena::Score(const Snapshot& world)
             {
                 body.guns += engine::PlayerAmmo(e, w) > 0;
             }
+            body.throwables = engine::PlayerAmmo(e, 4) + engine::PlayerAmmo(e, 5);
         }
+    }
+    mLastCars.swap(carsNow);
+    // A new round sets every score back to 0: no frag or death that tick
+    bool newRound = false;
+    for (size_t i = 0; i < mBots.size(); i++)
+    {
+        newRound |= bodies[i].deaths < mBots[i].last.deaths;
     }
     for (size_t i = 0; i < mBots.size(); i++)
     {
         const Bot::Body& me = bodies[i];
         Bot& bot = mBots[i];
-        float nearest = 1e9f, shooterDist = 1e9f;
+        const int frags = newRound ? 0 : me.frags - bot.last.frags, deaths = newRound ? 0 : me.deaths - bot.last.deaths;
+        float nearest = 1e9f, shooterDist = 1e9f, nearestOnFoot = 1e9f, nearestInCar = 1e9f, carDist = 1e9f;
+        bool movingCar = false;
+        for (size_t c = 0; c + 1 < cars.size(); c += 2)
+        {
+            const float d = hypotf(cars[c] - me.x, cars[c + 1] - me.y), speed = carSpeeds[c / 2];
+            carDist = d < carDist ? d : carDist;
+            movingCar |= d < 1.5f && speed >= 0.1f && speed < 2; // faster: put back somewhere, not driven
+        }
         int shooter = -1;
         for (size_t j = 0; j < mBots.size(); j++)
         {
@@ -244,6 +306,8 @@ void net::Arena::Score(const Snapshot& world)
                 continue;
             }
             nearest = d < nearest ? d : nearest;
+            nearestOnFoot = !other.car && d < nearestOnFoot ? d : nearestOnFoot;
+            nearestInCar = other.car && d < nearestInCar ? d : nearestInCar;
             // Who faces it (30 degrees, 10 blocks) or stands at it (3) hurt it; cars and fire mislead it
             int err = (int)(atan2f(dx, dy) * 720.0f / 3.14159265f) - other.rot;
             err = ((err % 1440) + 2160) % 1440 - 720;
@@ -264,13 +328,19 @@ void net::Arena::Score(const Snapshot& world)
         if (lost > 0 && shooter >= 0 && bot.last.health > 0)
         {
             mBots[shooter].dealt += lost;
+            mBots[shooter].fistDealt += !bodies[shooter].guns && !bodies[shooter].car ? lost : 0;
             mBots[shooter].reward += kDamageReward * lost;
         }
         if (mTicks > 0)
         {
-            bot.reward += kFragReward * (me.frags - bot.last.frags) + kDeathReward * (me.deaths - bot.last.deaths);
-            bot.reward += me.car || bot.last.car ? kCarFragReward * (me.frags - bot.last.frags) : 0;
-            bot.droveThisLife &= me.deaths == bot.last.deaths;
+            bot.reward += kFragReward * frags + kDeathReward * deaths;
+            bot.reward += me.car || bot.last.car ? kCarFragReward * frags : 0;
+            bot.frags += frags, bot.deaths += deaths;
+            bot.carDeaths += deaths > 0 && (me.car || bot.last.car) ? deaths : 0;
+            bot.carFrags += frags > 0 && (me.car || bot.last.car) ? frags : 0;
+            const bool runOver = !me.car && !bot.last.car && bot.movingCarAt && mTicks + 1 - bot.movingCarAt <= 30;
+            bot.runOvers += deaths > 0 && runOver ? deaths : 0;
+            bot.droveThisLife &= deaths == 0;
             if (me.car && !bot.droveThisLife)
             {
                 bot.droveThisLife = true;
@@ -281,11 +351,160 @@ void net::Arena::Score(const Snapshot& world)
             bot.pickups += took;
             bot.reward += took ? kPickupReward : 0;
             bot.cars += me.car && !bot.last.car;
+            if ((me.car != 0) != (bot.last.car != 0) && me.health > 0 && bot.last.health > 0)
+            {
+                bot.quickSwitches += bot.carSwitchTick && mTicks - bot.carSwitchTick < 150;
+                bot.carSwitchTick = mTicks;
+            }
+            const bool firing = (bot.buttons & kBtnAttack) && me.health > 0 && !me.car && me.guns > 0;
+            bot.firePresses += firing && !(bot.lastButtons & kBtnAttack);
+            bot.fireTicks += firing;
+            bot.lastButtons = bot.buttons;
+            if (me.throwables < bot.last.throwables && me.health > 0 && bot.last.health > 0 && !me.car)
+            {
+                bot.throws++;
+                bot.closeThrows += nearest < 1.8f;
+                bot.farThrows += nearest > 5;
+            }
         }
+        if (me.health > 0)
+        {
+            bot.movingCarAt = !me.car && movingCar ? mTicks + 1 : bot.movingCarAt;
+            bot.aliveTicks++;
+            bot.armedTicks += me.guns > 0;
+            bot.farTicks += nearest > 12;
+            bot.carTicks += me.car != 0;
+            bot.fistTicks += !me.guns && !me.car && nearest < 1.5f;
+            bot.carNearFootTicks += me.car && nearestOnFoot < 6;
+            const bool unarmedOnFoot = !me.guns && !me.car;
+            bot.carPunchTicks += unarmedOnFoot && (bot.buttons & kBtnAttack) && carDist < 1.2f;
+            bot.fistAtCarTicks += unarmedOnFoot && nearestInCar < 1.5f;
+            for (const std::pair<uint32_t, int>& c : damage)
+            {
+                bot.burningCarTicks += me.car && c.first == me.car && c.second >= kCarOnFire;
+            }
+        }
+        Meter(bot, me, carDist);
+        MeterRetreat(bot, me, bodies, (int)i);
         bot.last = me;
         bot.last.nearest = nearest;
     }
     mTicks++;
+}
+
+// Fire held on foot with a gun at the nearest player within 30 degrees of its facing and 12 blocks: blocked by a car,
+// or by a wall (not walkable in a straight line)
+void net::Arena::MeterFire(Bot& bot)
+{
+    const BotView& v = mView;
+    if (!(bot.buttons & kBtnAttack) || !v.hasBody || v.health <= 0 || v.car || v.weapon < 0 || v.weapon == 4 || v.weapon == 5 || mTicks == 0)
+    {
+        return;
+    }
+    const BotView::Seen* target = NULL;
+    float nearest = 12;
+    for (const BotView::Seen& s : v.seen)
+    {
+        const float dx = s.x - v.x, dy = s.y - v.y, d = hypotf(dx, dy);
+        int err = (int)(atan2f(dx, dy) * 720.0f / 3.14159265f) - v.rot;
+        err = ((err % 1440) + 2160) % 1440 - 720;
+        if (s.kind == BotView::Seen::kPlayer && s.health > 0 && d < nearest && abs(err) < 120)
+        {
+            nearest = d, target = &s;
+        }
+    }
+    if (!target)
+    {
+        return;
+    }
+    bot.aimedFireTicks++;
+    if (ShotBlocker(v, v.x, v.y, *target))
+    {
+        bot.carBlockedTicks++;
+    }
+    else if (v.map && !NavClear(*v.map, v.x, v.y, target->x, target->y))
+    {
+        bot.wallBlockedTicks++;
+    }
+}
+
+// Stuck: alive through a window, pressing on (forward, or back in a car) for most of it, and under 0.3 blocks (on foot)
+// or 0.5 (in a car) from where it started
+void net::Arena::Meter(Bot& bot, const Bot::Body& me, float carDist)
+{
+    const bool inCar = me.car != 0;
+    if (me.health <= 0 || (bot.windowOpen && inCar != bot.windowInCar))
+    {
+        bot.windowOpen = false;
+        bot.stuckRun = me.health <= 0 ? 0 : bot.stuckRun;
+        return;
+    }
+    if (!bot.windowOpen)
+    {
+        bot.windowOpen = true;
+        bot.windowFrom = mTicks, bot.pushing = 0, bot.firingInWindow = 0, bot.windowInCar = inCar, bot.windowX = me.x, bot.windowY = me.y;
+        bot.windowRot = me.rot, bot.windowTurned = false;
+    }
+    bot.pushing += (bot.buttons & (inCar ? kBtnForward | kBtnBack : kBtnForward)) != 0;
+    bot.firingInWindow += (bot.buttons & kBtnAttack) != 0;
+    bot.windowTurned |= (bot.buttons & (kBtnLeft | kBtnRight)) != 0;
+    const uint32_t length = inCar ? 60 : 45;
+    if (mTicks - bot.windowFrom + 1 < length)
+    {
+        return;
+    }
+    const bool stuck = bot.pushing * 2 >= length && hypotf(me.x - bot.windowX, me.y - bot.windowY) < (inCar ? 0.5f : 0.3f);
+    bot.stuckTicks += stuck ? length : 0;
+    bot.carStuckTicks += stuck && inCar ? length : 0;
+    bot.carStuckFootTicks += stuck && !inCar && carDist < 1.5f ? length : 0;
+    bot.stuckRun = stuck ? bot.stuckRun + length : 0;
+    bot.longestStuck = bot.stuckRun > bot.longestStuck ? bot.stuckRun : bot.longestStuck;
+    // Turning without the body turning or moving at all: the game holds it (a player just respawned)
+    const bool held = bot.windowTurned && me.rot == bot.windowRot && me.x == bot.windowX && me.y == bot.windowY;
+    const bool idle = bot.pushing * 2 < length && bot.firingInWindow * 2 < length && !held &&
+                      hypotf(me.x - bot.windowX, me.y - bot.windowY) < (inCar ? 0.5f : 0.3f);
+    bot.idleTicks += idle ? length : 0;
+    bot.idleRun = idle ? bot.idleRun + length : 0;
+    bot.longestIdle = bot.idleRun > bot.longestIdle ? bot.idleRun : bot.longestIdle;
+    bot.windowOpen = false;
+}
+
+// Each second: how far it went away from (or at) the nearest other player within 10 blocks at the start of it
+void net::Arena::MeterRetreat(Bot& bot, const Bot::Body& me, const std::vector<Bot::Body>& bodies, int self)
+{
+    if (me.health <= 0)
+    {
+        bot.fleeFrom = bot.retreatFrom = -1;
+        return;
+    }
+    if (mTicks % 30 != 0)
+    {
+        return;
+    }
+    if (bot.fleeFrom >= 0)
+    {
+        const float away = (me.x - bot.fleeX) * bot.fleeOx + (me.y - bot.fleeY) * bot.fleeOy;
+        if (away > 1.5f)
+        {
+            bot.retreatTicks += 30;
+            bot.retreatFrom = bot.fleeFrom, bot.lastRetreat = mTicks;
+        }
+        else if (away < -1.5f && bot.fleeFrom == bot.retreatFrom && mTicks - bot.lastRetreat <= 90)
+        {
+            bot.turnbacks++;
+            bot.retreatFrom = -1;
+        }
+    }
+    bot.fleeFrom = -1;
+    float nearest = 10;
+    for (size_t j = 0; j < bodies.size(); j++)
+    {
+        const float dx = me.x - bodies[j].x, dy = me.y - bodies[j].y, d = hypotf(dx, dy);
+        if ((int)j != self && bodies[j].health > 0 && d < nearest && d > 0.01f)
+        {
+            nearest = d, bot.fleeFrom = (int)j, bot.fleeX = me.x, bot.fleeY = me.y, bot.fleeOx = dx / d, bot.fleeOy = dy / d;
+        }
+    }
 }
 
 uint32_t net::Arena::Buttons(int slot) const
@@ -302,10 +521,30 @@ void net::Arena::Finish(const Snapshot& world)
         if (engine::PlayerOf(e, &p, &b) && p < (int)mBots.size())
         {
             const Bot& bot = mBots[p];
-            printf("net: arena %d %s frags %d deaths %d near %.3f dealt %d cars %d pickups %d\n", p, bot.kind.c_str(), engine::PlayerFrags(e),
-                   engine::PlayerDeaths(e), mTicks ? bot.closeness / mTicks : 0.0, bot.dealt, bot.cars, bot.pickups);
+            printf("net: arena %d %s frags %d deaths %d near %.3f dealt %d cars %d pickups %d\n", p, bot.kind.c_str(), bot.frags, bot.deaths, mTicks ? bot.closeness / mTicks : 0.0, bot.dealt, bot.cars, bot.pickups);
+            printf("net: arena %d %s stuck %.1f s longest %.1f s searches %u failed %u giveups %u recoveries %u in a car %.1f s\n", p,
+                   bot.kind.c_str(), bot.stuckTicks / 30.0, bot.longestStuck / 30.0, bot.nav.searches, bot.nav.failed, bot.nav.giveUps,
+                   bot.nav.recoveries, bot.carStuckTicks / 30.0);
+            printf("net: arena %d %s behaviour alive %.1f s armed %.1f s fists %.1f s dealing %d in a car near one on foot %.1f s\n", p,
+                   bot.kind.c_str(), bot.aliveTicks / 30.0, bot.armedTicks / 30.0, bot.fistTicks / 30.0, bot.fistDealt,
+                   bot.carNearFootTicks / 30.0);
+            printf("net: arena %d %s cars punched %.1f s fists near one in a car %.1f s stuck by a car %.1f s round cars %.1f s\n", p, bot.kind.c_str(),
+                   bot.carPunchTicks / 30.0, bot.fistAtCarTicks / 30.0, bot.carStuckFootTicks / 30.0, bot.nav.avoided / 30.0);
+            printf("net: arena %d %s throws %d nearer than 1.8 %d farther than 5 %d\n", p, bot.kind.c_str(), bot.throws, bot.closeThrows,
+                   bot.farThrows);
+            printf("net: arena %d %s car switches under 5 s %d fire presses %d held %.1f s\n", p, bot.kind.c_str(), bot.quickSwitches,
+                   bot.firePresses, bot.fireTicks / 30.0);
+            printf("net: arena %d %s shots blocked by a car %.1f s by a wall %.1f s of %.1f s aimed deaths in a car %d in a burning car %.1f s\n", p,
+                   bot.kind.c_str(), bot.carBlockedTicks / 30.0, bot.wallBlockedTicks / 30.0, bot.aimedFireTicks / 30.0, bot.carDeaths,
+                   bot.burningCarTicks / 30.0);
+            printf("net: arena %d %s idle %.1f s longest %.1f s retreats %.1f s turnbacks %d\n", p, bot.kind.c_str(), bot.idleTicks / 30.0,
+                   bot.longestIdle / 30.0, bot.retreatTicks / 30.0, bot.turnbacks);
+            printf("net: arena %d %s car frags %d far %.1f s in a car %.1f s\n", p, bot.kind.c_str(), bot.carFrags, bot.farTicks / 30.0,
+                   bot.carTicks / 30.0);
+            printf("net: arena %d %s dodges %u unseen %u run over %d\n", p, bot.kind.c_str(), bot.nav.dodges, bot.nav.unseen, bot.runOvers);
         }
     }
+    printf("net: arena search cells per tick: mean %.0f max %llu\n", mTicks ? (double)mExpanded / mTicks : 0.0, (unsigned long long)mMaxExpanded);
     if (mSocket >= 0)
     {
         std::vector<float> message;

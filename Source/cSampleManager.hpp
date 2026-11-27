@@ -155,6 +155,12 @@ class cSampleManager
 
     HDIGDRIVER mhDriver; // 0x0
     char_type mGtaAudioDriveLetter; // 0x4
+#if defined(GTA2_PORT)
+    bool PortBankLoaded() const
+    {
+        return mbLoaded;
+    }
+#endif
 
   private:
     char_type mStr5[80]; // 0x5

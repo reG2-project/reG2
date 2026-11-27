@@ -39,7 +39,7 @@ where **Network game** joins a server (below). The command line (`port/net/cmdli
 | Server | `--port` (27920), `--map <data/*.mmp>` (downtown-6p), `--maps a,b,c` (a rotation), `--players N` (1-10, 10: every map's slots), `--gametype 1-3` (frags, points, tag), `--fraglimit` (frags, 10; a points game's is money, 10000 as the original lobby's), `--timelimit` (minutes), `--tickms`, `--police [stars]` (off by default, as the lobby; up to the game's 1 star, or 1-6), `--traffic N` (ambient cars per player, 16), `--packets N` (a snapshot's parts at most, 4), `--interest blocks` (24) |
 | Round flow | `--minplayers N` (2), `--warmup s` (60), `--results s` (15), `--votes start,map,kick` (or `none`), `--rounds on\|off` |
 | Arena | `--arena brain,...` (bots on the server itself), `--ticks N` (the result printed and the server ended at tick N), `--seed N` |
-| Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` (a client's recording, or a server's: that server again, "Recordings") |
+| Client | `--connect host[:port]`, `--name`, `--bot [brain]` (simple, carhop, pulse, rammer, soldier, hunter, `nn:<file>`), `--replay <file>` (a client's recording, or a server's: that server again, "Recordings") |
 | Either end | `--lag ms`, `--jitter ms`, `--loss %`, `--lossburst N`, `--spike ms:on:every`: a link conditioner on this end's sends (losses in bursts of N on average; ms more delay for `on` s every `every` s); `--mtu N`: the link's MTU (IP packets, 1280 by default, which fits the VPNs people play over: Tailscale 1280, WireGuard 1420, Hamachi 1404; 1428 the most) |
 | Any | `--data <folder>` (the game folder, or its `data/`: else `GTA2_DIR`...), `--help` |
 
@@ -345,7 +345,13 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   restores S, applies the server's state, and runs the ticks up to its own with its own inputs; other players take
   the controls the snapshot forwards for the ticks after it (the next tick's as the server runs it, then the commands
   it holds, up to 4), then the last of them repeated, a turn only once two in a row have it (a tap repeated turns far
-  past the server's). A repeated fire is a guess: the shooter's pose shows (`Ped::mBf21C.bAttacking`, the gun raised),
+  past the server's). The repeat is what rollback games do (GGPO's fighting games, Rocket League's cars). On
+  recordings (`GTA2_NET_FWDLOG`) it had the movement wrong in 12% of the first guessed ticks and 23% of the fourth;
+  letting go was wrong in 80% and drew more run-overs the server never had. Those come from what the victim does in the
+  guessed ticks, which no repeat knows: a jump (a jumping ped doesn't collide with cars), a step aside or back; 5% of a
+  client's run-overs of players at 50 ms of lag, 15% at 100. An arena bot is guessed longer (only its next tick is
+  forwarded: 4 ticks at 50 ms against 2 or 3 for a client's player), but deciding its controls ahead doesn't help: its
+  reaction to a car then comes as much later as it is known earlier. A repeated fire is a guess: the shooter's pose shows (`Ped::mBf21C.bAttacking`, the gun raised),
   but its weapon is not used (`SetFireGuessed`, `gPortPedMayFire` in `Ped::ManageWeapon`): another player's shots come
   only from the ticks the server forwarded, never drawn for a burst it didn't fire (`GTA2_NET_HOLDFIRE=1` fires the
   repeated fire too, to compare). As a guess doesn't count its weapon's reload down, the player entity carries the
@@ -407,8 +413,8 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   shown dead at once instead (`ShowDeath`: its state, cry, corpse's sprite layer and blood), the rest of `Ped::Kill`
   (its corpse's AI, a dropped weapon, the score, the killer's wanted level) left to the server's death, which `KillNow`
   then carries out without starting its dying again; one the server still has alive `kShownDeathTicks` after it was
-  shown gets up as the server's, and until then it lies where it fell. A throw's fatal landing is the game's (its
-  thud, `Char::UpdateImmobilized`), its death held as any; before each tick a throw's timeout and the sinking and
+  shown gets up as the server's, and until then it lies where it fell. A throw's fatal landing is the game's (an ambient
+  ped's thud, `Char::UpdateImmobilized`; a player's is silent, its cry the server's death's), its death held as any; before each tick a throw's timeout and the sinking and
   electrocution timers are held short of the death (`GuardPhases`); the
   server's death ends them as the game does (a charred corpse, a sunk one, neither dropping its weapon; a player's
   electrocution voice and death type). Deaths in a car are its car's, whose explosion is the server's. A corpse here
@@ -464,7 +470,9 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
 - **Guards** (`engine/guards.cpp`, on the server too): what a network game breaks in the game's own logic is made
   safe: peds given on-foot orders while in a car, the HUD arrows to players who joined after the start, objects
   attached to cars the client moved (a tank's turret), a player driving a train that reversed (`Train::ReassignTrainHead`
-  makes the other end the lead and its driver, the ped stays in its old carriage: it goes with the driver's seat).
+  makes the other end the lead and its driver, the ped stays in its old carriage: it goes with the driver's seat), and a
+  player fallen through the floor (on foot at z 1 with no block under it: out of a car at the top of Tiny Town's ramp at
+  67,173 the game puts it one level down, into the slab, and it sinks into the void) put back on its column's ground.
 
 ### Cars in turn
 
@@ -611,16 +619,27 @@ follow the rollback: a tick first simulated in a resimulation, which plays nothi
 predicted and resimulated would be heard twice.
 
 The sound log (`engine/sound_log.cpp`): every live frame notes the one-shot samples its audio entities ask for
-(`gPortSoundRequestsHook`, in `sound_obj::ServiceSoundEffects`, around `InterrogateAudioEntities`), keyed by the entity's
-owner (its pointer and id), which of its sounds it is (`sound_0x68::mSampleIndex`; the collision queue's impacts by
-place), the place and the tick. A resimulated tick runs the same entities without the mixer (`SoundLogResimTick`: the
-queues and channels as they were, no radio, vocal stream or pager) and notes what they would have asked for; their
-progress moves on with the world as on a live frame (entity ages, `SoundPosEntry`, the frame counter, the events they
-take). Once a snapshot settles a tick (its tick and the next, which runs with the server's state and inputs), that
-tick's requests no live frame had (same owner and sound, within 2 ticks and a block) are added to the next live frame's
-queue, each once, and noted as heard. What a snapshot's Apply leaves (a death the server carried out) is asked for by a
-pass before the first resimulated tick, as the snapshot's next tick's. Loops are asked for every frame by the live
-frames from the corrected world, and the channels playing them are kept over a restore.
+(`gPortSoundRequestsHook`, in `sound_obj::ServiceSoundEffects`, around `InterrogateAudioEntities`), keyed by the
+entity's owner (a car or a ped by its id, as a resimulation can make it again elsewhere in its pool; an object, a blast,
+by place, as a snapshot's blast is made again with another id; anything else by its pointer), which of its sounds it is
+(`sound_0x68::mSampleIndex`; an object's sample; the collision queue's impacts by place, a car's on a ped apart; an AI driver's shouts and
+beeps, which take the next of a shared count, as one), the place and the tick, the game's cycle (`Rng::get_cur_rng`),
+which every map starts anew (so do the logs, `SoundLogNewGame`): a restore learns which snapshot tick it is. A resimulated tick runs the same entities
+without the mixer (`SoundLogResimTick`: the queues and channels as they were, no radio, vocal stream or pager) and notes
+what they would have asked for; their progress moves on with the world as on a live frame (entity ages, `SoundPosEntry`,
+the frame counter, the events they take). Its pause is its own world's, as `sound_obj::Service` has it (the results, a map change's
+pause), not the restored save's: the resimulation saves its ticks again, and a paused flag from the results would
+silence every later resimulated tick. Once a snapshot settles a tick (its tick and the next, which runs with the
+server's state and inputs), that tick's requests no live frame had (same owner and sound, within 2 ticks and a block)
+are added to the next live frame's queue, each once, and noted as heard. A car's impact on a ped that another player
+takes part in, as the ped or as the car's driver, is a guess at that player's inputs: a live tick doesn't queue its sound
+(`gPortImpactHeard`, `CollisionSoundQueue::AddCollision`), its settled tick gives it, lead and round trip later, when the
+server had it. The victim's knock-down shows at once as predicted; the thud is never heard for a hit the server lacked,
+nor again each tick as the car rolls over a player whose death is held. A bigger blast's bang given where a smaller one
+plays ends that one (the car the server blew up where this client's own rocket blast was; the server's game had only the
+car's). What a snapshot's Apply leaves (a death the server carried out) is asked for by a pass before the first
+resimulated tick, as the snapshot's next tick's. Loops are asked for every frame by the live frames from the corrected
+world, and the channels playing them are kept over a restore.
 
 | Sound | Where (`sound_obj.cpp`) | On a client |
 |---|---|---|
@@ -630,7 +649,7 @@ frames from the corrected world, and the channels playing them are kept over a r
 | Explosions: the bang at age 2, the crackle after | `ProcessOtherObjects` (object 113), the entity's age | one-shot: the log; the age moves on in a resimulation |
 | Car fires, fire | `ProcessOtherObjects` | one-shot asked for every frame: the log |
 | Footsteps | `ProcessPed`, the animation frame and the frame counter | one-shot: the log (the variant is drawn: keyed by the sound, not the sample) |
-| Ped voices (hits, screams, a death's cry), a burning ped's scream | `HandlePedVoiceEvent` (`Ped::mVoiceEvent`), `ProcessPed` (`mScreamTimer`) | one-shot: the log; an Apply's by the pass before the first resimulated tick |
+| Ped voices (hits, screams, a death's cry), a burning ped's scream | `HandlePedVoiceEvent` (`Ped::mVoiceEvent`), `ProcessPed` (`mScreamTimer`) | one-shot: the log; an Apply's by the pass before the first resimulated tick; a player's death cry by a sound of its own (sample index 16), so that no other line of the ped's near it (a landing) stands for it; another player's at volume 55 (the original's 35 for the local one), heard over the gunfire around a kill |
 | Car doors, engine start, air brakes, AI horn beeps, car shop | `HandleCarDoorSounds`, `HandleCarEngineStartSound`, `HandleHeavyVehicleStopSound` (`SoundPosEntry::mLastSpeed`), `HandleAICarHornBeep` (`Car::mSoundEvent`), `PlayCarShopEventSound` | one-shot: the log; the last speed moves on in a resimulation |
 | Phones, blaster, tank crush | `ProcessOtherObjects`, `HandleTankCrushSound` | one-shot: the log |
 | Engines, cornering, skids, sirens, alarms, horn, damage, car bomb, trains, tank, cranes, crushers, ambient emitters | `HandleCarEngineSound`, `HandleAICarEngineSound`, ..., `ProcessType8_Crane`, `ProcessType9_Crusher`, `ProcessEffectOnlyObject` | loop: live, channels kept |
@@ -639,6 +658,13 @@ frames from the corrected world, and the channels playing them are kept over a r
 | HUD pager, frontend | `ProcessType11_HudPager`, `ProcessType2_Frontend` | live only |
 
 `GTA2_NET_SFXLOG` measures it: a server with it listens at a client's player, both print every sample they start.
+
+A client's log has its sound in one line every 300 frames, at the old game's end and at a new game's start
+(`engine/sound_diag.cpp`, from `gPortSoundStats` in `sound_obj.cpp` and `port_MixerStats` in `compat/src/miles.cpp`): the
+samples asked for by live frames and by resimulated ticks, by kind; those dropped from a full queue, beyond their range or
+at volume 0; the samples started and the ones refused; the entities, the sound's switches and its bank; the listener
+against the local player and whose camera it follows; and the mixer: its device, callbacks, starts, voices and loudest
+output. Where the sound stops shows as the first count that drops to 0.
 
 Measured with it: a server with three arena bots and a bot client (all armed, burning cars and trucks put beside the
 client), the samples the server's game started at the client's player against the client's (matched by owner, tick
@@ -740,6 +766,110 @@ Bots are players whose input comes from a brain (`session/bot.hpp`), on the same
 `BotView` built from what its client knows (its own body as predicted, the snapshot's players, cars and peds, and the
 map as plain data: `engine::NavMap`, the walking height and the ways between cells) and returns the input bits a
 person would press. It uses no game logic: no route finder, no ped AI. Navigation is A* (`session/bot_nav.cpp`).
+The map's cells joined by ways are labelled in parts once per map: a goal in another part than the bot's (a pickup on
+a roof, a player behind a wall) is not chosen, and a search between parts fails at once. A body's cell is the one
+whose height fits its z, or the nearest within 2 that does (under a roof, the ground beside it). Routes head for the
+farthest of the next ten cells walkable in a straight line with room either side, and leave water out. On foot the
+brains walk with a `BotWalker`: stuck (under 0.3 blocks in 1.5 s), it backs off and turns; stuck again at the same
+cell within 10 s, it tries the next way out (the other side with the way it was crossing left out for 20 s, a jump,
+then the goal given up for 30 s). A goal its route gets no shorter to for 10 s (3 s with no route) is given up for
+30 s, except a player it has a route to (a player chased keeps moving). Going round a car, a corner it stands at counts
+as passed. A car it stands beside without getting in for 4 s is given up too. With nobody on its ways (Tiny Town's
+second arena slot starts on a raised spot), a fighter walks at the nearest player anyway. A car that stays within 2
+blocks of a spot for 5 s with nobody within 6 is wedged: the bot gets out and leaves it 30 s. A car still for a
+second backs out for one, the wheel turned the other way, then this way; still again after two back-outs within 2
+blocks, the bot gets out whoever is near (car stuck time: rammer 8.9 to 6.6 s per 5 minutes, hunter 7.0 to 5.8). After a fight on foot
+(the hunter: someone within 8 blocks), the hunter and the soldier stay on foot 5 s before going for a car. These brains draw only their dodges' reaction times, from their own stream seeded by the slot (`BotBrain::Seed`), never
+the game's, and their searches are bounded in cells, so an arena match of them repeats for a seed.
+
+**Stuck meter**: each arena bot's line `net: arena <slot> <brain> stuck S s longest L s searches N failed F giveups G
+recoveries R in a car C s` counts the time it spent alive pressing on without getting anywhere (under 0.3 blocks in
+1.5 s on foot, 0.5 in 2 s in a car), and the match's `search cells per tick`. `port/net/scripts/bot_bench.sh` (`BIN`,
+`DATA`, `MAPS`, `SEEDS`) plays headless matches on downtown, mp1 and Industrial, two at a time, and sums them per map
+and brain. With 10 seeds and hunter, soldier and simple twice each, stuck seconds per bot and 5 minutes went from 118,
+104 and 60 (the three brains summed, downtown, mp1, Industrial) to 60, 74 and 68, frags about doubled, and search
+cells per tick fell from 2200..15000 to 15..230 on average. Leaving a wedged car took the hunter's longest stuck
+stretch from 96 to 14 s; its time stuck in a car (about 30 s per 5 minutes) is still the largest share.
+**Behaviour line**: `net: arena <slot> <brain> behaviour alive A s armed G s fists F s dealing D in a car near one on
+foot C s`: the time alive with a gun, unarmed on foot within 1.5 blocks of someone (and the damage dealt so), and in a
+car within 6 blocks of someone on foot. The fighters (`simple`, the hunter on foot, `soldier`) remember the weapon
+pickups they have seen by place (one missing while they stand within 8 blocks is taken, and left 30 s) and fetch the
+best for its distance (machine guns, shotgun and rockets first); they hold the weapon that suits the target (rockets at
+a car from 4 blocks, nothing that blows up nearer), and hold fire while it is in range and faced (every gun on foot
+fires again while attack is held, `Weapon::CanFireWhileHeld`). Standing at someone, the fighter on foot (`simple`, the
+hunter) turns the last 20 degrees by one-tick taps (12 units, 3 degrees; a held turn overshoots): a shot goes where the
+shooter faces, or a player's machine gun's to the ped it locks on to within 16 degrees of that (`Ped::ComputeAimAngle`).
+Against a player standing still within a block (2 seeds), a hunter's shots that hit it went from 44 of 2080 to 140 of
+212; between bots the frags stayed as they were (simple against simple, 8 seeds: 50 and 48; six bots on downtown and
+Industrial, 6 seeds each: 159 and 166). Fists hit within a quarter block and only knock a player under 30
+health down, so an unarmed bot punches only an unarmed target above that it hurt in the last 4 s, else it fetches a
+weapon. **Avoiding cars** (`CarDodge`, its knobs at the top): a bot on foot sees each car where it was a reaction time ago
+(8 to 14 ticks, 270 to 470 ms, drawn per bot and car), carried on at its speed then, so a car going straight is seen
+where it is and one that turns is seen late. A car so seen whose path passes within 1.4 blocks in the next 30 ticks is
+a threat, and so is a player's car within 4.5 blocks with its nose at the bot, however slow (a rammer backing off for
+a run-up). One in four threats first seen outside its facing (90 degrees either way) goes unnoticed. For a threat, that
+tick it steps off the car's path (its own side, or within half a block of the path the side it turns to sooner, with
+1.5 blocks walkable in a straight line), or jumps when the car is under 12 ticks off or there is no room, pressing
+jump every other tick so that it jumps again once landed (a jump clears the car: without the jump the run-over deaths
+doubled). It doesn't fight while dodging (a throw under way stays held, a grenade let go at 85 ticks), and the rammer
+and the hunter on foot on their way to a car dodge too. A car first seen near, one from behind unnoticed, or one that
+turns late still runs it over. Against the old rule (no delay, 1 block and 20 ticks, one jump under 6 ticks), on mp1
+and downtown with a rammer and two hunters against fighters on foot, run-over deaths per bot and 5 minutes went from
+1.01, 1.08, 0.88, 0.63 to 0.59, 0.96, 0.73, 0.47 (soldier, simple, hunter, rammer; 128 seeds) and with `--kit smg` from
+0.93, 1.48, 1.06, 0.80 to 0.56, 1.15, 0.90, 0.43 (64 seeds); the frags made from a car fell by 40% (the rammer's
+match 3.1 to 2.3), the soldier's frags rose 8%, the simple bot's stayed, the hunter's on foot fell 5%. With the delay
+and the old rule's moves the deaths were 2 to 3 times as many: the earlier, wider threat, the nose rule and the jumps
+make up for it. Cars aren't in the walking map: a car's box (its sprite's size, its heading) within 3 blocks on the way makes the
+walker head for the corner of it that keeps the way shortest and is clear, and jump over it when none is (stuck with a
+car at hand, a jump is its first way out). The pickup memory starts with the weapon pickups the bot's own game has (the
+map script makes them on both ends, listed every 10 s), so a client bot, which sees pickups within its area only, knows
+the map's. Unarmed, a bot never punches near a car nor someone in one: it takes the car of someone driving slowly
+within 8 blocks (the game pulls the driver out), else looks for someone on foot or a weapon. Molotovs and grenades are
+thrown as the game throws them, as far as attack is held (measured standing: a molotov lands 0.68 + 0.0567 blocks per
+tick held, 4.1 at the most from 60 ticks, 33 ticks later; a grenade as far, going off (96 - held) * 0.75 ticks later, in
+the hand at 96): standing, turned to where the target will be when it lands, from 2.2 blocks (3 with a grenade) to
+4.6, backing off holding on when it comes nearer; rockets from 4. A bot looking for a car with none in sight walks
+towards the nearest player. Arena bots see what a client bot would: players and trains everywhere, cars, peds and
+pickups within 24 blocks. The meter's lines `cars punched P s fists near one in a car F s stuck by a car S s round cars
+R s` and `throws N nearer than 1.8 C farther than 5 F` (the nearest player when it threw) measure these, and `car
+switches under 5 s S fire presses P held H s` how often it gets in or out of a car under 5 s after the last time, and
+on foot armed its attack presses and the time attack was held (`bot_bench.sh` passes `ARGS` to the server: `--kit smg`). `idle I s longest L s retreats R s turnbacks T` counts the meter's windows it stood still in without pressing on or
+firing, the seconds it went 1.5 blocks or more away from the nearest player within 10 blocks, and how often it went
+back at the same one within 3 s of that; `bot_bench.sh` sums them with the frags. Over 12 seeds
+on downtown, Tiny Town, Industrial and Residential (96 bots per brain): stuck 31.5, 18.9, 19.7 to 21.8, 6.3, 13.3 s per
+5 minutes (hunter, simple, soldier; stuck by a car on foot 11.5, 14.9, 7.1 to 1.8, 1.6, 0.9), frags 535 to 717, throws
+362 to 904 with 9% to 7% of them at someone nearer than 1.8 blocks and 51% to 16% with nobody within 5. A well armed hunter gets out of its car for someone on foot within 6 blocks, or with rockets for a car within 8;
+the soldier gets out for a car only with rockets. Once in a car or out of one, the hunter, the soldier and the rammer
+keep to that for 10 s before choosing again (a wedged car aside), and the soldier takes a car only with nobody within
+10 blocks (it gets out for someone within 7): with `--kit smg` the soldier got in and out 27 to 44 times per 5 minutes
+under 5 s apart, and the rammer, which doesn't fight on foot, got out to shoot and straight back in. With the kit, over
+12 seeds on downtown and Tiny Town, frags went from 11.9 to 17.9 a match. Over 20 seeds on the three maps: frags 594 to
+754, fistfight time 61, 27, 12 to 18, 17, 14 s per 5 minutes (simple, hunter, soldier), the hunter armed 112 to 208 s and
+in a car near someone on foot 35 to 2 s; against rammers the simple bot's dodge took their frags from 265 to 162.
+A fighter fires only with a clear shot: no car between it and the target along the shot's line (the target's own car
+aside; with rockets, a car by the target counts as clear, its blast reaches it), and no wall (walkable in a straight
+line). With a car in the way it steps 1 to 3 blocks aside, round the car's nearer end, to a spot it can walk to and
+shoot clear from, else walks on at the target, the walker going round the car. A car on fire from `Car::mDamage` 25000
+(the game's big fire, `mDamageLevel` 4, where its own drivers get out; its small fire from 16000 burns 1 a tick and
+lasts minutes) makes the rammer, the hunter and the soldier get out before anything else, the 10 s commitment
+included, and walk 2 s away from it until 4 blocks off; cars on fire and wrecks are not chosen to get into. The meter's
+line `shots blocked by a car C s by a wall W s of A s aimed deaths in a car D in a burning car B s` counts fire held on
+foot at the nearest player within 30 degrees and 12 blocks of where it faces, and of that with a car or a wall in the
+way. Over 32 seeds on mp1 and downtown, with and without `--kit smg`: aimed fire blocked by a car 14..31% to 0, deaths
+in a car 529 to 98, frags 2869 to 3099.
+The rammer is the car brain and the simple fighter together, as the hunter is: in a car whenever it has one (it gets
+out only when the car burns or is wedged, with a gun even with someone near, to fight there); on foot it takes a car
+within 12 blocks (30 unarmed) unless it has a gun and someone was within 8 blocks in the last 5 s, and fights on foot
+otherwise. The car brain (the rammer's and the hunter's) keeps its target until another is much nearer (someone on
+foot counts as nearer), follows its route when far or round a block, aims at where the target will be when near,
+backs off a second after a hit to ram again, and uses the handbrake to turn back at a target near and well off its
+nose. The meter's line `car frags F far X s in a car C s` counts frags made in a car and the seconds alive with
+nobody within 12 blocks and in a car. Over 64 seeds on mp1 and downtown, with and without `--kit smg`, the rammer's
+frags went from 463 to 1097 (in a car 512 to 487), the cars it took from 3709 to 1969 and its idle time from 9.5 to
+2.2 s per match; the hunter's and the soldier's frags rose, the simple bot's rose with the kit and fell 8% without.
+The meter's line `dodges D unseen U run over R` counts the dodges a bot on foot began, the cars coming at it it never
+noticed, and its deaths on foot within 30 ticks of a car moving 0.1 blocks a tick or more within 1.5 blocks of it (the
+game keeps no cause of death: a shot by a car passing counts too); `bot_bench.sh` gives them per bot and 5 minutes.
 A bot client still takes the keyboard's key events (Escape and the pause menu, the chat), so `GTA2_INPUT` can press
 them in a test.
 
@@ -747,8 +877,9 @@ them in a test.
 |---|---|
 | `simple` | walks its route to the nearest player and fights when close |
 | `carhop` | gets into the nearest car, drives, gets out, again |
-| `rammer` | drives at players |
-| `hunter` | the rammer when a car is near and nobody is, the fighter otherwise |
+| `pulse` | for comfort's input to motion: in the nearest car, forward with a turn each way, braked to a stop, again |
+| `rammer` | rams players in a car it keeps; on foot with a gun and someone near, or no car at hand, the fighter |
+| `hunter` | the rammer when a car is near, nobody is and it has a good gun or none to fetch, the fighter otherwise |
 | `soldier` | a weapon, a car, then to the nearest player: runs it over when coming at it head on, or gets out and shoots |
 | `human` | for crash hunts, what people do and the others don't, in turns: cars, buses and the tank (in, about, out at speed), trains (on at a station, a ride, off), every weapon it has, pickups, into water, its own blasts (`session/bot_human.cpp`) |
 | `nn:<file>` | a trained network (`session/bot_nn.cpp`): 62 inputs (`BotFeatures`), a choice in six groups of outputs |
@@ -834,6 +965,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `ScriptThread.cpp` | `gPortScriptCommandRuns` | a client runs the level start's look and sound commands, and steps over the rest |
 | `Car.cpp` | `gPortUpdateCars` | the car pool's update, a car ahead of one following it first ("Cars in turn") |
 | `Car.cpp` | `gPortCarMayExplode` | a client's car the server sends blows up when a snapshot says the server's did, not on its own prediction |
+| `Car.cpp` | `gPortCarHornId` | a client's car the server sends honks and its driver shouts by the server's id (`Car::TryHonkHorn` picks the cars by its low bits) |
 | `Object_5C.cpp` | `gPortObjectMade` | an object made: a network game keys the shots it predicts (`engine/shots.cpp`) |
 | `Explosion.cpp` | `gPortBlastHurts` | a client's blast made from a snapshot hurts nothing: the server's did |
 | `char.cpp` | `gPortCharSolid` | a client's player whose death it holds collides with nothing, as the server's corpse |
@@ -847,9 +979,11 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
 | `Player.cpp` | `gPortKillCamTicks`, `gPortDeathViewPed` | the kill cam: a player wasted by another has a longer death countdown (`Player::Wasted`), whose end its view spends on the killer (`Player::Service`, camera mode 2) |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
+| `sound_obj.cpp`, `Player.cpp`, `char.cpp` | `gPortPlayersDeathCry` | a player cries out at its death as the other peds do (`HandlePedVoiceEvent`, voice event 4), from its corpse, or from its car when it died in one (`ProcessCar`); a fatal landing or lethal fall has the cry instead of the thud, on a client too, where its `Ped::Kill` is held; the cry has a sample index of its own (16), apart from the voice's; the cry is first in the mixer's queue (priority 0) to its end (`AddReleasingSounds` leaves its priority); the ped respawned elsewhere (`Player::Wasted`) drops the event |
+| `sound_obj.cpp` | `gPortFullQueueRanked` | a sample asked for when the mixer's request queue is full is ranked among all the others (`AddDetailsToRequestedOrderList`); the original's search stops at the slot it takes and loses the sample at that place |
 | `Object_3C.hpp` | `gPortGroundedObjects` | a new object isn't airborne by its pool slot's previous one, which the server and a client don't share |
 | `PlayerScoreTracker.cpp` | `gPortServerKillAwards`, `gPortScoreBonusHook` | a client's kills award no points or bonuses: the scores are the server's, and a bonus's message and voice are its player's client's, from the server |
-| `Pool.hpp`, `Car.cpp`, `Char_Pool.cpp`, `Game.cpp` | `PortRand::Scope` (`port/src/rand/owner.hpp`) | who a random draw belongs to, and who makes a shot |
+| `Pool.hpp`, `Car.cpp`, `Char_Pool.cpp`, `Game.cpp`, `Ped.cpp` | `PortRand::Scope` (`port/src/rand/owner.hpp`) | who a random draw belongs to (a robbed driver's: its car), and who makes a shot |
 | `sound_obj.*`, `ParticleManager.cpp`, `Particle_4C.cpp`, `Explosion.cpp`, `Weapon.cpp` (`DrawElectricArc`) | `port/src/rand/sound.hpp`, `particle.hpp` | their own random streams; `SoundPosEntry` from the pool; `sound_obj`'s state public for the rollback |
 
 The game's own multiplayer assumed one machine per player in places; under `GTA2_PORT` a network game fixes them:
@@ -890,7 +1024,8 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
   corrections and the comparison check's worst fields.
 - **churn**: two bot clients stay while two others join and leave four times (stopped by SIGTERM and Ctrl-C): no
   crash, no `CHECK` line, nobody turned away as the server being full.
-- **maps**: a three-map rotation, 15 s rounds at 4 times the clock: both clients follow every change.
+- **maps**: a three-map rotation, 15 s rounds at 4 times the clock: both clients follow every change, and play the
+  resimulated ticks' sounds on a later map.
 - **rounds**: two bot clients ready up, play a round, vote for map 2 and follow the server there (a check of where
   the players stand: on the new map); a third joins during the results and plays round 2.
 - **soak**: a server and three bot clients at 10 times the clock: 10 minutes of play in 60 s, no crash.
@@ -899,7 +1034,7 @@ player's view (`view.cpp`) and timed by the steps the client ran, not by its res
   client watching with the blend off: every tick it shows a player thrown, the server had it thrown there with the
   same outcome, once a snapshot it applied had the
   tick that throw started at, the server's or its own (before that, it shows its own prediction of that player). The server listens at the client's player
-  (`GTA2_NET_SFXLOG=2`): the client plays each fatal landing's thud the server played.
+  (`GTA2_NET_SFXLOG=2`): neither end plays a player's fatal landing thud.
   The burning bot is also electrocuted and drowned (`GTA2_NET_TESTPHASE`): the client still shows it in that state at
   the tick the server's dies. It is also put in a car and pulled out of it: the client shows it at the door only on ticks the
   server has it there, never seated or walking; then the client's player jacks a player out of a car twice
@@ -984,10 +1119,13 @@ off by default:
 | `GTA2_NET_SFXLOG=1` (client), `=<slot>` (server) | both | every sample the mixer starts, by tick, what made it and where; a server with it opens its audio device and listens at that slot's player (to count what a client misses or plays twice) |
 | `GTA2_NET_INPUTLOG=1`, `_ANIMLOG=1`, `_SELFLOG=1`, `_SOUNDLOG=1` | client | the input, the other players' animation, the local player around a death (and the cars around its view, its camera) and the server's hits on players, the sound's channels and the car radio |
 | `GTA2_NET_CARDIFF=1` | client | where the prediction of the local player's car differs from the snapshot |
+| `GTA2_NET_HITLOG=1` | both | every tick, each player in a car: its place (`DRIVE`); on a client also each impact of the local player's car on a ped as it happens (`CARHIT`, live ticks only) |
+| `GTA2_NET_FWDLOG=1` | client | at each snapshot, every other player's controls the server forwarded for the ticks after it (`FWD`): what it pressed, for the ticks the client guessed |
+| `GTA2_NET_FRAMELOG=1` | client | each frame: the time since the last one, its step's, its reconciliation's and the ticks resimulated (`FRAME`) |
 | `GTA2_NET_GANGLOG=1` | both | player 0's group every 15 ticks, by the server's ids |
 | `GTA2_NET_STACKLOG=1` | both | two cars in one place (under 0.4 blocks apart), once per pair: a car the client kept that the server dropped |
 | `GTA2_NET_PICKUPLOG=1` | client | pickups made and removed |
-| `GTA2_NET_THROWLOG=1` | both | every tick, the players thrown, knocked down, dead or on fire (their states, the throw's object and motion) and the explosions just made |
+| `GTA2_NET_THROWLOG=1` | both | every tick, the players thrown, knocked down, dead or on fire (their states, the throw's object and motion, the player the game blames: `by p<slot>`) and the explosions just made |
 | `GTA2_NET_SHOTLOG=1` | both | every tick, the shots by key (model, blast type and timer, owner, place); on a client each shot made, removed or beyond the reach at a snapshot, and each other player's shot slid or flashed (`SHOTVIS`, by the frame GTA2GL_CAPTURE numbers) |
 | `GTA2_NET_PEDLOG=<player>` | both | the peds within 12 blocks of that player, their states and phase: every tick, and on a client also as each snapshot's apply left them |
 | `GTA2_NET_FIRELOG=1` | both | every fire at every 30th tick of the game's cycle: a car's (its id, wrecked or not, its fire's explosion types), the ones on nothing by place, the peds on fire |

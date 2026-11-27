@@ -1,4 +1,4 @@
-// port/net bot navigation test (ctest): FindPath on made-up maps, no game.
+// port/net bot navigation test (ctest): FindPath, the parts, NavCell and NavClear on made-up maps, no game.
 #include "check.hpp"
 #include "../session/bot.hpp"
 #include <stdio.h>
@@ -8,6 +8,7 @@
 
 namespace
 {
+using net::LabelNavParts;
 const int N = net::engine::NavMap::kSize;
 
 // Every cell walkable at height 2, every way open
@@ -81,6 +82,91 @@ int main()
     WallEast(m, 50, 201, N - 1);
     CHECK(!net::FindPath(m, 40, 20, 60, 20, path));
     CHECK(net::FindPath(m, 40, 20, 40, 20, path) && path.empty()); // already there
+
+    // Two parts either side of the closed wall: no search at all between them
+    net::LabelNavParts(m);
+    CHECK(m.part[20 * N + 40] && m.part[20 * N + 60] && m.part[20 * N + 40] != m.part[20 * N + 60]);
+    int expanded = -1;
+    CHECK(!net::FindPath(m, 40, 20, 60, 20, path, 40000, &expanded) && expanded == 0);
+
+    // The cell a body stands on: its own, or under a roof (a column of height 5) the ground next to it
+    Open(m);
+    m.height[30 * N + 30] = 5;
+    CHECK(net::NavCell(m, 30.5f, 31.5f, 3.0f) == 31 * N + 30);
+    CHECK(net::NavCell(m, 30.5f, 30.5f, 6.0f) == 30 * N + 30);
+    CHECK(net::NavCell(m, 30.5f, 30.5f, 3.0f) != 30 * N + 30 && net::NavCell(m, 30.5f, 30.5f, 3.0f) >= 0);
+    CHECK(net::NavCell(m, 30.5f, 30.5f, 9.0f) == -1);
+
+    // A corner: the wall east of x 50 for y <= 100; a straight line round its end is clear, one through it isn't, nor
+    // one that shaves it closer than a body's half width
+    WallEast(m, 50, 0, 100);
+    LabelNavParts(m);
+    CHECK(net::NavClear(m, 50.5f, 103.5f, 51.5f, 103.5f));
+    CHECK(!net::NavClear(m, 50.5f, 99.5f, 51.5f, 99.5f));
+    CHECK(!net::NavClear(m, 50.5f, 100.5f, 51.5f, 101.1f));
+    CHECK(net::NavClear(m, 50.5f, 102.5f, 51.5f, 102.5f));
+
+    // A blocked way is left out of the search until it expires
+    std::vector<net::BotRoute::Blocked> blocked(1, net::BotRoute::Blocked{101 * N + 50, net::engine::NavMap::kEast, 100});
+    CHECK(net::FindPath(m, 40, 20, 60, 20, path, 40000, NULL, &blocked, 50) && Valid(m, 40, 20, path));
+    bool through = false;
+    for (size_t i = 1; i < path.size(); i++)
+    {
+        through |= path[i - 1] == 101 * N + 50 && path[i] == 101 * N + 51;
+    }
+    CHECK(!through);
+    CHECK(net::FindPath(m, 40, 20, 60, 20, path, 40000, NULL, &blocked, 100));
+    through = false;
+    for (size_t i = 1; i < path.size(); i++)
+    {
+        through |= path[i - 1] == 101 * N + 50 && path[i] == 101 * N + 51;
+    }
+    CHECK(through);
+
+    // Water is walked into only when it is the goal
+    Open(m);
+    for (int y = 0; y < N; y++)
+    {
+        m.water[y * N + 70] = true;
+    }
+    CHECK(!net::FindPath(m, 60, 20, 80, 20, path));
+    CHECK(net::FindPath(m, 60, 20, 70, 20, path) && path.size() == 10);
+
+    // A car parked across the way east (its length along y): the walker turns for a corner of it; walled in either side
+    // of it, it jumps
+    Open(m);
+    LabelNavParts(m);
+    net::BotView v;
+    v.map = &m;
+    v.hasBody = true;
+    v.x = 100.5f, v.y = 100.5f, v.z = 3.0f, v.rot = 360; // facing +x
+    net::BotView::Seen car = {};
+    car.kind = net::BotView::Seen::kCar, car.id = 0x01000001, car.x = 102.0f, car.y = 100.5f, car.z = 3.0f, car.rot = 0;
+    car.width = 0.8f, car.length = 1.6f;
+    v.seen.push_back(car);
+    net::BotWalker walker;
+    v.frame = 1;
+    uint32_t b = walker.Walk(v, 0x03000001, 110.5f, 100.5f, 3.0f);
+    CHECK((b & (net::kBtnLeft | net::kBtnRight)) && !(b & net::kBtnJump));
+    v.x = 101.3f;
+    WallEast(m, 101, 0, 99);
+    WallEast(m, 101, 102, N - 1);
+    for (int y = 0; y < N; y++)
+    {
+        m.ways[y * N + 101] &= ~(net::engine::NavMap::kNorth | net::engine::NavMap::kSouth);
+    }
+    v.frame = 2;
+    b = walker.Walk(v, 0x03000001, 110.5f, 100.5f, 3.0f);
+    CHECK((b & net::kBtnForward) && (b & net::kBtnJump));
+
+    // A shot east at someone past the car hits the car; one at someone in it doesn't (its own car), nor one passing by it
+    net::BotView::Seen target = {};
+    target.kind = net::BotView::Seen::kPlayer, target.x = 104.5f, target.y = 100.5f, target.z = 3.0f;
+    CHECK(net::ShotBlocker(v, 100.5f, 100.5f, target) == &v.seen[0]);
+    target.x = 102.0f;
+    CHECK(!net::ShotBlocker(v, 100.5f, 100.5f, target));
+    target.x = 104.5f, target.y = 102.5f;
+    CHECK(!net::ShotBlocker(v, 100.5f, 102.5f, target));
 
     printf("net bot tests passed\n");
     return 0;

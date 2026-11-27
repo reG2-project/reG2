@@ -1045,8 +1045,17 @@ void LogSampleStart(const void*)
     {
         snprintf(src, sizeof(src), "type%d", o->mObjectType);
     }
-    printf("sfx: tick %u samp %u %s at %d,%d loops %u\n", gpRng ? (uint32_t)gpRng->get_cur_rng() : 0, a.mSampIdx, src,
-           a.mObj.mX.ToInt(), a.mObj.mY.ToInt(), a.mLoopCount);
+    printf("sfx: tick %u samp %u %s at %d,%d loops %u vol %u\n", gpRng ? (uint32_t)gpRng->get_cur_rng() : 0, a.mSampIdx, src,
+           a.mObj.mX.ToInt(), a.mObj.mY.ToInt(), a.mLoopCount, a.mnVolume);
+}
+
+// A player's death cry: unheard (far, vol0: its distance), queued or not (full, queued: its distance and volume; a
+// resimulated tick's is the sound log's), and how long its channel played (cut, ended: the frames played and the sample's)
+void LogDeathCry(const char* what, s32 a, s32 b, const sound_0x68& q)
+{
+    printf("cry: tick %u %s %d %d at %d,%d listener %d,%d%s\n", gpRng ? (uint32_t)gpRng->get_cur_rng() : 0, what, (int)a, (int)b,
+           q.mObj.mX.ToInt(), q.mObj.mY.ToInt(), gSound_obj.mListenerX.ToInt(), gSound_obj.mListenerY.ToInt(),
+           gPortSoundSide ? " resim" : "");
 }
 } // namespace
 
@@ -1058,6 +1067,7 @@ void net::engine::InstallSfxLog(bool server)
         return;
     }
     gPortSampleStartHook = LogSampleStart;
+    gPortDeathCryHook = LogDeathCry;
     const int slot = atoi(on);
     Game* g = gGame_0x40;
     Player* p = server && g && slot > 0 && slot < (int)g->mNumPlayers ? g->mPlayers[slot] : NULL;
@@ -1071,6 +1081,11 @@ void net::engine::InstallSfxLog(bool server)
         }
         p->mSoundObj = user->mSoundObj;
         user->mSoundObj = NULL;
+    }
+    // Player::Service points it at the view camera only while the slot is in the game; else it is still player 0's
+    if (p && p->mSoundObj && p->mSoundObj->mpAny.pCamera_0xBC != &p->mViewCamera)
+    {
+        p->mSoundObj->mpAny.pCamera_0xBC = &p->mGameCamera;
     }
 }
 
@@ -1158,6 +1173,28 @@ void net::engine::PoseLog(bool server)
     }
 }
 
+void net::engine::DriveLog(bool server)
+{
+    static const bool on = getenv("GTA2_NET_HITLOG") != NULL;
+    static uint32_t sLast;
+    const uint32_t tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+    if (!on || tick == sLast)
+    {
+        return;
+    }
+    sLast = tick;
+    for (int i = 0; i < PlayerCount(); i++)
+    {
+        Ped* ped = InGamePed(i);
+        Sprite* s = ped && ped->mCar ? PedSprite(ped) : NULL;
+        if (s)
+        {
+            printf("net: DRIVE %s tick %u: p%d at (%.3f, %.3f) rot %d\n", server ? "server" : "client", tick, i, s->mXy.x.ToFloat(),
+                   s->mXy.y.ToFloat(), (int)s->mRotation.rValue);
+        }
+    }
+}
+
 void net::engine::ThrowLog(bool server, uint32_t snap)
 {
     static const bool on = getenv("GTA2_NET_THROWLOG") != NULL;
@@ -1179,15 +1216,20 @@ void net::engine::ThrowLog(bool server, uint32_t snap)
             continue;
         }
         const Object* o = ped->mpObj2C;
+        int killer = -1;
+        for (int j = 0; j < PlayerCount() && ped->mKillerIdTimer > 0; j++)
+        {
+            killer = InGamePed(j) && InGamePed(j)->mId == ped->mKillerId ? j : killer;
+        }
         printf("net: THROW %s tick %u: p%d at (%.2f, %.2f, %.2f) ped %d/%d stored %d/%d char %d/%d anim %d health %d inv %d fire %d "
-               "cause %d obj %s(%.2f, %.2f, %.2f) speed %.3f z %.3f timeout %d snap %u\n",
+               "cause %d obj %s(%.2f, %.2f, %.2f) speed %.3f z %.3f timeout %d snap %u by p%d\n",
                end, tick, i, s->mXy.x.ToFloat(), s->mXy.y.ToFloat(), s->mZpos.ToFloat(), (int)ped->mPedState1, (int)ped->mPedState2,
                (int)ped->mStoredPedState1, (int)ped->mStoredPedState2, c ? (int)c->mPedState1 : -1, c ? (int)c->mPedState2 : -1,
                c ? (int)c->mAnimationState : -1, (int)ped->mHealth, (int)ped->mInvulnerability, (int)ped->mBf21C.bOnFire,
                (int)ped->mDeathCause, o ? "" : "none ", o && o->mSprite ? o->mSprite->mXy.x.ToFloat() : 0.0f,
                o && o->mSprite ? o->mSprite->mXy.y.ToFloat() : 0.0f, o && o->mSprite ? o->mSprite->mZpos.ToFloat() : 0.0f,
                o && o->mObj3c ? o->mObj3c->mSpeed.ToFloat() : 0.0f, o && o->mObj3c ? o->mObj3c->mZSpeed.ToFloat() : 0.0f,
-               c ? (int)c->mTimeout : -1, server ? tick : snap);
+               c ? (int)c->mTimeout : -1, server ? tick : snap, killer);
     }
     for (int pool = 0; pool < 2; pool++)
     {

@@ -6,11 +6,11 @@
 #   churn   two bot clients staying while two others join and leave, four times (stopped: SIGTERM, Ctrl-C): no
 #           crash, no CHECK line, nobody turned away as the server being full
 #   rounds  the round flow: two bot clients ready up, play a round, vote for the next map and follow; a third joins late
-#   maps    a map rotation, a round of 15 s each (the clock 4 times as fast): two bot clients follow every map change,
-#           no crash, no CHECK line
+#   maps    a map rotation, a round of 15 s each (the clock 4 times as fast): two bot clients follow every map change and
+#           play the resimulated ticks' sounds on a later map, no crash, no CHECK line
 #   soak    a server and three bot clients, the clock 10 times as fast: 10 minutes of play in 60 s, no crash
 #   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown as the
-#           server has it at that tick, with its outcome, and hears a flying death's landing as the server does
+#           server has it at that tick, with its outcome, and hears a player's flying death land as the server does (no thud)
 #   shots   armed bots and a server's own rockets, grenades and molotovs, a bot client watching: it keeps the shots it
 #           predicted, makes the ones it lacks and removes one the server never had at the next snapshot; the game's
 #           random stream is the server's at every snapshot (cosmetics draw from their own)
@@ -76,17 +76,29 @@ live() {
   [ -n "$QUICK" ] && secs=20
   rm -f "$OUT"/live_*.log
   rm -f "$OUT/live_server.rec"
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 GTA2_NET_RECORD="$OUT/live_server.rec" exec "$BIN" --server --port $p --map mp1-6p --players 6 --police \
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 GTA2_NET_POSELOG=1 GTA2_NET_RECORD="$OUT/live_server.rec" exec "$BIN" --server --port $p --map mp1-6p --players 6 --police \
     --arena hunter,soldier,rammer,simple > "$OUT/live_server.log" 2>&1) &
   sleep 3
   for b in rammer soldier; do
-    (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 GTA2_NET_JERKLOG=1 GTA2_NET_COMPARE=1 GTA2_NET_CORRLOG=1 exec "$BIN" --connect 127.0.0.1:$p --name c_$b --bot $b \
+    (cd "$GAME" && GTA2_HEADLESS=1 GTA2_NET_CHECKGRID=1 GTA2_NET_JERKLOG=1 GTA2_NET_COMPARE=1 GTA2_NET_CORRLOG=1 GTA2_NET_POSELOG=1 exec "$BIN" --connect 127.0.0.1:$p --name c_$b --bot $b \
       --lag 100 --jitter 10 --loss 2 > "$OUT/live_$b.log" 2>&1) &
   done
   sleep $secs
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
-  local crashes checks joined
+  local crashes checks joined firing posed lead
+  # The other players (the server bots p0..p3, the soldier client p5) standing with a gun and the fire held: the rammer
+  # client shows them in the firing pose too, its guess of their fire <lead> ticks on (per player, the best fitting shift)
+  read -r firing posed lead <<< "$(awk '
+    FNR == 1 { file++ }
+    { sub(":", "", $5) }
+    file == 1 && /POSE server tick/ && $6 ~ /^p[0-35]$/ && $8 == 1 && $10 >= 0 && $14 == 0 { firing[$5 " " $6] = 1 }
+    file == 2 && /POSE client tick/ && $8 == 1 { posed[$5 " " $6] = 1 }
+    END {
+      for (k in firing) { f++; split(k, t, " "); who[t[2]] = 1; for (d = 0; d <= 12; d++) if ((t[1] + d) " " t[2] in posed) n[t[2], d]++ }
+      for (w in who) { best = 0; for (d = 0; d <= 12; d++) if (n[w, d] > n[w, best]) best = d; p += n[w, best]; leads = leads (leads ? "," : "") w ":" best }
+      printf "%d %d %s", f, p, leads ? leads : "-" }' "$OUT/live_server.log" "$OUT/live_rammer.log")"
+  echo "  others firing on foot, standing: $firing ticks, $posed of them shown in the firing pose by a client (lead $lead)"
   crashes=$(grep -l "crashed" "$OUT"/live_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/live_*.log | grep -c "net: CHECK")
   joined=$(grep -c "joined as player" "$OUT/live_server.log")
@@ -99,10 +111,12 @@ live() {
   echo "  server replay: ${replayed:-none}"
   if [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ "$joined" != 2 ]; then
     fail "live: $joined of 2 clients joined, $crashes crashed, $checks CHECK lines ($BUILD/net_check/live_*.log)"
+  elif [ "${firing:-0}" -lt 30 ] || [ $((${posed:-0} * 10)) -lt $((firing * 8)) ]; then
+    fail "live: a client showed $posed of $firing ticks of the others firing standing in the firing pose, lead $lead ($BUILD/net_check/live_*.log)"
   elif ! grep -q "matches the recording's" "$OUT/live_server_replay.log"; then
     fail "live: the server's replay differs ($BUILD/net_check/live_server_replay.log)"
   else
-    pass "live: 2 bot clients for ${secs} s at 100 ms, 2% loss, police on; the server's replay matches"
+    pass "live: 2 bot clients for ${secs} s at 100 ms, 2% loss, police on; the other players' firing pose shown; the server's replay matches"
   fi
 }
 
@@ -144,28 +158,42 @@ maps() {
   local secs=120 p=$((BASE + 204))
   [ -n "$QUICK" ] && secs=60
   rm -f "$OUT"/maps_*.log
-  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_SPEED=4 exec "$BIN" --server --port $p --maps mp1-6p,mp2-6p,downtown-6p --players 6 --timelimit 1 \
+  # The server listens where m_rammer (player 3, after the arena's three) does, for its gunfire to compare with
+  (cd "$GAME" && GTA2_HEADLESS=1 GTA2_SPEED=4 GTA2_NET_SFXLOG=3 exec "$BIN" --server --port $p --maps mp1-6p,mp2-6p,downtown-6p --players 6 --timelimit 1 \
     --arena simple,hunter,soldier > "$OUT/maps_server.log" 2>&1) &
   sleep 2
   for b in rammer soldier; do
-    (cd "$GAME" && GTA2_HEADLESS=1 GTA2_SPEED=4 GTA2_NET_CHECKGRID=1 exec "$BIN" --connect 127.0.0.1:$p --name m_$b --bot $b \
+    (cd "$GAME" && GTA2_HEADLESS=1 GTA2_SPEED=4 GTA2_NET_CHECKGRID=1 GTA2_NET_SFXLOG=1 exec "$BIN" --connect 127.0.0.1:$p --name m_$b --bot $b \
       > "$OUT/maps_$b.log" 2>&1) &
+    sleep 1
   done
   sleep $secs
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
-  local changes crashes checks followed=1 b
+  local changes crashes checks followed=1 heard=1 gunfire=1 b
   changes=$(grep -c "net: the next map:" "$OUT/maps_server.log")
   crashes=$(grep -l "crashed" "$OUT"/maps_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/maps_*.log | grep -c "net: CHECK")
   for b in rammer soldier; do
     # every change but perhaps the last, still under way at the end
     [ $(grep -c "a new game" "$OUT/maps_$b.log") -ge $((changes - 1)) ] || followed=0
+    # the sound log plays the resimulated ticks' sounds on a later map too (its ticks are that map's game cycle)
+    awk '/a new game/ { n++ } /net: [1-9][0-9]* sounds of the resimulated ticks played/ && n { ok = 1 } END { exit !ok }' "$OUT/maps_$b.log" || heard=0
   done
-  if [ "$changes" -lt 3 ] || [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $followed = 0 ]; then
-    fail "maps: $changes map changes, clients followed: $followed, $crashes crashed, $checks CHECK lines ($BUILD/net_check/maps_*.log)"
+  # On every later map m_rammer hears the others' gunfire as the server's listener at its place does: at least half
+  # the shots' samples of a map the server heard 20 of (the last map's, maybe cut short, not counted)
+  if grep -q "as player 3 of" "$OUT/maps_rammer.log"; then
+    awk '/net: the next map:/ { n++ } /^sfx: / && / weapon/ && !/\/p3 / && n { s[n]++ } END { for (i = 1; i < n; i++) print i, s[i] + 0 }' \
+      "$OUT/maps_server.log" > "$OUT/maps_gunfire_server.txt"
+    awk '/a new game/ { n++ } /^sfx: / && / weapon/ && !/\/p3 / && n { c[n]++ } END { for (i = 1; i <= n; i++) print i, c[i] + 0 }' \
+      "$OUT/maps_rammer.log" > "$OUT/maps_gunfire_client.txt"
+    awk 'NR == FNR { s[$1] = $2; next } ($1 in s) && s[$1] >= 20 && $2 * 2 < s[$1] { bad = 1; print "  maps: map " $1 + 1 ", the others gunfire: " $2 " samples for m_rammer, " s[$1] " for the server" }
+         END { exit bad }' "$OUT/maps_gunfire_server.txt" "$OUT/maps_gunfire_client.txt" || gunfire=0
+  fi
+  if [ "$changes" -lt 3 ] || [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $followed = 0 ] || [ $heard = 0 ] || [ $gunfire = 0 ]; then
+    fail "maps: $changes map changes, clients followed: $followed, resimulated sounds on a later map: $heard, the others' gunfire heard: $gunfire, $crashes crashed, $checks CHECK lines ($BUILD/net_check/maps_*.log)"
   else
-    pass "maps: $changes map changes, both clients followed"
+    pass "maps: $changes map changes, both clients followed, both played the resimulated ticks' sounds on a later map, m_rammer heard the others' gunfire there as the server did"
   fi
 }
 
@@ -196,6 +224,9 @@ rounds() {
   done
   for b in rammer soldier; do
     grep -q "a new game" "$OUT/rounds_$b.log" || { ok=0; echo "  rounds: r_$b didn't follow to the next map"; }
+    # After the results, the resimulated ticks ask for sounds again (the others' shots are heard through them)
+    awk '/notice: Round 2: go/ { n = 1 } n && /, sound: asked/ && / live, [1-9][0-9]* \(spr/ { ok = 1 } END { exit !ok }' "$OUT/rounds_$b.log" ||
+      { ok=0; echo "  rounds: r_$b's resimulated ticks asked for no sound in round 2"; }
   done
   grep -q "notice: Round 2: go" "$OUT/rounds_late.log" || { ok=0; echo "  rounds: the late client wasn't in round 2"; }
   # The game on the new map, not the old one again: Tiny Town (mp1) is within x 50..130, mp2's restart zones east of 140
@@ -204,7 +235,7 @@ rounds() {
   if [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $ok = 0 ]; then
     fail "rounds: $crashes crashed, $checks CHECK lines ($BUILD/net_check/rounds_*.log)"
   else
-    pass "rounds: warmup, ready, a round, results with a map vote, the voted map, a player joining in the results"
+    pass "rounds: warmup, ready, a round, results with a map vote, the voted map with its sounds, a player joining in the results"
   fi
 }
 
@@ -301,17 +332,17 @@ throws() {
     }' "$OUT/throws_server.log" "$OUT/throws_client.log")
   local unseen thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead
   read -r unseen thrown fatal shown shownFatal wrong burnt phased early pulled pullShown pullWrong ownTicks ownRun jackServer jackClient cancelShown cancelLate lead <<< "$result"
-  # A fatal landing's thud (sample 41, Char::UpdateImmobilized) the server played at the client's player: the client too
+  # A player's fatal landing cries out (gPortPlayersDeathCry) instead of the thud (sample 41, Char::UpdateImmobilized), on both ends
   local thuds clientThuds
   thuds=$(grep -c "^sfx: .* samp 41 ped/p[01] " "$OUT/throws_server.log")
   clientThuds=$(grep -c "^sfx: .* samp 41 ped/p[01] " "$OUT/throws_client.log")
   echo "  server: $thrown player ticks thrown, $fatal of them to a death; client: $shown shown ($shownFatal to a death), $wrong not as the server's (and $unseen before a snapshot had the throw's start); a player burning $burnt ticks; $phased deaths electrocuted or sinking, $early of them not shown so by the client"
-  echo "  fatal landings heard at the client's player: $thuds on the server, $clientThuds on the client"
+  echo "  players' fatal landing thuds heard at the client's player: $thuds on the server, $clientThuds on the client (none wanted)"
   echo "  pulled out of a car: $pulled server ticks, $pullShown client ticks, $pullWrong of them while the server's sat or walked; the client's own phases: $ownTicks ticks, $ownRun at most in a row; its player's jack: pulled out $jackServer server ticks, $jackClient client ticks ($lead ticks ahead); the jack called off: $cancelShown ticks shown pulled before, $cancelLate after"
   if [ "${fatal:-0}" = 0 ] || [ "${shownFatal:-0}" = 0 ] || [ "${wrong:-1}" != 0 ] || [ "${burnt:-0}" = 0 ] || [ "${phased:-0}" = 0 ] || [ "${early:-1}" != 0 ] ||
     [ "${pulled:-0}" = 0 ] || [ "${pullShown:-0}" = 0 ] || [ "${pullWrong:-1}" != 0 ] || [ "${ownTicks:-0}" = 0 ] || [ "${ownRun:-99}" -gt 20 ] ||
     [ "${jackServer:-0}" = 0 ] || [ "${jackClient:-0}" = 0 ] || [ "${lead:--1}" -lt 0 ] || [ "${cancelShown:-0}" = 0 ] || [ "${cancelLate:-1}" != 0 ] ||
-    [ "$clientThuds" -lt "$thuds" ]; then
+    [ "$thuds" != 0 ] || [ "$clientThuds" != 0 ]; then
     fail "throws: the client's throws or burning aren't the server's ($BUILD/net_check/throws_*.log)"
   else
     pass "throws: every throw the client showed was the server's at that tick, flying deaths included; electrocution and sinking deaths were the server's; a pull out of a car the server's; the client's own phases cancelled; its player's jacks of another player's car predicted, the one called off cancelled"

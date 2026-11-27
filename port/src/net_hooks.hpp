@@ -42,6 +42,47 @@ extern bool gPortNoAudio;
 extern void (*gPortSoundRequestsHook)(bool requested);
 // After the mixer starts a sample (compat/src/miles.cpp, miles3d.cpp: its handle); NULL but for a log (GTA2_NET_SFXLOG)
 extern void (*gPortSampleStartHook)(const void* handle);
+// The sound's counters for a network client's log (port/net/engine/sound_diag.cpp), each an increment where sound_obj
+// decides: what was asked for, by kind, and why it went unheard. Index 0 for a live frame, 1 for a resimulated tick
+struct PortSoundStats
+{
+    enum
+    {
+        kSprite,
+        kWeapon,
+        kCollision,
+        kOther,
+        kReleasing, // AddReleasingSounds: a sound fading out, asked for again
+        kKinds
+    };
+    u32 requests[2][kKinds]; // AddSampleToRequestedQueue
+    u32 queueFull[2]; // quieter than the queue's quietest, the queue full
+    u32 outOfRange[2]; // beyond its range (CalculateDistance)
+    u32 silent[2]; // at volume 0 (VolCalc)
+    u32 frames, pausedFrames, noListenerFrames; // ServiceSoundEffects: paused (or the results), no camera entity
+    u32 resimTicks, resimPaused, resimOff; // a client's resimulated ticks: with the restored sound paused, or off (no pass)
+    u32 started, refused, badSample, noRate; // ProcessActiveQueues' new samples: started, InitSampleForType said no...
+    u32 busyMax; // channels playing at a frame's end, the most
+    u32 entityAdds, entityFrees, addFails, cameraRefused; // AddSoundObject, FreeSoundEntry: a full table, a second camera
+    u32 cryAsked, cryFar, crySilent, cryFull, cryStarted, cryCut; // a player's death cry: asked for, unheard, started, stopped early
+};
+extern PortSoundStats gPortSoundStats;
+// A player's death cry (sound_obj::PortPlayerDeathCry): asked for, unheard, started, ended; NULL but for a log (GTA2_NET_SFXLOG)
+struct sound_0x68;
+extern void (*gPortDeathCryHook)(const char* what, s32 a, s32 b, const sound_0x68& sample);
+extern int gPortSoundSide; // 1 while a network client's resimulated tick asks for its sounds
+// The mixer's (compat/src/miles.cpp) since the last call, then reset
+struct PortMixerStats
+{
+    u32 starts, emptyStarts; // AIL_start_sample, of them with no data
+    u32 callbacks, frames; // the audio device's callbacks and the frames they asked for
+    u32 voicesMax; // samples playing in a callback, the most
+    u32 streams; // streams playing now
+    float peak; // the loudest output sample, before the clamp
+    bool open, paused; // the device
+    const char* driver;
+};
+void port_MixerStats(PortMixerStats* pOut);
 // A dedicated server (--server), known before anything runs (compat/src/main.cpp): no message box, no setup, and none of
 // the files only a player uses (the keyboard layout, the attract mode replays)
 extern bool gPortServer;
@@ -76,6 +117,9 @@ extern bool (*gPortWorldStill)();
 // Asked as a car would blow up (Car::HandleCarExplosion): false, and it doesn't. NULL but on a network client, whose cars
 // the server sends blow up when the server's do (a prediction can't be taken back)
 extern bool (*gPortCarMayExplode)(Car* pCar);
+// Car::TryHonkHorn's id, whose low bits pick the cars that honk and shout: NULL but on a network client, whose cars the
+// server sends go by the server's id
+extern s32 (*gPortCarHornId)(const Car* pCar);
 // Called as Object_5C::CreateObject makes an object, its model set: a network game keys the ones it predicts
 // (port/net/engine/shots.cpp). NULL but in a network game
 extern void (*gPortObjectMade)(Object* pObject);
@@ -91,6 +135,9 @@ extern bool (*gPortPedMayDie)(Ped* pPed);
 // Asked as a char would collide with a sprite (Char::ShouldCollideWithSprite): false, and it doesn't. NULL but on a network
 // client, whose players held from a death of its own are as the dead to cars, peds and shots
 extern bool (*gPortCharSolid)(const Char* pChar);
+// Asked as a sprite's impact on another is queued for its sound (CollisionSoundQueue::AddCollision): false, and it isn't.
+// NULL but on a network client, which hears a predicted run-over of another player once the server has it
+extern bool (*gPortImpactHeard)(Sprite* pSprite, Sprite* pHit);
 // Asked as a ped would use its weapon (Ped::ManageWeapon): false, and it does not. NULL but on a network client
 extern bool (*gPortPedMayFire)(Ped* pPed);
 // Asked as a jacker's char pulls a driver out (Char::UpdateCharB4): false, and the jacker waits at the door. NULL but in
@@ -137,6 +184,13 @@ extern bool gPortTagTimeCounts;
 // A network game's: a new object (Object_3C::PoolAllocate) isn't airborne by its pool slot's previous one, which the
 // server and a client don't share
 extern bool gPortGroundedObjects;
+// A network game's: a player cries out at its death (Ped::Kill's voice event 4) as the other peds do, which the original
+// keeps for peds that aren't players (sound_obj::HandlePedVoiceEvent)
+extern bool gPortPlayersDeathCry;
+// A network game's: a sample asked for when the mixer's request queue is full is ranked among all the others
+// (sound_obj::AddDetailsToRequestedOrderList); the original's search stops at the slot it takes, and the sample at that
+// place in the order is lost
+extern bool gPortFullQueueRanked;
 // A network server's: the character a player's client typed with the key <dik> this tick, in its keyboard's layout
 // (0: none), for its chat line (Hud_ChatInput::HandleChatInputKey); the server's own table is a US keyboard's
 extern u16 (*gPortChatChar)(Player* pPlayer, s32 dik);

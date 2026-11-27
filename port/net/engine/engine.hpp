@@ -32,6 +32,7 @@ typedef void (*FrameHook)(void* user);
 void SetFrameHook(FrameHook hook, void* user);
 bool GameRunning(); // a game with its players exists
 int PlayerCount();
+uint32_t GameCycle(); // the game's tick count (Rng::get_cur_rng), which each map starts anew
 uint32_t LocalInput(); // what this machine's controls give for the next tick
 void SetPlayerInput(int player, uint32_t buttons); // for the next tick
 // A client's: whether another player's fire in the next tick is our guess (its pose shows, its weapon is not used)
@@ -159,6 +160,14 @@ int PlayerAmmo(const EntityState& e, int weapon); // 0..14 on foot, 15..27 a car
 // A pickup entity's Object::mModel (objects:: in Source/enums.hpp: 200..227 weapons, 228.. power-ups)
 int PickupModel(const EntityState& e);
 int CarModel(const EntityState& e); // a car entity's Car::mCarInfoIdx (car_model_enum in Source/enums.hpp), -1 for others
+// A car model's size in blocks (its sprite's, car_info w and h: across, along); false for an unknown model
+bool CarSize(int model, float* pWidth, float* pLength);
+struct PickupSpot
+{
+    float x, y, z;
+    int model; // Object::mModel: 200..227 weapons
+};
+void WeaponPickups(std::vector<PickupSpot>& out); // the weapon pickups this game has (the map script makes them on both ends)
 // The position of a player's ped or car, in blocks; false without a ped
 bool PlayerPosition(int player, float* pX, float* pY);
 bool PlayerPose(int player, float* pX, float* pY, float* pZ, int* pRot); // and its height and heading (0..1439)
@@ -303,6 +312,7 @@ struct NavMap
     uint8_t height[kSize * kSize]; // 255: nobody stands here
     uint8_t ways[kSize * kSize];
     bool water[kSize * kSize]; // its top block is water: a walker drowns there
+    uint16_t part[kSize * kSize]; // which part of the map's ways (net::LabelNavParts), 0: none
 };
 void BuildNavMap(NavMap& out);
 void DumpNavMap(const NavMap& map, const char* path); // as a picture (PGM): grey by height, black blocked
@@ -314,6 +324,8 @@ void DumpNavMap(const NavMap& map, const char* path); // as a picture (PGM): gre
 void ReplicaStats(const Snapshot& snap, int* pCars, int* pPeds, float* pMaxDrift);
 void PoolUse(int* pCars, int* pPeds, int* pChars); // live cars, peds, chars in this game
 void PrintReplicaLog(); // what the replicas did since the last call (explosions carried out, wrecks and corpses made again...)
+// The sound since the last call, from the game's requests to the mixer, and its state: one line, <when> its start
+void PrintSoundDiag(const char* when);
 // Drivers: how many peds the snapshot has in a car, how many of their cars have a driver here, and how many of
 // those are the same (mapped) ped
 void DriverStats(const Snapshot& snap, int* pSent, int* pDriven, int* pSame);

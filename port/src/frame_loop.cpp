@@ -10,6 +10,7 @@
 #include "Ped.hpp"
 #include "interpolation.hpp"
 #include "net_hooks.hpp"
+#include "rng.hpp"
 #include "settings.hpp"
 #include "sprite.hpp"
 #include "view.hpp"
@@ -229,7 +230,7 @@ void Trace(char kind)
             }
         }
     }
-    fputc('\n', spTrace);
+    fprintf(spTrace, " ns %llu tick %u\n", port_NowNs(), gpRng ? static_cast<u32>(gpRng->get_cur_rng()) : 0);
 }
 
 // Whether a new frame is due now, by the pacing Next uses.

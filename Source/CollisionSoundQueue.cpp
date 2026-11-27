@@ -5,6 +5,9 @@
 #include "root_sound.hpp"
 #include "sprite.hpp"
 #include "collision_event_type.hpp"
+#if defined(GTA2_PORT)
+#include "../port/src/net_hooks.hpp" // the network game's hooks (port/docs/netcode.md)
+#endif
 
 DEFINE_GLOBAL(CollisionSoundQueue*, gCollisionSoundQueue, 0x66AFE0);
 DEFINE_GLOBAL(CollisionTarget, gCollisionTarget, 0x679188);
@@ -199,6 +202,11 @@ void CollisionSoundQueue::AddCollision(Sprite* pSprite, Fix16 impact_strength)
     // Port: at most k_max_events a tick, the rest unheard; past it the original wrote over the heap after the queue
     // (a pile of cars touching: a crash much later, freeing something else)
     if (mCount >= k_max_events)
+    {
+        return;
+    }
+    if (gPortImpactHeard && gCollisionTarget.mType == collision_target_type::sprite_3 &&
+        !gPortImpactHeard(pSprite, gCollisionTarget.mpHitSprite))
     {
         return;
     }

@@ -94,6 +94,8 @@ void net::engine::StartNetworkGame(const NetworkGame& game)
     gPortWorldStill = WorldStill;
     gPortTagTimeCounts = true;
     gPortGroundedObjects = true;
+    gPortPlayersDeathCry = true;
+    gPortFullQueueRanked = true;
     gPortScoreBonusHook = net::engine::ScoreBonus;
     gPortKillCamTicks = KillCamTicks;
     gPortDeathViewPed = DeathCamera;
@@ -139,6 +141,8 @@ void net::engine::StopNetworkGame()
     SoundLogStop();
     gPortTagTimeCounts = false;
     gPortGroundedObjects = false;
+    gPortPlayersDeathCry = false;
+    gPortFullQueueRanked = false;
     gPortChatChar = NULL;
     gPortScoreBonusHook = NULL;
     gPortKillCamTicks = NULL;
@@ -186,6 +190,7 @@ bool NextNetworkGame()
         return false;
     }
     gNextPending = false;
+    net::engine::PrintSoundDiag("the old game's end");
     // The game takes the map's files from its session, which Start_NetworkGame set once for the first game
     char path[260];
     snprintf(path, sizeof(path), "data\\%s", gNetGame.gmp.c_str());

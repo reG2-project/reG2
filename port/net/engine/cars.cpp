@@ -19,6 +19,18 @@ int net::engine::CarModel(const EntityState& e)
     return e.type == kEntityCar ? e.f[kCarModel] : -1;
 }
 
+bool net::engine::CarSize(int model, float* pWidth, float* pLength)
+{
+    const car_info* info = gGtx_0x106C && model >= 0 && model < 256 ? gGtx_0x106C->get_car_info_4BF1F0((u8)model) : NULL;
+    if (!info || !info->w || !info->h)
+    {
+        return false;
+    }
+    *pWidth = info->w / 64.0f;
+    *pLength = info->h / 64.0f;
+    return true;
+}
+
 namespace
 {
 using net::engine::Member;
