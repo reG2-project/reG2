@@ -55,11 +55,13 @@ const net::EntityState* InBase(const net::Snapshot* base, const net::EntityState
 }
 
 // A client's Escape (the key's code in the input: Source/input_bits.hpp) is its own (Client::ChooseInput: its leave
-// prompt): here it would open the server's quit prompt for that player, whose yes ended the server's game
+// prompt): here it would open the server's quit prompt for that player, whose yes ended the server's game. A code past
+// 0xFF is no key: KeyboardLayout::GetKey's table has 256
 uint32_t WithoutEscape(uint32_t buttons)
 {
     const uint32_t kKeyDown = 0x200000, kKeyBits = 0x1FF000, kEscape = 0x01; // DIK_ESCAPE
-    return ((buttons & kKeyBits) >> 12) == kEscape ? buttons & ~(kKeyDown | kKeyBits) : buttons;
+    const uint32_t code = (buttons & kKeyBits) >> 12;
+    return code == kEscape || code > 0xFF ? buttons & ~(kKeyDown | kKeyBits) : buttons;
 }
 
 // A replay's: the recording has what came in, and nothing goes out
