@@ -19,6 +19,7 @@ namespace
 const int kSaves = 32; // ticks a snapshot may be behind and still be reconciled (about 1 s)
 const int kMaxFastForward = 8; // ticks our commands may come late and be caught up at once (FastForward); more: a jump
 const uint32_t kMaxMapChangePause = 300; // ticks a map change's end may be off; further: a bad end tick
+const uint32_t kLatePatience = 4; // server ticks our commands stay late before they are caught up
 const int kMaxAhead = 20; // ticks our commands may be early beyond two before a jump back
 const int kStallMs = 700; // no snapshot for this long: the connection is out (ENet drops it after 5 to 10 s)
 const int kReconnectMs = 3000; // between attempts to connect again
@@ -405,6 +406,8 @@ void net::Client::OnSnapshot(BitReader& r)
     mWarning.OnSnapshot(NowMs(), h.tick);
     mLink.snapshots++;
     mSlack = (int)h.lastCmdTick - (int)(h.tick + 1);
+    mCmdsCame = h.lastCmdTick != mLastCmdTick;
+    mLastCmdTick = h.lastCmdTick;
     mSlackKnown = mSynced && h.lastCmdTick > mJumpTick; // it has heard of the ticks since our last jump
     mPacer.OnSnapshot(engine::GameNowUs(), h.tick);
     if (mSlackKnown)
@@ -1257,7 +1260,11 @@ void net::Client::TakeSnapshot()
     // every save and with them the prediction until snapshots of the new ticks come. Far ahead is paced back slowly
     const int off = mSynced && mSlackKnown ? mSlack - 2 : 0;
     mTakenAt = mTick; // before the resimulation: its ticks have this snapshot's news
-    const bool behind = mSynced && mLatestTick <= mTick && off < -3;
+    // Late and still coming: a link's stall stops our commands, so running ahead then gains nothing, and once it ends they
+    // come at once, on time again. Caught up only when that lasts; a stall's lost inputs are left to the reconcile
+    const bool late = mSynced && mLatestTick <= mTick && off < -3 && mCmdsCame;
+    mLateSince = late ? (mLateSince && mLateSince <= mLatestTick ? mLateSince : mLatestTick) : 0;
+    const bool behind = late && mLatestTick - mLateSince >= kLatePatience;
     if (!mProbe.Alone() && behind && -off <= kMaxFastForward && Saved(mLatestTick))
     {
         Reconcile(snap);

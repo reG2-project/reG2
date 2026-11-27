@@ -189,6 +189,9 @@ class Client
     bool mSlackKnown = false;
     Pacer mPacer;
     uint32_t mJumpTick = 0; // our tick at the last jump
+    uint32_t mLateSince = 0; // the first snapshot of a run that said our commands were late (0: none)
+    uint32_t mLastCmdTick = 0; // the newest snapshot's last command of ours the server had
+    bool mCmdsCame = false; // it had a newer one than the snapshot before
     bool mNewSnapshot = false;
 
     // Prediction: this game's tick (the server tick it is predicting) and the game saved after each tick

@@ -53,7 +53,7 @@ class Conditioner : public net::Transport
         {
             return true; // lost on the way
         }
-        int delay = mShape.lagMs + Spike();
+        int delay = mShape.lagMs + Spike() + Stall();
         if (mShape.jitterMs > 0)
         {
             delay += (int)(Next() % (2 * mShape.jitterMs + 1)) - mShape.jitterMs;
@@ -134,6 +134,17 @@ class Conditioner : public net::Transport
         const long long on = mShape.spikeOnS * 1000LL;
         const double ramp = t < 1000 ? t / 1000.0 : t < on ? 1.0 : t < on + 1000 ? 1.0 - (t - on) / 1000.0 : 0.0;
         return (int)(mShape.spikeMs * ramp);
+    }
+
+    // A stall at the start of each period: what is sent during it waits for its end, then goes at once (a Wi-Fi hiccup)
+    int Stall() const
+    {
+        if (!mShape.stallMs || mShape.stallEveryS <= 0)
+        {
+            return 0;
+        }
+        const long long t = (Now() - mStart) % (mShape.stallEveryS * 1000LL);
+        return t < mShape.stallMs ? (int)(mShape.stallMs - t) : 0;
     }
 
     uint32_t Next()
