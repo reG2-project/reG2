@@ -3470,7 +3470,7 @@ bool sound_obj::CalculateDistance(Fix16 max_dist)
         return true;
     }
 #if defined(GTA2_PORT)
-    gPortSoundStats.far[gPortSoundSide]++;
+    gPortSoundStats.outOfRange[gPortSoundSide]++;
 #endif
     return false;
 }

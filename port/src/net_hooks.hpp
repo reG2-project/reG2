@@ -59,7 +59,7 @@ struct PortSoundStats
     };
     u32 requests[2][kKinds]; // AddSampleToRequestedQueue
     u32 queueFull[2]; // quieter than the queue's quietest, the queue full
-    u32 far[2]; // beyond its range (CalculateDistance)
+    u32 outOfRange[2]; // beyond its range (CalculateDistance)
     u32 silent[2]; // at volume 0 (VolCalc)
     u32 frames, pausedFrames, noListenerFrames; // ServiceSoundEffects: paused (or the results), no camera entity
     u32 resimTicks, resimPaused, resimOff; // a client's resimulated ticks: with the restored sound paused, or off (no pass)
