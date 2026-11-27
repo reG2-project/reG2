@@ -383,6 +383,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
     BitWriter w;
     const bool read = ReadHello(r, hello);
     const std::string refusal = Refusal(hello, read);
+    bool refused = true;
     if (!refusal.empty())
     {
         Reject reject;
@@ -430,6 +431,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
         }
         else
         {
+            refused = false;
             if (slot == room)
             {
                 MakeRoom(room);
@@ -487,6 +489,10 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
     if (w.ByteCount()) // a second hello from a client already in: nothing to say
     {
         mTransport->Send(peer, kChannelReliable, w.Data().data(), w.ByteCount(), true);
+        if (refused)
+        {
+            mTransport->Disconnect(peer); // once the reject is through: a refused connection keeps no peer of the host's
+        }
     }
 }
 
