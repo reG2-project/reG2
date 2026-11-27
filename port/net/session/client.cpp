@@ -1495,6 +1495,7 @@ void net::Client::Frame()
     engine::AnchorAttachments(); // the frame is drawn next
     engine::ShotVisFrame();
     mProbe.FrameEnd();
+    mProbe.Comfort(mFrame, mTick, mSlot, mSynced && mConnected);
 }
 
 void net::Client::Step()
