@@ -16,7 +16,9 @@
 #include <stdlib.h>
 #include <string.h>
 #if !defined(_WIN32)
-    #include <execinfo.h>
+    #if !defined(__EMSCRIPTEN__)
+        #include <execinfo.h>
+    #endif
     #include <pthread.h>
     #include <sys/stat.h>
     #include <unistd.h>
@@ -68,8 +70,10 @@ pthread_t gMainThread;
 
 void OnBacktraceSignal(int)
 {
+#if !defined(__EMSCRIPTEN__)
     void* frames[64];
     backtrace_symbols_fd(frames, backtrace(frames, 64), 2);
+#endif
 }
 
 void OnPipeSignal(int)
@@ -144,8 +148,10 @@ void WatchExits()
     atexit(NoteExit);
 #if !defined(_WIN32)
     gMainThread = pthread_self();
+#if !defined(__EMSCRIPTEN__)
     void* frame;
     backtrace(&frame, 1); // loads what backtrace needs now, not in the handler
+#endif
     signal(SIGUSR2, OnBacktraceSignal);
     signal(SIGPIPE, OnPipeSignal);
 #endif
