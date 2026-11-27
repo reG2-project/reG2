@@ -55,11 +55,13 @@ const net::EntityState* InBase(const net::Snapshot* base, const net::EntityState
 }
 
 // A client's Escape (the key's code in the input: Source/input_bits.hpp) is its own (Client::ChooseInput: its leave
-// prompt): here it would open the server's quit prompt for that player, whose yes ended the server's game
+// prompt): here it would open the server's quit prompt for that player, whose yes ended the server's game. A code past
+// 0xFF is no key: KeyboardLayout::GetKey's table has 256
 uint32_t WithoutEscape(uint32_t buttons)
 {
     const uint32_t kKeyDown = 0x200000, kKeyBits = 0x1FF000, kEscape = 0x01; // DIK_ESCAPE
-    return ((buttons & kKeyBits) >> 12) == kEscape ? buttons & ~(kKeyDown | kKeyBits) : buttons;
+    const uint32_t code = (buttons & kKeyBits) >> 12;
+    return code == kEscape || code > 0xFF ? buttons & ~(kKeyDown | kKeyBits) : buttons;
 }
 
 // A replay's: the recording has what came in, and nothing goes out
@@ -381,6 +383,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
     BitWriter w;
     const bool read = ReadHello(r, hello);
     const std::string refusal = Refusal(hello, read);
+    bool refused = true;
     if (!refusal.empty())
     {
         Reject reject;
@@ -428,6 +431,7 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
         }
         else
         {
+            refused = false;
             if (slot == room)
             {
                 MakeRoom(room);
@@ -478,13 +482,17 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
                 engine::SetPlayerName(slot, name.c_str());
             }
             printf("net: %s %s player %d%s\n", name.c_str(), back >= 0 ? "is back as" : "joined as", slot,
-                   name != hello.name ? (" (asked for \"" + hello.name + "\")").c_str() : "");
+                   name != hello.name ? (" (asked for \"" + Printable(hello.name) + "\")").c_str() : "");
             Notice(-1, name + (back >= 0 ? " is back" : " joined"), slot);
         }
     }
     if (w.ByteCount()) // a second hello from a client already in: nothing to say
     {
         mTransport->Send(peer, kChannelReliable, w.Data().data(), w.ByteCount(), true);
+        if (refused)
+        {
+            mTransport->Disconnect(peer); // once the reject is through: a refused connection keeps no peer of the host's
+        }
     }
 }
 

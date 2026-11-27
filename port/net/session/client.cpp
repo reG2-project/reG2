@@ -877,6 +877,10 @@ uint32_t net::Client::ChooseInput(uint32_t recordedInput)
         local = (idle ? 0 : bot) | (local & kKeyEventBits);
     }
     local &= 0x3FFFFF;
+    if (((local >> 12) & 0x1FF) > 0xFF) // no key (a replay's or GTA2_INPUT's): KeyboardLayout::GetKey's table has 256
+    {
+        local &= ~kKeyEventBits;
+    }
     // F12, or the key under Esc (` or §: keyboards without F12), keys the game doesn't use (here as their DirectInput
     // codes and the key-down bit: Source/input_bits.hpp), mark the moment, in play and in its replay alike
     const uint32_t kKeyDown = 0x200000, kMarkF12 = 0x58, kMarkGrave = 0x29; // DIK_F12, DIK_GRAVE
