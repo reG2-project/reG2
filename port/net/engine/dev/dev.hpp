@@ -49,15 +49,18 @@ void DebugArm(int player, int weapon, int ammo); // Player::AddWeaponWithAmmo
 void DebugFire(int player); // the player's ped set on fire (Ped::SetOnFire)
 // On foot, the player's ped drowned (Char::DrownPed, 0) or electrocuted (1); seated in a car beside it (2), pulled out of the
 // car it sits in (3, StartPulledOut), jacking another player seated in a car beside it, from where that one stood (4);
-// 10 + 0..3: the nearest ambient ped on foot drowned, electrocuted, knocked down, or thrown by a blast at its feet
+// 10 + 0..4: the nearest ambient ped on foot drowned, electrocuted, knocked down, thrown by a blast at its feet, or killed
 void DebugPhase(int player, int what);
 // GTA2_NET_TESTLOCALPHASE=<tick>:<what>[,...] on a client, before each run of that tick (live and resimulated): its own
-// player drowned (0), electrocuted (1) or knocked down (2), which the server never has
+// player drowned (0), electrocuted (1) or knocked down (2), which the server never has; the nearest ambient ped killed (3)
 void DebugLocalPhase();
 // That many ambient peds nearest the player, at least that many blocks from it, set on fire: their corpses call the ambulance
 void DebugPatients(int player, int count, int fromBlocks);
 void DebugBlast(int player, int tenths); // an explosion (a grenade's) that far east of the player
-void DebugShot(int player, int model); // a rocket, grenade or molotov (objects::) thrown east from beside the player (shots.cpp)
+void DebugShot(int player, int model); // a rocket, grenade or molotov (objects::) thrown east from beside the player
+// GTA2_NET_TESTGHOSTSHOT=<tick> on a client, before each run of that tick: a rocket beside its player the server never fires
+void DebugGhostShot();
+uint32_t DebugShotSkew(); // GTA2_NET_SHOTSKEW=1 on a client: what its keys are xored with, none of the server's then
 void DebugStreak(int player); // a kill streak's bonus (PlayerScoreTracker::Service: 20 kills in a row)
 void DebugWanted(int player, int points); // at least that many wanted points (Ped::mWantedPoints)
 void DebugPowerUp(int player, int powerUp); // Player::CollectPowerUp (power_up_indices, e.g. 12 instant gang)
@@ -71,7 +74,10 @@ void InstallSpriteCheck(); // GTA2_NET_CHECKGRID: a sprite moved off the map is 
 void StackLog(bool server); // GTA2_NET_STACKLOG: two cars in one place (under 0.4 blocks apart in x and y), once per pair
 void TrainLog(bool server); // GTA2_NET_TRAINLOG: every train's place and state at every 150th tick of the game's cycle
 void FireLog(bool server); // GTA2_NET_FIRELOG: every fire (cars', loose, peds on fire) at every 30th tick of the game's cycle
-void ThrowLog(bool server); // GTA2_NET_THROWLOG: every tick, the players thrown, down, dead or on fire, and new explosions
+void PoseLog(bool server); // GTA2_NET_POSELOG: every tick, each player on foot: its fire held (Ped::mBf21C.bAttacking), weapon, moving
+// GTA2_NET_THROWLOG: every tick, the players thrown, down, dead or on fire, and new explosions; snap: the newest
+// snapshot applied (a client), each player line ends with it
+void ThrowLog(bool server, uint32_t snap);
 void ShotLog(bool server); // GTA2_NET_SHOTLOG: every tick, the rockets, grenades, molotovs and blasts by key (shots.cpp)
 // GTA2_NET_PEDLOG=<player>: the peds within 12 blocks of that player, their states and phase; end "server", "client" (a live
 // tick) or "applied" (a snapshot's tick, as its apply left them)
@@ -97,6 +103,8 @@ void InstallSfxLog(bool server);
 void DebugSoundChannels(uint32_t frame); // GTA2_NET_SOUNDLOG: the sound's playing channels, printed when they change
 void DebugAnimLog(uint32_t frame); // GTA2_NET_ANIMLOG: the other players' inputs, states and walking animation, every third frame
 void DebugSelfLog(uint32_t frame); // GTA2_NET_SELFLOG: the local player around a death (position, states, the death fields)
+// GTA2_NET_DEATHLOG: each frame, the other players around a death (their ped and corpse clone, as drawn)
+void DebugDeathLog();
 std::string DebugPlayerCar(int player, const Snapshot& snap); // for the logs: its car states here and in the snapshot
 bool DebugCheckPlayerCars(const char* where); // every in-game player's car is a live car; prints the first time not
 // GTA2_NET_CHECKGRID: every ped driving a car is its driver and leaves it through it; each one wrong printed when it goes wrong

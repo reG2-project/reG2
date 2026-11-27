@@ -80,6 +80,7 @@ void net::engine::CaptureWorld(Snapshot& out)
     for (int i = 0; i < MAX_PLAYERS; i++)
     {
         w.f[kWorldItTime + i] = gTagGame.mItTimeSecs[i];
+        w.f[kWorldLead + i] = SpawnLead(i);
     }
     out.entities.push_back(w);
 }
@@ -116,6 +117,7 @@ void net::engine::ApplyWorld(const EntityState& w)
     for (int i = 0; i < MAX_PLAYERS; i++)
     {
         gTagGame.mItTimeSecs[i] = w.f[kWorldItTime + i];
+        SetSpawnLead(i, w.f[kWorldLead + i]);
     }
     if (gpMapRenderer)
     {

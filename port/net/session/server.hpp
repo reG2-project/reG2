@@ -97,7 +97,7 @@ class Server
         const EntityState* had; // in the client's baseline
         EntityState aged; // what it has, with its age
         size_t freshBits, agedBits;
-        float priority;
+        float priority, distance;
         int pick; // 0: not sent (new, no room), 1: aged, 2: this tick's
         bool hold; // far off screen and fresh lately: aged this tick even with room (PriceArea)
     };

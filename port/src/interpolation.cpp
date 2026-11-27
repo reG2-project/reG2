@@ -135,6 +135,22 @@ u32 sObjOff;
 f32 sObjWorst;
 Camera* spAppliedCamera;
 u8 sCameraBytes[sizeof(Camera)];
+u32 sSteps;
+f64 sDrawTime;
+
+// Steps a late shot takes to slide from the gun to its place: 3 frames at 60 fps
+const f64 kSlideSteps = 1.5;
+struct Slide
+{
+    Sprite* mpSprite;
+    const Sprite* mpFrom;
+    s16 mId, mFromId;
+    f32 mMuzzle;
+    bool mSlide;
+    f64 mStart; // the time of its first frame, -1 before it
+};
+std::vector<Slide> sSlides;
+std::vector<std::pair<f32, f32>> sSlideMeasures;
 
 ArrowRef ArrowAt(s32 i)
 {
@@ -411,10 +427,54 @@ void Measure(f32 alpha)
         }
     }
 }
+// After the sprites are placed for the draw: each sliding shot between its shooter's drawn gun and its drawn place
+void ApplySlides()
+{
+    for (size_t i = 0; i < sSlides.size();)
+    {
+        Slide& slide = sSlides[i];
+        Sprite& sprite = *slide.mpSprite;
+        if (sprite.mInstanceId != slide.mId || slide.mpFrom->mInstanceId != slide.mFromId || (slide.mStart >= 0 && sDrawTime - slide.mStart >= kSlideSteps))
+        {
+            sSlides.erase(sSlides.begin() + static_cast<std::ptrdiff_t>(i));
+            continue;
+        }
+        const Sprite& from = *slide.mpFrom;
+        const f32 gx = from.mXy.x.ToFloat() + slide.mMuzzle * Ang16::sine(from.mRotation).ToFloat();
+        const f32 gy = from.mXy.y.ToFloat() + slide.mMuzzle * Ang16::cosine(from.mRotation).ToFloat();
+        const f32 gz = from.mZpos.ToFloat();
+        const f32 x = sprite.mXy.x.ToFloat(), y = sprite.mXy.y.ToFloat(), z = sprite.mZpos.ToFloat();
+        const bool first = slide.mStart < 0;
+        if (first)
+        {
+            slide.mStart = sDrawTime;
+        }
+        const f32 f = slide.mSlide ? static_cast<f32>((sDrawTime - slide.mStart) / kSlideSteps) : 1.0f;
+        if (f < 1.0f)
+        {
+            const s32 at = static_cast<s32>(&sprite - gSpritePool->mPool.mPool);
+            if (sSavedAt[at] < 0)
+            {
+                Save(sprite);
+            }
+            sprite.mXy.x = Fix16(gx + (x - gx) * f);
+            sprite.mXy.y = Fix16(gy + (y - gy) * f);
+            sprite.mZpos = Fix16(gz + (z - gz) * f);
+            sprite.InvalidateZColAndBBoxes();
+        }
+        if (first && sSlideMeasures.size() < 256)
+        {
+            const f32 dx = sprite.mXy.x.ToFloat() - gx, dy = sprite.mXy.y.ToFloat() - gy;
+            sSlideMeasures.push_back(std::make_pair(sqrtf((x - gx) * (x - gx) + (y - gy) * (y - gy)), sqrtf(dx * dx + dy * dy)));
+        }
+        i++;
+    }
+}
 } // namespace
 
 void Snapshot()
 {
+    sSteps++;
     sValid = gSpritePool && ViewCamera();
     if (!sValid)
     {
@@ -447,6 +507,33 @@ void SnapshotResim()
 void Clear()
 {
     sValid = false;
+    sSlides.clear();
+}
+
+void SlideFrom(Sprite* pSprite, const Sprite* pFrom, f32 muzzle, bool slide)
+{
+    if (pSprite && pFrom && sSlides.size() < 128)
+    {
+        Slide s = {pSprite, pFrom, pSprite->mInstanceId, pFrom->mInstanceId, muzzle, slide, -1.0};
+        sSlides.push_back(s);
+    }
+}
+
+bool TakeSlideMeasure(f32* pWouldBe, f32* pDrawn)
+{
+    if (sSlideMeasures.empty())
+    {
+        return false;
+    }
+    *pWouldBe = sSlideMeasures.back().first;
+    *pDrawn = sSlideMeasures.back().second;
+    sSlideMeasures.pop_back();
+    return true;
+}
+
+f64 DrawTime()
+{
+    return sDrawTime;
 }
 
 void LaidMoving(Sprite* pSprite, s32 dx, s32 dy)
@@ -493,6 +580,7 @@ void Apply(f32 alpha)
     memset(sSavedAt, 0xFF, sizeof(sSavedAt));
     memset(sOnOwner, 0, sizeof(sOnOwner));
     spAppliedCamera = NULL;
+    sDrawTime = sSteps + static_cast<f64>(alpha);
     if (!sValid || !gSpritePool || ViewCamera() != spCamera)
     {
         return;
@@ -544,6 +632,7 @@ void Apply(f32 alpha)
     }
     ApplyAttached(owners);
     Measure(alpha);
+    ApplySlides();
     for (s32 i = 0; i < numPlayers; i++)
     {
         const PlayerSprite& p = players[i];
@@ -592,6 +681,19 @@ void Apply(f32 alpha)
             arrow.mpRot->rValue = static_cast<s16>(cur.mRot - turn + Lerp(0, turn, alpha));
             arrow.mpRot->Normalize();
         }
+    }
+}
+
+void ApplySlidesOnly(f32 alpha)
+{
+    sSaved.clear();
+    memset(sSavedAt, 0xFF, sizeof(sSavedAt));
+    spAppliedCamera = NULL;
+    sArrowsApplied = false;
+    sDrawTime = sSteps + static_cast<f64>(alpha);
+    if (gSpritePool)
+    {
+        ApplySlides();
     }
 }
 

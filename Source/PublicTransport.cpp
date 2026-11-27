@@ -12,6 +12,9 @@
 #include "Object_5C.hpp"
 #include "Player.hpp"
 #include "SpriteGrid.hpp"
+#if defined(GTA2_PORT)
+#include "../port/src/net_hooks.hpp"
+#endif
 
 DEFINE_GLOBAL(PublicTransport*, gPublicTransport_181C, 0x6FF1D4);
 DEFINE_GLOBAL(TrainStationList, gTrainStationList, 0x6FEE68);
@@ -1209,7 +1212,12 @@ void PublicTransport::BusesService()
 {
     Car* pBusCar;
 
+#if defined(GTA2_PORT)
+    // Port: a network client's bus is the server's, a car of the snapshots
+    if (!bSkip_buses && !gPortNoOwnBus)
+#else
     if (!bSkip_buses)
+#endif
     {
         if (sBusSpawnDelay || sBusSpawned || !gCarManager_6C->CanAllocateCarOfKind(car_kind::recycled_1))
         {

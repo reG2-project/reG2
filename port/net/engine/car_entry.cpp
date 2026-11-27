@@ -189,47 +189,60 @@ void net::engine::ForceIntoCarAsPassenger(Ped* ped, Car* car)
     ped->EnterCarAsPassenger(car);
 }
 
-// As the jacker's char pulls a driver out (Char::UpdateCharB4), without what it decides for the driver (its occupation,
-// voice, the police's call: the snapshot's AI state). Out of a train's carriage walking; without char room it stays
+// Pulled out at the car's door as Char::UpdateCharB4 does it, without its AI choices for the driver (the snapshot's): from
+// its seat (out of a train walking; without char room it stays), or on foot here already (x, y, z unused)
 void net::engine::StartPulledOut(Ped* ped, Car* car, int door, const Fix16& x, const Fix16& y, const Fix16& z)
 {
-    if (ped->mCar != car || !car->mCarSprite || IsSpareDriver(ped))
+    if (!car || !car->mCarSprite || IsSpareDriver(ped) || (ped->mCar && ped->mCar != car))
     {
         return;
     }
-    if (car->IsTrainModel())
+    if (ped->mCar)
     {
-        ForceOutOfCar(ped, x, y, z, car->mCarSprite->mRotation);
+        if (car->IsTrainModel())
+        {
+            ForceOutOfCar(ped, x, y, z, car->mCarSprite->mRotation);
+            return;
+        }
+        if (!ped->AllocCharB4(x, y, z))
+        {
+            return;
+        }
+        ped->ChangeNextPedState1(ped_state_1::immobilized_8);
+        ped->ChangeNextPedState2(ped_state_2::ped2_at_car_door_17);
+        if (car->mDriver == ped)
+        {
+            car->ClearDriver();
+        }
+        if (ped->mEnterCarAsPassenger)
+        {
+            car->mPassengersList.RemovePed_471240(ped);
+            ped->mEnterCarAsPassenger = 0;
+        }
+        ped->mGameObject->set_rotation(car->mCarSprite->mRotation);
+        ped->SetRemap(ped->get_remap());
+        ped->mCar = NULL;
+    }
+    else if (!ped->mGameObject || AtCarDoor(ped))
+    {
         return;
     }
-    if (!ped->AllocCharB4(x, y, z))
+    else
     {
-        return;
-    }
-    ped->ChangeNextPedState1(ped_state_1::immobilized_8);
-    ped->ChangeNextPedState2(ped_state_2::ped2_at_car_door_17);
-    if (car->mDriver == ped)
-    {
-        car->ClearDriver();
-    }
-    if (ped->mEnterCarAsPassenger)
-    {
-        car->mPassengersList.RemovePed_471240(ped);
-        ped->mEnterCarAsPassenger = 0;
+        if (Object* o = ped->mpObj2C)
+        {
+            o->RequestRemoval();
+            ped->mpObj2C = NULL;
+        }
+        ped->mPedState1 = ped_state_1::immobilized_8;
+        ped->mPedState2 = ped_state_2::ped2_at_car_door_17;
     }
     Char* c = ped->mGameObject;
-    c->set_rotation(car->mCarSprite->mRotation);
     c->Set_F8_ped_state_1_433910(ped_state_1::immobilized_8);
     ped->set_target_car_door((char_type)door);
     c->SetPedState2(ped_state_2::ped2_at_car_door_17);
     c->mTargetCar = car;
+    c->mAnimationState = Char_Anim_state::Getting_pulled_out_of_car_8;
     c->mSpritePtr->SetDrawLayer(6);
-    ped->SetRemap(ped->get_remap());
-    ped->mCar = NULL;
     ped->SetStateInitPending();
-}
-
-bool net::engine::ClientMayPullOut(Ped* victim)
-{
-    return !victim->mPlayer;
 }

@@ -19,6 +19,7 @@ struct SessionEnv
     uint32_t divergeTick, divergeTicks; // the divergence check: from that server tick on this game alone, for that many ticks
     int jerkLog; // 1: the jerk statistics, 2: and each jump
     bool noForward; // GTA2_NET_NOFORWARD=1: a client predicts other players by their held input only, not the server's forwarded controls
+    bool holdFire; // GTA2_NET_HOLDFIRE=1: a client predicts other players' held fire button too (to compare)
     bool holdAll; // GTA2_NET_HOLDALL=1: a client holds other players' last input through a stall (to compare on a replay)
     int resimSaves; // GTA2_NET_RESIMSAVES=<n>: a resimulation saves its first n ticks (4; 0: all of them)
     float blend; // how far a small correction is blended in each tick (0.3; 1: at once)
@@ -40,7 +41,7 @@ struct SessionEnv
     const char* say; // <frame>:<command>[;...]: a client's test commands to the server ("/kick r_b")
     uint32_t fuzz, fuzzRate; // GTA2_NET_FUZZ=<seed>[:<per mille>]: a client turns that many of each snapshot's fields to random values (20)
     bool botVoteMap2; // GTA2_NET_BOTMAP2: a bot client votes map 2 in the results (a test sees the map change)
-    uint32_t botIdleFrom, botIdleTo; // GTA2_NET_BOTIDLE=<tick>:<tick>: a client bot presses nothing in those ticks (a test drives its player)
+    uint32_t botIdleFrom, botIdleTo; // GTA2_NET_BOTIDLE=<tick>:<tick>: a client's bot or a server's arena bots press nothing in those ticks (a test drives them)
     bool scoreboard; // GTA2_NET_SCOREBOARD=1: a client shows the scoreboard as if its key were held (captures)
 };
 const SessionEnv& Env();

@@ -87,7 +87,7 @@ if(WIN32 AND GTA2_PORT_DIRECTX)
     target_compile_definitions(binkw32 PRIVATE BUILD_BINK)
 
     add_executable(gta2 WIN32 ${lib_src} ${ROOT}/test.cpp ${ROOT}/StdAfx.cpp
-        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/heat_haze.cpp src/fire_smoke.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/ambient_occlusion.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp src/port_globals.cpp src/rand/rand.cpp src/rand/particle.cpp src/net_hooks.cpp src/player_names.cpp ${CMAKE_CURRENT_LIST_DIR}/resources.rc)
+        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/heat_haze.cpp src/fire_smoke.cpp src/shot_flash.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/ambient_occlusion.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp src/port_globals.cpp src/rand/rand.cpp src/rand/particle.cpp src/net_hooks.cpp src/player_names.cpp ${CMAKE_CURRENT_LIST_DIR}/resources.rc)
     target_link_libraries(gta2 PRIVATE mss32 binkw32
         ddraw dinput dxguid dplayx winmm ole32 oleaut32 user32 gdi32 advapi32 version shell32 comdlg32)
     target_link_options(gta2 PRIVATE -static -static-libgcc -static-libstdc++ -lpthread)
@@ -187,7 +187,7 @@ else()
 
     list(FILTER lib_src EXCLUDE REGEX "/Source/(NetPlay|NetUi)\\.cpp$")
     add_executable(gta2 ${lib_src} ${net_game_src} ${ROOT}/test.cpp ${ROOT}/StdAfx.cpp
-        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/heat_haze.cpp src/fire_smoke.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/ambient_occlusion.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp src/port_globals.cpp src/rand/rand.cpp src/rand/particle.cpp src/net_hooks.cpp src/player_names.cpp src/build_id.cpp ${compat_src})
+        src/debug_stubs.cpp src/menu.cpp src/options_menu.cpp src/pause_menu.cpp src/lights.cpp src/heat_haze.cpp src/fire_smoke.cpp src/shot_flash.cpp src/shadows.cpp src/settings.cpp src/game_hooks.cpp src/frame_loop.cpp src/interpolation.cpp src/view.cpp src/day_night.cpp src/ambient_occlusion.cpp src/twin_stick.cpp src/rumble.cpp src/ptr_slot.cpp src/saves.cpp src/autosave.cpp src/retry.cpp src/welcome.cpp src/prompts.cpp src/layout_checks.cpp src/port_globals.cpp src/rand/rand.cpp src/rand/particle.cpp src/net_hooks.cpp src/player_names.cpp src/build_id.cpp ${compat_src})
     target_compile_definitions(gta2 PRIVATE GTA2_PORT_SDL GTA2_NET_PLAY)
     # The git commit, looked up at every build (the network game's join compares it); GTA2_COMMIT where git can't see the
     # source tree (the packages' containers)

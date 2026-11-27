@@ -135,6 +135,7 @@ class Client
     void StartOver(); // a new game (the next map): synced again from its first snapshot
     void Resync(const Snapshot& snap);
     void Reconcile(const Snapshot& snap);
+    void Resimulate(uint32_t s);
     void MeasureShownError(const Snapshot& snap);
     void TakePlayerStates(const Snapshot& snap);
     void Blend(const std::vector<engine::Pose>& shown);
@@ -200,7 +201,8 @@ class Client
     ForwardedInputs mKnown; // those of the snapshot the game took last, for the ticks after <mKnownTick>
     uint32_t mKnownTick = 0;
     uint32_t mTakenAt = 0; // our tick when the game took the newest snapshot (a stall: the ticks since)
-    uint32_t RemoteInput(int player, uint32_t tick) const; // what we predict another player's tick with
+    uint32_t RemoteInput(int player, uint32_t tick, bool* pGuessed) const; // what we predict another player's tick with
+    uint32_t PredictedInput(int player, uint32_t tick);
 
     std::unique_ptr<BotBrain> mBot;
     std::unique_ptr<ClientRecorder> mRecorder;

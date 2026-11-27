@@ -1034,7 +1034,7 @@ void Char::UpdateAnimState()
                     newId = mAnimationFrame + baseId + 19;
                     Ped* pDriver = pCar->mDriver;
 #if defined(GTA2_PORT)
-                    // Port: a network client's player is pulled out by the server's jack only; the jacker waits here
+                    // Port: a network test can hold the pull, the jacker waiting here (port/net/engine/dev/test_hooks.cpp)
                     if (pDriver && gPortMayPullOut && !gPortMayPullOut(pDriver))
                     {
                         pDriver = NULL;
@@ -6391,6 +6391,14 @@ MATCH_FUNC(0x553340)
 bool Char::ShouldCollideWithSprite(Sprite* pSprite) const
 {
     Ped* pPed;
+
+#if defined(GTA2_PORT)
+    // Port: a network client's player whose death it holds collides as the server's corpse does: not at all
+    if (gPortCharSolid && !gPortCharSolid(this))
+    {
+        return false;
+    }
+#endif
 
     if (pSprite)
     {

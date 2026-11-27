@@ -5,6 +5,7 @@
 #include "types.hpp"
 
 class Car;
+class Char;
 class Explosion;
 class Object;
 class Ped;
@@ -56,9 +57,9 @@ inline s32 PortTrafficLimit()
 {
     return gPortTrafficCap * gPortSpawnPlayers;
 }
-// Called in Game::UpdateGame after the players' tick (their cameras moved), before anything spawns; NULL but on a
-// network server, which moves a client's cameras' bounds to where that client already shows them (its lag ahead): a car
-// or ped spawned out of sight here would come into a fast client's view
+// Called in Game::UpdateGame after the players' tick (their cameras moved), before anything spawns; NULL but in a network
+// game, whose ends give every player's cameras the same bounds: the network view, out to where its client already shows
+// them (its lag ahead). What the game counts as on screen is then the same on both ends
 extern void (*gPortAfterPlayersHook)();
 // Called in Game::BootGame after the map script's level start, before the players are set up: NULL but in a network
 // game, whose players past the script's PLAYER_PEDs get a ped there
@@ -66,6 +67,9 @@ extern void (*gPortExtraPlayerPeds)();
 // Asked as a ped (re)starts at a restart zone (Ped::SpawnCharInZone): true, and it starts on the block *x, *y at the
 // level *z instead of the zone's first block with ground. NULL but in a network game: a block nobody stands on
 extern bool (*gPortSpawnBlock)(Ped* pPed, gmp_map_zone* pZone, s32* x, s32* y, s32* z);
+// Called in CarManager::CarsService instead of the car pool's update: NULL but in a network game, whose cars move a
+// car ahead of one following it first (port/net/engine/car_turns.cpp)
+extern void (*gPortUpdateCars)();
 // Asked in Game::UpdateGame after the players' tick: true, and nothing else runs this tick but the HUD (a network
 // game's results: the world stands still, the chat goes on)
 extern bool (*gPortWorldStill)();
@@ -84,8 +88,13 @@ extern bool (*gPortBlastDebris)(Explosion* pExplosion);
 // Asked as a ped would die (Ped::Kill): false, and it doesn't. NULL but on a network client, whose peds on foot die by
 // the server's death only
 extern bool (*gPortPedMayDie)(Ped* pPed);
-// Asked as a jacker's char pulls a driver out (Char::UpdateCharB4): false, and the jacker waits at the door. NULL but on
-// a network client, whose players are pulled out by the server's jack only
+// Asked as a char would collide with a sprite (Char::ShouldCollideWithSprite): false, and it doesn't. NULL but on a network
+// client, whose players held from a death of its own are as the dead to cars, peds and shots
+extern bool (*gPortCharSolid)(const Char* pChar);
+// Asked as a ped would use its weapon (Ped::ManageWeapon): false, and it does not. NULL but on a network client
+extern bool (*gPortPedMayFire)(Ped* pPed);
+// Asked as a jacker's char pulls a driver out (Char::UpdateCharB4): false, and the jacker waits at the door. NULL but in
+// a network test that holds the server's pull
 extern bool (*gPortMayPullOut)(Ped* pVictim);
 // Asked as a ped would be deallocated (Ped::Deallocate): false, and it stays. NULL but on a network client, whose peds of
 // the server go when the snapshots no longer carry them
@@ -110,6 +119,12 @@ extern bool (*gPortNextNetworkGame)();
 // zeroes them nor registers a criminal: zeroed each tick, the HUD would show no cop heads and the cops chasing a player
 // would give up between snapshots
 extern bool gPortKeepWantedPoints;
+// A network client's: no bus of its own (PublicTransport::BusesService); its peds still go for the bus stops as the
+// server's do (Ped::EnterPublicTransport, whose draw bSkip_buses would skip)
+extern bool gPortNoOwnBus;
+// A network client's: its cars count the ticks unseen as the server's do (Car::ManageDespawning), whose despawning
+// it gets by the snapshots
+extern bool gPortServerDespawns;
 // A network client's: the HUD's kill notices (Hud_MpMessage::AnnounceKill) are the server's deaths only, not the ones
 // its prediction starts and a restore undoes
 extern bool gPortServerKillNotices;
@@ -119,6 +134,9 @@ extern bool gPortServerKillAwards;
 // A network game's: the tag game counts the fugitive's seconds (TagGame::ExecuteGamemodeTick) though the game has no
 // time limit (the netcode ends the rounds), whose flag the original counts by
 extern bool gPortTagTimeCounts;
+// A network game's: a new object (Object_3C::PoolAllocate) isn't airborne by its pool slot's previous one, which the
+// server and a client don't share
+extern bool gPortGroundedObjects;
 // A network server's: the character a player's client typed with the key <dik> this tick, in its keyboard's layout
 // (0: none), for its chat line (Hud_ChatInput::HandleChatInputKey); the server's own table is a US keyboard's
 extern u16 (*gPortChatChar)(Player* pPlayer, s32 dik);

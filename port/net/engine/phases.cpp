@@ -1,7 +1,7 @@
 // port/net (port/docs/netcode.md, "Entities"): a ped's phase, as the server has it: thrown (throws.cpp), lying knocked
 // down, sinking (Char::DrownPed), electrocuted (Ped::ManageShocking), pulled out at a car door. A client follows the
 // server's at every snapshot: starts it the game's way, writes its timer, or cancels its own; and holds the fatal ends of
-// its own (GuardThrow, GuardPhases, ClientPedMayDie) for the server's death (KillNow).
+// its own (GuardPhases, ClientPedMayDie) for the server's death (KillNow).
 #include "internal.hpp"
 #include "Source/Car.hpp"
 #include "Source/Object_5C.hpp"
@@ -18,31 +18,6 @@ using net::EntityState;
 bool InPhase(const Ped* ped, s32 state2)
 {
     return ped->mPedState1 == ped_state_1::immobilized_8 && ped->mPedState2 == state2;
-}
-// On foot here (a pull out of a car predicted ahead of the server's), at the server's car door as the jacker's char left it
-void BackAtDoor(Ped* ped, Char* c, const int32_t* f)
-{
-    Car* car = RefCar(f[kPhaseCar]);
-    if (!car || !car->mCarSprite || AtCarDoor(ped))
-    {
-        return;
-    }
-    if (Object* o = ped->mpObj2C)
-    {
-        o->RequestRemoval();
-        ped->mpObj2C = NULL;
-    }
-    ped->mPedState1 = ped_state_1::immobilized_8;
-    ped->mPedState2 = ped_state_2::ped2_at_car_door_17;
-    ped->mTargetCarDoor = (u8)(f[kPhaseTimer] >> 2 & 3);
-    c->Set_F8_ped_state_1_433910(ped_state_1::immobilized_8);
-    c->mPedState2 = ped_state_2::ped2_at_car_door_17;
-    c->mTargetCar = car;
-    c->mAnimationState = Char_Anim_state::Getting_pulled_out_of_car_8;
-    c->mAnimationFrame = (u8)(f[kPhaseTimer] & 3);
-    c->mFrameTimer = (s8)(f[kPhaseTimer] >> 4 & 7);
-    c->mStateInitPending = (f[kPhase] & kPhaseInit) != 0;
-    c->mSpritePtr->SetDrawLayer(6);
 }
 } // namespace
 
@@ -68,6 +43,15 @@ int32_t net::engine::PhaseOf(const Ped* ped)
             return kPhaseDoor;
     }
     return kPhaseNone;
+}
+
+int32_t net::engine::PhaseTimer(const int32_t* f)
+{
+    // As the game starts them: a char's timeout 500 (knocked down 300), lying 60, sinking 10, electrocuted 0 up to 100
+    static const int32_t kMost[] = {0, 500, 60, 10, 100, 0x7F, 0, 0};
+    const int32_t timer = f[kPhaseTimer];
+    const int32_t most = kMost[f[kPhase] & 7];
+    return timer < 0 ? 0 : timer > most ? most : timer;
 }
 
 // On its feet as a live electrocuted ped gets up, its sinking's shrink undone (a ped's sprite has no visual shape)
@@ -149,6 +133,11 @@ void net::engine::GuardPhases(Ped* ped)
     {
         c->mTimer = 99;
     }
+    // A player lying at 0 health dies as it gets up (Char::UpdateImmobilized): down until the server's death, not up ahead of it
+    if (InPhase(ped, ped_state_2::lying_on_floor_22) && c->mLyingOnFloorTimer < 2 && PlayerDyingThere(ped))
+    {
+        c->mLyingOnFloorTimer = 2;
+    }
 }
 
 void net::engine::ApplyPhases(Ped* ped, const EntityState& e, int base, bool deadThere, Car* seat)
@@ -172,10 +161,16 @@ void net::engine::ApplyPhases(Ped* ped, const EntityState& e, int base, bool dea
     }
     if (deadThere)
     {
+        // Thrown there out of another phase here (lying, sinking): that one ends for the throw, as the server's did
+        const int32_t here = PhaseOf(ped);
+        if ((f[kPhase] & 7) == kPhaseThrown && here > kPhaseThrown && here != kPhaseDoor)
+        {
+            CancelPhase(ped);
+        }
         ApplyThrow(ped, e, base); // a thrown ped's death takes at its landing; the others' end as KillNow ends them
         return;
     }
-    const int32_t here = PhaseOf(ped);
+    int32_t here = PhaseOf(ped);
     // Held otherwise here (a fall, a throw's state without its object) while the server's has a phase; at a car door here
     // and back in that car there: the seat's (ForceIntoCar)
     const bool held = here == kPhaseNone && there && ped->mPedState1 == ped_state_1::immobilized_8;
@@ -188,10 +183,24 @@ void net::engine::ApplyPhases(Ped* ped, const EntityState& e, int base, bool dea
         }
         CancelPhase(ped);
     }
+    // Getting in or out at a car door here while the server's ped is thrown, down, sinking or electrocuted: called off
+    // here as CancelJack does, then the server's phase started below
+    if (there && there != kPhaseDoor && here == kPhaseNone && AtCarDoor(ped))
+    {
+        ped->SetObjective(objectives_enum::no_obj_0, 9999);
+        ped->SetObjective2(objectives_enum::no_obj_0);
+        CancelPhase(ped);
+    }
     if (there == kPhaseDoor && here != kPhaseDoor)
     {
-        BackAtDoor(ped, c, f);
-        return;
+        // On foot here (a pull predicted ahead of the server's): at the server's door, its frame the server's (below)
+        StartPulledOut(ped, RefCar(f[kPhaseCar]), f[kPhaseTimer] >> 2 & 3, Raw(e.f[kPedX]), Raw(e.f[kPedY]), Raw(e.f[kPedZ]));
+        if (PhaseOf(ped) != kPhaseDoor)
+        {
+            return;
+        }
+        c->mStateInitPending = false;
+        here = kPhaseDoor;
     }
     ApplyThrow(ped, e, base);
     if (here == there && there > kPhaseThrown)
@@ -205,7 +214,7 @@ void net::engine::ApplyPhases(Ped* ped, const EntityState& e, int base, bool dea
         {
             return;
         }
-        const int32_t timer = f[kPhaseTimer];
+        const int32_t timer = PhaseTimer(f);
         switch (there)
         {
             case kPhaseLying:

@@ -528,11 +528,12 @@ void net::Client::TakePlayerStates(const Snapshot& snap)
     }
 }
 
-// The server's forwarded controls for that tick if it sent them, else the held input. With no snapshot for a while the
-// held one is let go: the fire after 5 ticks, the rest after 10 (nobody runs on or shoots on through a stall)
-uint32_t net::Client::RemoteInput(int player, uint32_t tick) const
+// The server's forwarded controls for that tick if it sent them, else the held input (let go 10 ticks into a stall), its
+// fire a guess: the pose shows, the shots come from the forwarded ticks only (PredictedInput)
+uint32_t net::Client::RemoteInput(int player, uint32_t tick, bool* pGuessed) const
 {
     const uint32_t k = tick - mKnownTick - 1;
+    *pGuessed = false;
     if (player < kMaxForwardSlots && tick > mKnownTick && k < mKnown.count[player])
     {
         return mKnown.controls[player][k];
@@ -542,7 +543,18 @@ uint32_t net::Client::RemoteInput(int player, uint32_t tick) const
     {
         printf("net: frame %u, no snapshot for 10 ticks: player %d's held input 0x%x let go\n", mFrame, player, mRemote[player]);
     }
-    return stalled > 10 ? 0 : stalled > 5 ? mRemote[player] & ~(uint32_t)kBtnAttack : mRemote[player];
+    const uint32_t held = stalled > 10 ? 0 : stalled > 5 ? mRemote[player] & ~(uint32_t)kBtnAttack : mRemote[player];
+    *pGuessed = !Env().holdFire && (held & kBtnAttack);
+    return held;
+}
+
+// Another player's input for a tick about to run, its weapon kept from a guessed fire
+uint32_t net::Client::PredictedInput(int player, uint32_t tick)
+{
+    bool guessed;
+    const uint32_t b = RemoteInput(player, tick, &guessed);
+    engine::SetFireGuessed(player, guessed && player != mSlot);
+    return b;
 }
 
 // A snapshot of tick S: back to the game as it was after S, the server's state on top, then the ticks since then
@@ -558,9 +570,10 @@ void net::Client::Reconcile(const Snapshot& snap)
         mProbe.CompareAlone(snap, saved, *mSaves[mTick % kSaves]);
         return;
     }
-    if (!saved || !saved->valid || saved->tick != s || !engine::Restorable(*saved))
+    const bool restore = saved && saved->valid && saved->tick == s && engine::Restorable(*saved);
+    if (!saved)
     {
-        engine::Apply(snap); // too old (or too new, or saved with another rollback set) to reconcile: take it as it is
+        engine::Apply(snap); // too old (or too new) to reconcile: take it as it is
         mProbe.AfterPlainApply(snap);
         mStats.plainApplies += mSynced;
         engine::ApplyScores(snap);
@@ -574,21 +587,54 @@ void net::Client::Reconcile(const Snapshot& snap)
         return (double)std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
     };
     const Clock::time_point start = Clock::now();
-    mStats.staleRestores += mStale[s % kSaves];
-    engine::RestoreGame(*saved);
-    mProbe.AfterRestore(snap);
-    mStats.changed += engine::Differs(snap);
+    if (restore)
+    {
+        mStats.staleRestores += mStale[s % kSaves];
+        engine::RestoreGame(*saved);
+        mProbe.AfterRestore(snap);
+        mStats.changed += engine::Differs(snap);
+    }
+    else
+    {
+        // Its save lost (a jump) or taken with another rollback set: the server's state on the game as it is, and its
+        // ticks since run again, so the game stays at our tick
+        engine::ResimFrom(s);
+        mStats.plainApplies += mSynced;
+    }
     engine::Apply(snap);
+    if (!restore)
+    {
+        mProbe.AfterPlainApply(snap);
+    }
     engine::ApplyScores(snap); // the resimulated ticks and their saves carry the server's scores
     mProbe.AfterApply(snap, mTick);
     Clock::time_point mark = Clock::now();
     mStats.restoreUs += us(start, mark);
+    Resimulate(s);
+    mark = Clock::now();
+    const double total = us(start, mark);
+    mStats.reconcileWorstUs = total > mStats.reconcileWorstUs ? total : mStats.reconcileWorstUs;
+    engine::PutLocalChat(chat);
+    mStats.reconciles++;
+    mLink.reconciles++;
+    engine::ApplyScores(snap);
+    Blend(before);
+}
+
+// The ticks after <s> again, to ours, with the inputs we used (other players: their last known input)
+void net::Client::Resimulate(uint32_t s)
+{
+    using Clock = std::chrono::steady_clock;
+    const auto us = [](Clock::time_point a, Clock::time_point b) {
+        return (double)std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
+    };
+    Clock::time_point mark = Clock::now();
     std::vector<uint32_t> buttons(mRemote);
     for (uint32_t t = s + 1; t <= mTick; t++)
     {
         for (size_t i = 0; i < buttons.size(); i++)
         {
-            buttons[i] = RemoteInput((int)i, t);
+            buttons[i] = PredictedInput((int)i, t);
         }
         buttons[mSlot] = mHist[t % kRing].tick == t ? mHist[t % kRing].buttons : 0;
         if (t == mTick)
@@ -616,13 +662,6 @@ void net::Client::Reconcile(const Snapshot& snap)
         mStats.resimTicks++;
         mLink.resimTicks++;
     }
-    const double total = us(start, mark);
-    mStats.reconcileWorstUs = total > mStats.reconcileWorstUs ? total : mStats.reconcileWorstUs;
-    engine::PutLocalChat(chat);
-    mStats.reconciles++;
-    mLink.reconciles++;
-    engine::ApplyScores(snap);
-    Blend(before);
 }
 
 // The correction in steps: what is shown moves from where it was a part of the way to the corrected state each frame
@@ -1069,7 +1108,7 @@ void net::Client::FastForward(int ticks)
     {
         for (size_t p = 0; p < buttons.size(); p++)
         {
-            buttons[p] = (int)p == mSlot ? local : RemoteInput((int)p, mTick + 1); // as a live tick would have them
+            buttons[p] = (int)p == mSlot ? local : PredictedInput((int)p, mTick + 1); // as a live tick would have them
         }
         SetNextInputs(local);
         engine::ResimTick(buttons.data(), (int)buttons.size());
@@ -1104,6 +1143,11 @@ void net::Client::Resync(const Snapshot& snap)
     }
     engine::Apply(snap);
     engine::ApplyScores(snap);
+    if (mTick > snap.tick && mTick - snap.tick < (uint32_t)kSaves)
+    {
+        engine::ResimFrom(snap.tick); // on to our tick: the saves from here on are worlds of their ticks
+        Resimulate(snap.tick);
+    }
 }
 
 // When time is short, on the HUD (who won is the server's notice)
@@ -1236,8 +1280,9 @@ int net::Client::PacedTickMs() const
     {
         return mTickMs;
     }
-    // Late: a quarter faster; far ahead: a fifth slower, before it comes to a jump (kMaxAhead)
-    return mSlack < 1 ? mTickMs * 3 / 4 : mSlack - 2 > 12 ? mTickMs + mTickMs / 5 : mSlack > 4 ? mTickMs + mTickMs / 10 : mTickMs;
+    // Late: a quarter faster; far ahead: a fifth slower, before it comes to a jump (kMaxAhead); 3 or more: a tenth slower,
+    // as every tick early lengthens the prediction of the others (a server that lost ticks leaves us there)
+    return mSlack < 1 ? mTickMs * 3 / 4 : mSlack - 2 > 12 ? mTickMs + mTickMs / 5 : mSlack > 2 ? mTickMs + mTickMs / 10 : mTickMs;
 }
 
 // The next tick's inputs: ours (predicted and sent), the others' last known
@@ -1249,7 +1294,7 @@ void net::Client::SetNextInputs(uint32_t local)
     mHist[next % kRing].typed = engine::TypedChar(local);
     for (size_t i = 0; i < mRemote.size(); i++)
     {
-        engine::SetPlayerInput((int)i, (int)i == mSlot ? local : RemoteInput((int)i, next));
+        engine::SetPlayerInput((int)i, (int)i == mSlot ? local : PredictedInput((int)i, next));
     }
 }
 
@@ -1446,7 +1491,9 @@ void net::Client::Frame()
 {
     Step();
     engine::GuardPeds(); // again: the snapshot this frame applied comes before the next tick
+    engine::GuardFatalPhases(); // a fatal throw of the frame's last tick is drawn knocked down
     engine::AnchorAttachments(); // the frame is drawn next
+    engine::ShotVisFrame();
     mProbe.FrameEnd();
 }
 

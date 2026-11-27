@@ -1135,7 +1135,30 @@ void net::engine::FireLog(bool server)
            me ? me->get_cam_y().ToFloat() : -1.0f);
 }
 
-void net::engine::ThrowLog(bool server)
+void net::engine::PoseLog(bool server)
+{
+    static const bool on = getenv("GTA2_NET_POSELOG") != NULL;
+    static uint32_t sLast;
+    const uint32_t tick = gpRng ? (uint32_t)gpRng->get_cur_rng() : 0;
+    if (!on || tick == sLast)
+    {
+        return;
+    }
+    sLast = tick;
+    for (int i = 0; i < PlayerCount(); i++)
+    {
+        Ped* ped = InGamePed(i);
+        Char* c = ped ? ped->mGameObject : NULL;
+        if (c && !ped->mCar && !ped->isDead())
+        {
+            printf("net: POSE %s tick %u: p%d attack %d weapon %d anim %d moving %d\n", server ? "server" : "client", tick, i,
+                   (int)ped->mBf21C.bAttacking, ped->mSelectedWeapon ? (int)ped->mSelectedWeapon->mWeaponType : -1,
+                   (int)c->mAnimationState, c->mVelocity.mValue != 0);
+        }
+    }
+}
+
+void net::engine::ThrowLog(bool server, uint32_t snap)
 {
     static const bool on = getenv("GTA2_NET_THROWLOG") != NULL;
     static uint32_t sLast;
@@ -1157,13 +1180,14 @@ void net::engine::ThrowLog(bool server)
         }
         const Object* o = ped->mpObj2C;
         printf("net: THROW %s tick %u: p%d at (%.2f, %.2f, %.2f) ped %d/%d stored %d/%d char %d/%d anim %d health %d inv %d fire %d "
-               "cause %d obj %s(%.2f, %.2f, %.2f) speed %.3f z %.3f\n",
+               "cause %d obj %s(%.2f, %.2f, %.2f) speed %.3f z %.3f timeout %d snap %u\n",
                end, tick, i, s->mXy.x.ToFloat(), s->mXy.y.ToFloat(), s->mZpos.ToFloat(), (int)ped->mPedState1, (int)ped->mPedState2,
                (int)ped->mStoredPedState1, (int)ped->mStoredPedState2, c ? (int)c->mPedState1 : -1, c ? (int)c->mPedState2 : -1,
                c ? (int)c->mAnimationState : -1, (int)ped->mHealth, (int)ped->mInvulnerability, (int)ped->mBf21C.bOnFire,
                (int)ped->mDeathCause, o ? "" : "none ", o && o->mSprite ? o->mSprite->mXy.x.ToFloat() : 0.0f,
                o && o->mSprite ? o->mSprite->mXy.y.ToFloat() : 0.0f, o && o->mSprite ? o->mSprite->mZpos.ToFloat() : 0.0f,
-               o && o->mObj3c ? o->mObj3c->mSpeed.ToFloat() : 0.0f, o && o->mObj3c ? o->mObj3c->mZSpeed.ToFloat() : 0.0f);
+               o && o->mObj3c ? o->mObj3c->mSpeed.ToFloat() : 0.0f, o && o->mObj3c ? o->mObj3c->mZSpeed.ToFloat() : 0.0f,
+               c ? (int)c->mTimeout : -1, server ? tick : snap);
     }
     for (int pool = 0; pool < 2; pool++)
     {
@@ -1222,5 +1246,63 @@ void net::engine::PedLog(const char* end)
         {
             log(kv.first, kv.second);
         }
+    }
+}
+
+namespace
+{
+std::string DeathLogPed(const char* name, Ped* ped)
+{
+    char buf[200];
+    Char* c = ped ? ped->mGameObject : NULL;
+    Sprite* s = c ? c->mSpritePtr : NULL;
+    if (!ped)
+    {
+        return "";
+    }
+    snprintf(buf, sizeof(buf), " %s[id %d ped %d/%d h %d", name, ped->mId, (int)ped->mPedState1, (int)ped->mPedState2, (int)ped->mHealth);
+    std::string out = buf;
+    if (c && s)
+    {
+        snprintf(buf, sizeof(buf), " char %d/%d anim %d frame %d spr %d layer %d at %.2f,%.2f", (int)c->mPedState1, (int)c->mPedState2,
+                 (int)c->mAnimationState, (int)c->mAnimationFrame, (int)s->mTypeSpriteIdx, (int)s->mDrawLayer, s->mXy.x.ToFloat(),
+                 s->mXy.y.ToFloat());
+        out += buf;
+    }
+    else
+    {
+        out += " no char";
+    }
+    return out + "]";
+}
+} // namespace
+
+void net::engine::DebugDeathLog()
+{
+    const uint32_t frame = gDebugFrame;
+    static const bool on = getenv("GTA2_NET_DEATHLOG") != NULL;
+    static int sAfter[MAX_PLAYERS];
+    if (!on || !gGame_0x40)
+    {
+        return;
+    }
+    for (int i = 0; i < PlayerCount() && i < MAX_PLAYERS; i++)
+    {
+        Player* p = GetPlayer(i);
+        Ped* ped = p ? p->mPlayerPed : NULL;
+        if (!p || !ped || i == LocalPlayer())
+        {
+            continue;
+        }
+        const bool odd = ped->mPedState1 == ped_state_1::immobilized_8 || ped->isDead() || p->mWastedOrBusted || p->mAuxPed ||
+            ped->mHealth < 100;
+        sAfter[i] = odd ? 10 : sAfter[i] - 1;
+        if (sAfter[i] <= 0)
+        {
+            continue;
+        }
+        printf("net: frame %u, tick %u, death p%d: wasted %d count %d cam %d%s%s\n", frame, gpRng ? (uint32_t)gpRng->get_cur_rng() : 0, i,
+               (int)p->mWastedOrBusted, (int)p->mDeathCountdown, (int)p->mCameraMode, DeathLogPed("ped", ped).c_str(),
+               DeathLogPed("aux", p->mAuxPed).c_str());
     }
 }

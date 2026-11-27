@@ -13,6 +13,8 @@
 #include "Source/Game.hpp"
 #include "Source/GameSession.hpp"
 #include "Source/Hud.hpp"
+#include "Source/ParticleManager.hpp"
+#include "Source/debug.hpp"
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
 #include "Source/TextTable.hpp"
@@ -30,6 +32,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <algorithm>
+#include <vector>
 
 
 namespace
@@ -44,14 +48,77 @@ uint8_t gDeaths[MAX_PLAYERS];
 uint8_t gDeathEvents[MAX_PLAYERS];
 uint8_t gKiller[MAX_PLAYERS];
 bool gWasDead[MAX_PLAYERS];
+bool gDyingThere[MAX_PLAYERS]; // the newest snapshot's health is 0: dying (as it gets up, if lying) or dead there
 // A client's: the deaths it has carried out, by the server's game count, and whether it has seen the player yet (it
 // takes the count as it finds it the first time: a joiner doesn't carry out the deaths before it came), in the
 // rollback set
+// The ambient peds its own simulation killed, shown dead until the server's death (KillNow): their id and the game's cycle
+const int kShownDeaths = 32;
+struct ShownDeath
+{
+    uint32_t mPedId;
+    uint32_t mCycle;
+};
 struct
 {
     uint8_t mDone[MAX_PLAYERS];
     bool mKnown[MAX_PLAYERS];
+    bool mHeld[MAX_PLAYERS]; // a death of this game's own held (ClientPedMayDie) since the last snapshot
+    ShownDeath mShown[kShownDeaths];
 } gNetDeaths;
+
+ShownDeath* FindShownDeath(const Ped* ped)
+{
+    for (ShownDeath& d : gNetDeaths.mShown)
+    {
+        if (d.mPedId && d.mPedId == ped->mId)
+        {
+            return &d;
+        }
+    }
+    return NULL;
+}
+
+// Dead to the eye as Ped::Kill makes it (its state, cry, corpse's sprite layer, blood); its corpse, dropped weapon, score
+// and the AI's reactions wait for KillNow
+void ShowDeath(Ped* ped)
+{
+    Char* c = ped->mGameObject;
+    if (ped->mBf21C.bOnFire)
+    {
+        c->mAnimationState = Char_Anim_state::Charred_Corpse_21;
+        ped->PutOutFire();
+    }
+    ped->SetObjective2(objectives_enum::no_obj_0);
+    if (ped->mPedState2 == ped_state_2::lying_on_floor_22)
+    {
+        ped->mPedState1 = ped_state_1::dead_9;
+        ped->mPedState2 = ped_state_2::ped2_dead_15;
+    }
+    else
+    {
+        ped->ChangeNextPedState1(ped_state_1::dead_9);
+        ped->ChangeNextPedState2(ped_state_2::ped2_dead_15);
+    }
+    ped->SetVoiceEventIfNotOnFire(4);
+    ped->mHealth = ped->mHealth > 0 ? ped->mHealth : 1;
+    ped->SetStateInitPending();
+    c->SetSpriteNum(6);
+    if (bDo_blood && c->mAnimationState != Char_Anim_state::Electrocuted_17)
+    {
+        gParticle_8->SpawnBlood(ped->mCam.x, ped->mCam.y, ped->mCam.z);
+    }
+    ShownDeath* slot = FindShownDeath(ped);
+    for (ShownDeath& d : gNetDeaths.mShown)
+    {
+        if (!slot || (slot->mPedId != ped->mId && slot->mPedId && (!d.mPedId || (int32_t)(d.mCycle - slot->mCycle) < 0)))
+        {
+            slot = &d; // its own, a free one, else the oldest
+        }
+    }
+    slot->mPedId = ped->mId;
+    slot->mCycle = gpRng->get_cur_rng();
+}
 
 // The kill cam: after the original's 70 ticks on its corpse, a player killed by another sees its killer this long
 // before it respawns. The killer's slot + 1 (0: none) per player, set as it is wasted, in the rollback set
@@ -189,9 +256,9 @@ void ApplyWeapons(Player* p, const net::EntityState& e)
             gWeapon_8->add_car_weapon(w, 1, car);
         }
     }
-    // Only to a weapon this game has made for the player (a new map's game: not yet, and the HUD reads it,
+    // Fists (0), or only a weapon this game has made for the player (a new map's game: not yet, and the HUD reads it,
     // Hud_PlayerStats::DrawPlayerStats)
-    if (e.f[kPlayerWeapon] >= 1 && e.f[kPlayerWeapon] <= kPlayerWeapons && p->mWeapons[e.f[kPlayerWeapon] - 1])
+    if (e.f[kPlayerWeapon] == 0 || (e.f[kPlayerWeapon] >= 1 && e.f[kPlayerWeapon] <= kPlayerWeapons && p->mWeapons[e.f[kPlayerWeapon] - 1]))
     {
         p->mCurrWeaponIdx = (s16)(e.f[kPlayerWeapon] - 1);
     }
@@ -320,15 +387,15 @@ void SettleCar(Player* p, Ped* ped, const net::EntityState& e)
     }
 }
 
-// Its place: its car's, or its own on foot. True: a jump of the local player (its first snapshot, a respawn), which
-// the camera follows at once instead of panning across the map, as PutInGame and the game's respawn place it
-bool MovePlayer(int i, Ped* ped, const net::EntityState& e)
+// Its place: its car's, or its own on foot. True: a jump (its first snapshot, a respawn), which the camera follows at
+// once instead of panning across the map, as PutInGame and the game's respawn place it: the server's is there too
+bool MovePlayer(Ped* ped, const net::EntityState& e)
 {
     const Fix16 x = Raw(e.f[kPlayerX]), y = Raw(e.f[kPlayerY]), z = Raw(e.f[kPlayerZ]);
     const Ang16 rot = Angle(e.f[kPlayerRot]);
     const GridCheck check("moving a player", ped->mCar);
     Sprite* was = PedSprite(ped);
-    const bool jump = i == LocalPlayer() && was && (abs(was->mXy.x.mValue - x.mValue) > (8 << 14) || abs(was->mXy.y.mValue - y.mValue) > (8 << 14));
+    const bool jump = was && (abs(was->mXy.x.mValue - x.mValue) > (8 << 14) || abs(was->mXy.y.mValue - y.mValue) > (8 << 14));
     if (ped->mCar)
     {
         // A train's carriage is where its train puts it (trains.cpp): moved to a player the server has elsewhere, its
@@ -364,6 +431,45 @@ void StartTransition(Player* p, Ped* ped, Car* serverTarget, const net::EntitySt
     {
         StartLeaving(ped);
     }
+}
+// Leaving a car here while the server's is on foot and not leaving (its leave cut short there): over here too
+void EndLeaving(Ped* ped, const net::EntityState& e)
+{
+    if (e.f[kPlayerInCar] || (e.f[kPlayerState] & (kPlayerLeaving | kPlayerDead)) || ped->isDead() || !LeavingCar(ped))
+    {
+        return;
+    }
+    if (ped->mCar)
+    {
+        ForceOutOfCar(ped, Raw(e.f[kPlayerX]), Raw(e.f[kPlayerY]), Raw(e.f[kPlayerZ]), Angle(e.f[kPlayerRot]));
+        return;
+    }
+    if (ped->mGameObject)
+    {
+        ped->SetObjective(objectives_enum::no_obj_0, 9999);
+        ped->SetObjective2(objectives_enum::no_obj_0);
+        CancelPhase(ped);
+    }
+}
+
+// The cars the snapshot's players sit in (NoteSeats)
+std::vector<Car*> gSeatsThere;
+
+// At the door of a car another player sits in there, this game's jack (its pull predicted or not) the server's isn't
+// getting into any more: called off, the victim put back in its seat by its own SettleCar
+void CancelJack(Ped* ped, const net::EntityState& e)
+{
+    Char* c = ped->mGameObject;
+    Car* car = c ? c->mTargetCar : NULL;
+    if ((e.f[kPlayerState] & (kPlayerTransition | kPlayerDead)) || ped->mCar || !car || ped->isDead() ||
+        (c->mAnimationState != Char_Anim_state::Entering_Car_6 && c->mAnimationState != Char_Anim_state::Carjacking_9) ||
+        RefCar(e.f[kPlayerCar]) == car || std::find(gSeatsThere.begin(), gSeatsThere.end(), car) == gSeatsThere.end())
+    {
+        return;
+    }
+    ped->SetObjective(objectives_enum::no_obj_0, 9999);
+    ped->SetObjective2(objectives_enum::no_obj_0);
+    CancelPhase(ped);
 }
 } // namespace
 
@@ -409,6 +515,8 @@ void net::engine::CapturePlayer(int i, Snapshot& out)
         e.f[kPlayerPowerUp + k] = p->mPowerUpTimers[k];
     }
     e.f[kPlayerInvulnerable] = ped->mInvulnerability;
+    const Weapon* weapon = p->GetCurrPlayerWeapon();
+    e.f[kPlayerReload] = weapon ? weapon->mReloadTimer : 0;
     CapturePhases(ped, e, kPlayerPhase);
     out.entities.push_back(e);
 }
@@ -437,6 +545,19 @@ void net::engine::ApplySlots(const Snapshot& snap)
     }
 }
 
+void net::engine::NoteSeats(const Snapshot& snap)
+{
+    gSeatsThere.clear();
+    for (const EntityState& e : snap.entities)
+    {
+        Car* car = e.type == kEntityPlayer && e.f[kPlayerInCar] ? RefCar(e.f[kPlayerCar]) : NULL;
+        if (car)
+        {
+            gSeatsThere.push_back(car);
+        }
+    }
+}
+
 // Again once the snapshot's cars are here (ApplyCarsAndPeds): a car new to this game wasn't when its player was applied
 void net::engine::SettlePlayerCar(const EntityState& e)
 {
@@ -447,14 +568,14 @@ void net::engine::SettlePlayerCar(const EntityState& e)
     }
 }
 
-void net::engine::ApplyPlayer(const EntityState& e)
+bool net::engine::ApplyPlayer(const EntityState& e)
 {
     const int i = (int)e.id - 1;
     Player* p = GetPlayer(i);
     Ped* ped = p ? p->mPlayerPed : NULL;
     if (!ped)
     {
-        return;
+        return false;
     }
     const std::string name = UnpackName(e);
     if (!name.empty() && NarrowName(p) != name)
@@ -464,6 +585,11 @@ void net::engine::ApplyPlayer(const EntityState& e)
     ApplyWeapons(p, e);
     ApplyPowerUps(p, ped, e);
     ped->mInvulnerability = (u16)e.f[kPlayerInvulnerable];
+    // A guessed fire doesn't use the weapon (ClientPedMayFire): the server's timer keeps another player's shots on its ticks
+    if (Weapon* weapon = p->GetCurrPlayerWeapon())
+    {
+        weapon->mReloadTimer = (u8)e.f[kPlayerReload];
+    }
     ApplyFire(ped, (e.f[kPlayerState] & kPlayerOnFire) != 0);
     // Its wanted points, the server's: the HUD's cop heads, and the cops' AI here, which gave up the chase at 0 stars
     ped->mWantedPoints = (s16)e.f[kPlayerWanted];
@@ -485,11 +611,13 @@ void net::engine::ApplyPlayer(const EntityState& e)
             gBonusSeen = count;
         }
     }
+    gDyingThere[i] = e.f[kPlayerHealth] <= 0;
+    gNetDeaths.mHeld[i] = false;
     // First: a death carried out on a thrown ped takes at its landing, as the server's
     ApplyPhases(ped, e, kPlayerPhase, (e.f[kPlayerState] & kPlayerDead) != 0, e.f[kPlayerInCar] ? RefCar(e.f[kPlayerCar]) : NULL);
     if (CarryOutDeath(i, p, ped, e))
     {
-        return;
+        return false;
     }
     if (!ped->isDead())
     {
@@ -497,15 +625,20 @@ void net::engine::ApplyPlayer(const EntityState& e)
         // ped has (0) started a death of this game's own, undone by the next restore (a flicker of dying and living)
         ped->set_health((s16)(e.f[kPlayerHealth] > 0 ? e.f[kPlayerHealth] : 1));
     }
+    EndLeaving(ped, e);
+    CancelJack(ped, e);
     Car* serverTarget = RefCar(e.f[kPlayerTarget]);
     RetargetEntering(ped, serverTarget, e);
     SettleCar(p, ped, e);
-    const bool jump = MovePlayer(i, ped, e);
+    // Pulled out here ahead of the server's jack: where the pull put it, not in the seat the server's still has
+    const bool pulledAhead = !ped->mCar && e.f[kPlayerInCar] && PhaseOf(ped) != kPhaseNone;
+    const bool jump = !pulledAhead && MovePlayer(ped, e);
     StartTransition(p, ped, serverTarget, e);
     if (jump)
     {
         SnapCamera(p);
     }
+    return true;
 }
 
 void net::engine::ApplyScores(const Snapshot& snap)
@@ -548,6 +681,21 @@ bool gServerDeath; // in KillNow
 
 int net::engine::gDeathsHeld;
 
+int net::engine::ShownDeathAge(const Ped* ped)
+{
+    const ShownDeath* d = ped->isDead() ? FindShownDeath(ped) : NULL;
+    const int32_t age = d ? (int32_t)(gpRng->get_cur_rng() - d->mCycle) : -1;
+    return d && age < 0 ? 0 : age;
+}
+
+void net::engine::ForgetShownDeath(const Ped* ped)
+{
+    if (ShownDeath* d = FindShownDeath(ped))
+    {
+        d->mPedId = 0;
+    }
+}
+
 void net::engine::KillNow(Ped* ped)
 {
     // Electrocuted or sinking to its death, it ends as the game ends them (Char::UpdateImmobilized): a charred corpse, a
@@ -568,9 +716,27 @@ void net::engine::KillNow(Ped* ped)
             ped->mPlayer->SetDeathType(4);
         }
     }
+    // Shown dead already (ShowDeath): the rest of Ped::Kill, its char's dying, cry and blood as they are
+    const bool shown = ShownDeathAge(ped) >= 0;
+    ForgetShownDeath(ped);
+    const bool initPending = c && c->mStateInitPending;
+    const s32 voice = ped->mVoiceEvent;
+    const bool blood = bDo_blood;
+    if (shown)
+    {
+        ped->mPedState1 = ped_state_1::walking_0;
+        ped->mPedState2 = ped_state_2::ped2_walking_0;
+        bDo_blood = false;
+    }
     gServerDeath = true;
     ped->Kill();
     gServerDeath = false;
+    if (shown && c)
+    {
+        c->mStateInitPending = initPending;
+        ped->mVoiceEvent = voice;
+        bDo_blood = blood;
+    }
     // Knocked down (a blast threw it), the game keeps the ped's state until it gets up (Ped::ChangeNextPedState1), so
     // the server's death didn't take and the next snapshot carried it out again: its cry, its killer's points. A
     // thrown ped's death takes when it lands: the landing restores the dead_9 Ped::Kill stored
@@ -594,20 +760,55 @@ void net::engine::KillNow(Ped* ped)
 
 bool net::engine::ClientPedMayDie(Ped* ped)
 {
-    if (gServerDeath || ped->mCar || !ped->mGameObject || ped->isDead())
+    if (gServerDeath || ped->mCar || !ped->mGameObject || ped->isDead() || !IsServerPed(ped))
     {
-        return true; // in a car, its car's state (an explosion) is the server's
+        return true; // in a car, its car's state (an explosion) is the server's; this game's own ped, its own
     }
-    // Held: alive, and on its feet knocked down until the server's state says what became of it
     gDeathsHeld++;
+    // An ambient ped dies to the eye at once, as Ped::Kill takes it (on its feet, or lying)
+    if (!ped->mPlayer && !InCarTransition(ped) &&
+        (ped->mPedState1 != ped_state_1::immobilized_8 || ped->mPedState2 == ped_state_2::lying_on_floor_22))
+    {
+        ShowDeath(ped);
+        return false;
+    }
+    // Held: alive, and on its feet knocked down until the server's state says what became of it (getting into or out
+    // of a car, it goes on: the door's states are the entering's and leaving's)
     ped->mHealth = ped->mHealth > 0 ? ped->mHealth : 1;
-    if (ped->mPedState1 != ped_state_1::immobilized_8)
+    if (ped->mPlayer && ped->mPlayer->mPlayerIdx < MAX_PLAYERS)
+    {
+        gNetDeaths.mHeld[ped->mPlayer->mPlayerIdx] = true;
+    }
+    if (ped->mPedState1 != ped_state_1::immobilized_8 && !InCarTransition(ped))
     {
         ped->ChangeNextPedState1(ped_state_1::immobilized_8);
         ped->ChangeNextPedState2(ped_state_2::lying_on_floor_22);
         ped->SetStateInitPending();
     }
     return false;
+}
+
+bool net::engine::ClientCharSolid(const Char* c)
+{
+    const Player* p = c->mpPed ? c->mpPed->mPlayer : NULL;
+    return !p || p->mPlayerIdx >= MAX_PLAYERS || !gNetDeaths.mHeld[p->mPlayerIdx] || c->mpPed->mCar;
+}
+
+namespace
+{
+uint32_t gFireGuessed; // by player
+} // namespace
+
+void net::engine::SetFireGuessed(int player, bool guessed)
+{
+    const uint32_t bit = player >= 0 && player < 32 ? 1u << player : 0;
+    gFireGuessed = guessed ? gFireGuessed | bit : gFireGuessed & ~bit;
+}
+
+bool net::engine::ClientPedMayFire(Ped* ped)
+{
+    const int i = ped->mPlayer ? ped->mPlayer->mPlayerIdx : -1;
+    return i < 0 || i >= 32 || !(gFireGuessed >> i & 1);
 }
 
 bool net::engine::InServerDeath()
@@ -675,6 +876,16 @@ int net::engine::PlayerFrags(const EntityState& e)
 uint32_t net::engine::PlayerCarId(const EntityState& e)
 {
     return e.type == kEntityPlayer ? CarRefNetId(e.f[kPlayerCar]) : 0;
+}
+
+uint32_t net::engine::PlayerDoorCarId(const EntityState& e)
+{
+    if (e.type != kEntityPlayer)
+    {
+        return 0;
+    }
+    const int32_t door = (e.f[kPlayerPhase + kPhase] & 7) == kPhaseDoor ? e.f[kPlayerPhase + kPhaseCar] : 0;
+    return CarRefNetId(door ? door : e.f[kPlayerTarget]);
 }
 
 int net::engine::PlayerWeapon(const EntityState& e)
@@ -811,12 +1022,19 @@ std::string net::engine::PlayerName(int slot)
     return p ? NarrowName(p) : std::string();
 }
 
+bool net::engine::PlayerDyingThere(const Ped* ped)
+{
+    const int i = ped->mPlayer ? ped->mPlayer->mPlayerIdx : -1;
+    return i >= 0 && i < MAX_PLAYERS && gDyingThere[i];
+}
+
 void net::engine::ResetDeaths(int slot)
 {
     if (slot >= 0 && slot < MAX_PLAYERS)
     {
         gDeaths[slot] = 0;
         gKiller[slot] = 0;
+        gDyingThere[slot] = false;
     }
 }
 

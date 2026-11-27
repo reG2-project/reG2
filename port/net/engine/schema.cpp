@@ -55,6 +55,7 @@ net::Schema BuildSchema()
     player.fields.push_back(FieldDesc{"death_events", 8, false}); // kPlayerDeathEvents
     player.fields.push_back(FieldDesc{"bonus", 12, false}); // kPlayerBonus
     player.fields.push_back(FieldDesc{"invulnerable", 16, false}); // kPlayerInvulnerable
+    player.fields.push_back(FieldDesc{"reload", 8, false}); // kPlayerReload
     PhaseRecordFields(player.fields); // kPlayerPhase
     net::EntityType car = {"car", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"model", 8, false},
                                    {"driver", 2, false}, {"damage", 16, false}, {"areas", 32, false}, {"wrecked", 2, false},
@@ -104,6 +105,7 @@ net::Schema BuildSchema()
     AppendNumbered(world.fields, "pursuit_timer", 4, 16);
     AppendNumbered(world.fields, "pursuit_crews", 4, 3);
     AppendNumbered(world.fields, "pursuit_chased", 4, 1);
+    AppendNumbered(world.fields, "lead", MAX_PLAYERS, 5); // kWorldLead
     net::EntityType object = {"object", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"model", 9, false}, {"idx", 8, false},
                                          {"age", 6, false}}};
     net::EntityType train = {"train", {{"x", 22, false}, {"y", 22, false}, {"z", 17, false}, {"rot", 11, false}, {"wagons", 4, false},

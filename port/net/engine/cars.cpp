@@ -351,12 +351,17 @@ bool net::engine::SetCarState(Car* car, const EntityState& e, bool fresh)
     }
     if (e.f[kCarRemap] >= 0 && e.f[kCarRemap] < 256)
     {
-        if (car->mCarSprite->mPaletteType != palette_types_enum::car_remaps_3 &&
-            gGtx_0x106C->get_car_info_5AA3B0(car->mCarInfoIdx)->has_remaps())
+        // On the sprite, as a gang car is made (TrafficSpawner): Car::SetCarRemap leaves models without remaps (a
+        // limo, a bank van) as they are
+        Car* trailer = car->mpTrailer ? car->mpTrailer->mTrailerCar : NULL;
+        for (Car* c : {car, trailer})
         {
-            car->mCarSprite->SetRemap((s16)e.f[kCarRemap]); // on its own palette here: SetCarRemap only compares remaps
+            Sprite* s = c ? c->mCarSprite : NULL;
+            if (s && (s->mPaletteType != palette_types_enum::car_remaps_3 || s->get_remap() != e.f[kCarRemap]))
+            {
+                s->SetRemap((s16)e.f[kCarRemap]);
+            }
         }
-        car->SetCarRemap((u8)e.f[kCarRemap]); // only a model with remaps, only when it differs (and its trailer)
     }
     else if (e.f[kCarRemap] < 0)
     {

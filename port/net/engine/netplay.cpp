@@ -93,10 +93,13 @@ void net::engine::StartNetworkGame(const NetworkGame& game)
     gPortNextNetworkGame = NextNetworkGame;
     gPortWorldStill = WorldStill;
     gPortTagTimeCounts = true;
+    gPortGroundedObjects = true;
     gPortScoreBonusHook = net::engine::ScoreBonus;
     gPortKillCamTicks = KillCamTicks;
     gPortDeathViewPed = DeathCamera;
     InstallStarts(true);
+    InstallCarTurns(true);
+    InstallNetworkViews(true);
     gNetPlay.mPlayerIdx = game.localPlayer;
     gNetPlay.mN2.mPlayersCount = 2; // > 1: the game calls SendToAll every frame
 }
@@ -135,11 +138,14 @@ void net::engine::StopNetworkGame()
     gPortWorldStill = NULL;
     SoundLogStop();
     gPortTagTimeCounts = false;
+    gPortGroundedObjects = false;
     gPortChatChar = NULL;
     gPortScoreBonusHook = NULL;
     gPortKillCamTicks = NULL;
     gPortDeathViewPed = NULL;
     InstallStarts(false);
+    InstallCarTurns(false);
+    InstallNetworkViews(false);
     gNetPlay.mPlayerIdx = 0;
     gNetPlay.mN2.mPlayersCount = 0;
     // Off, not as before: a network game cleared them at its start (ClearDebugFlags)
@@ -152,11 +158,15 @@ void net::engine::StopNetworkGame()
     bSkip_buses = false;
     gPortNetRoundPad = 0;
     gPortKeepWantedPoints = false;
+    gPortNoOwnBus = false;
+    gPortServerDespawns = false;
     gPortServerKillNotices = false;
     gPortServerKillAwards = false;
     gPortProtectsPlayers = false;
     gPortCarMayExplode = NULL;
     gPortPedMayDie = NULL;
+    gPortCharSolid = NULL;
+    gPortPedMayFire = NULL;
     gPortMayPullOut = NULL;
     gPortPedMayGo = NULL;
     gPortScriptCommandRuns = NULL;

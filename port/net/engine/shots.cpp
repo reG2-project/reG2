@@ -9,9 +9,12 @@
 #include "port/src/rand/owner.hpp"
 #include "Source/Car.hpp"
 #include "Source/Char_Pool.hpp"
+#include "Source/CollisionSoundQueue.hpp"
 #include "Source/Explosion.hpp"
 #include "Source/Object_3C.hpp"
+#include "Source/Object_3C_Pool.hpp"
 #include "Source/Object_5C.hpp"
+#include "Source/Object_8_Pool.hpp"
 #include "Source/ObjectPool.hpp"
 #include "Source/Ped.hpp"
 #include "Source/PedRefTable.hpp"
@@ -19,6 +22,7 @@
 #include "Source/explosion_type.hpp"
 #include "Source/rng.hpp"
 #include "Source/sprite.hpp"
+#include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,17 +51,25 @@ const Member kMotion[] = {
 };
 const size_t kMotionCount = sizeof(kMotion) / sizeof(kMotion[0]);
 const uint32_t kMostCatchUp = 64; // ticks a made shot is brought on at most (a snapshot's lag)
+const int kMostMade = 32; // shots made from one snapshot (a busy fight makes a few)
 
+// 0x28..0x2A: the key, 0x2B: the keyed objects it made (PortRand::gObjectMade); nothing of the game's reads them
 uint32_t KeyOf(const Object* o)
 {
     uint32_t k;
-    memcpy(&k, &o->mUnused28, sizeof(k)); // 0x28..0x2B: nothing of the game's reads them
-    return k;
+    memcpy(&k, &o->mUnused28, sizeof(k));
+    return k & 0xFFFFFF;
 }
 
-void SetKey(Object* o, uint32_t k)
+void SetKey(Object* o, uint32_t k, uint8_t made = 0)
 {
-    memcpy(&o->mUnused28, &k, sizeof(k));
+    const uint32_t v = (k & 0xFFFFFF) | (uint32_t)made << 24;
+    memcpy(&o->mUnused28, &v, sizeof(v));
+}
+
+unsigned char* MadeCount(const Object* o)
+{
+    return (unsigned char*)const_cast<char*>(&o->mUnused2B);
 }
 
 // And a loose fire: the burning debris a large blast throws (Explosion::UpdateExplosion_18_19_20_32_33), sent as it is
@@ -210,12 +222,75 @@ void SetDebris(Object* o, const EntityState& e)
 
 std::unordered_map<uint32_t, EntityState> gStarts; // a live shot's key -> its start, as first captured
 std::unordered_set<uint32_t> gMadeHere; // a client's blasts made from a snapshot: they hurt on the server
-uint32_t gGhostTick; // GTA2_NET_TESTGHOSTSHOT
-uint32_t gKeySkew; // GTA2_NET_SHOTSKEW=1: a client's keys none of the server's (the shots check's red run)
+uint32_t gKeySkew; // DebugShotSkew
+bool gClient;
+std::vector<std::pair<Object*, uint32_t>>* gCatchUpMade; // while a made shot is brought on: the keyed objects it makes
 
 void ObjectMade(Object* o)
 {
     SetKey(o, KeyedModel(o->mModel) ? PortRand::NextObjectKey() ^ gKeySkew : 0);
+    if (gClient)
+    {
+        ShotVisMade(o);
+    }
+    if (gCatchUpMade && KeyOf(o))
+    {
+        gCatchUpMade->push_back(std::make_pair(o, KeyOf(o)));
+    }
+}
+
+// Room for a shot and what comes with it (Pool::Allocate doesn't check): a margin for the game's own
+bool RoomForShot()
+{
+    return FreeSlots(gObject_2C_Pool->mpStart) > 32 && FreeSlots(gObject_3C_Pool->mpHead) > 16 && FreeSlots(gObject_8_Pool->mpHead) > 16 &&
+           FreeSlots(gSpritePool->mPool.mpHead) > 32;
+}
+
+// Brought on <ticks> ticks to the snapshot's, each numbered for the draws as the server ran it; what it hits makes no
+// blast, sound or rumble here (the server's blast comes with the next snapshot). False: gone on the way
+bool CatchUp(Object* o, uint32_t ticks, uint32_t cycle)
+{
+    std::vector<std::pair<Object*, uint32_t>> made;
+    gCatchUpMade = &made;
+    const bool noRumble = gPortNoRumble;
+    gPortNoRumble = true;
+    const s32 sounds = gCollisionSoundQueue ? gCollisionSoundQueue->mCount : 0;
+    const unsigned int tick = PortRand::SetTick(0);
+    bool gone = false;
+    for (uint32_t t = 0; t < ticks && !gone; t++)
+    {
+        PortRand::SetTick(cycle - ticks + t);
+        PortRand::Scope scope(o);
+        gone = o->PoolUpdate();
+    }
+    PortRand::SetTick(tick);
+    if (gCollisionSoundQueue && gCollisionSoundQueue->mCount > sounds)
+    {
+        gCollisionSoundQueue->mCount = sounds;
+    }
+    gPortNoRumble = noRumble;
+    gCatchUpMade = NULL;
+    for (const auto& m : made)
+    {
+        Object* x = m.first;
+        if (x != o && x->mSprite && !x->mRemovalState && KeyOf(x) == m.second && SyncedBlast(BlastKind(x)))
+        {
+            x->Dealloc();
+        }
+    }
+    if (gone)
+    {
+        // As the pool's update frees it
+        if (o->mPoolListState == object_pool_state::in_pool_list_1)
+        {
+            gObject_2C_Pool->FindAndDeAllocate(o);
+        }
+        else
+        {
+            gObject_2C_Pool->DeAllocate(o);
+        }
+    }
+    return !gone;
 }
 
 unsigned int ObjectCreator(const Object* o)
@@ -278,7 +353,7 @@ Object* MakeShot(const EntityState& e, uint32_t key, uint32_t cycle)
         {
             return NULL;
         }
-        o->mpAny.pExplosion->mTimer = (u16)e.f[kShotTimer];
+        o->mpAny.pExplosion->mTimer = (u16)std::min(e.f[kShotTimer], (int32_t)explosion_timer::start_100);
         gMadeHere.insert(key);
     }
     else
@@ -327,24 +402,7 @@ Object* MakeShot(const EntityState& e, uint32_t key, uint32_t cycle)
     }
     SetKey(o, key);
     const uint32_t behind = model == objects::explosion_fragments_127 ? 0 : (cycle - (uint32_t)e.f[kShotBorn]) & 0xFFFF;
-    for (uint32_t t = 0; t < behind && t < kMostCatchUp; t++)
-    {
-        PortRand::Scope scope(o);
-        if (o->PoolUpdate())
-        {
-            // Gone on the way (a flight that differs here): as the pool's update frees it
-            if (o->mPoolListState == object_pool_state::in_pool_list_1)
-            {
-                gObject_2C_Pool->FindAndDeAllocate(o);
-            }
-            else
-            {
-                gObject_2C_Pool->DeAllocate(o);
-            }
-            return NULL;
-        }
-    }
-    return o;
+    return CatchUp(o, std::min(behind, kMostCatchUp), cycle) ? o : NULL;
 }
 } // namespace
 
@@ -361,25 +419,42 @@ void net::engine::InstallShots(bool on, bool client)
     PortRand::gObjectKey = on ? ObjectCreator : NULL;
     gPortBlastHurts = on && client ? BlastHurts : NULL;
     gPortBlastDebris = !on ? NULL : client ? ClientBlastDebris : ServerBlastDebris;
-    const char* ghost = getenv("GTA2_NET_TESTGHOSTSHOT");
-    gGhostTick = on && client && ghost ? (uint32_t)atoi(ghost) : 0;
-    gKeySkew = on && client && getenv("GTA2_NET_SHOTSKEW") ? 0x800000 : 0;
+    PortRand::gObjectMade = on ? MadeCount : NULL;
+    gKeySkew = on && client ? DebugShotSkew() : 0;
+    gClient = on && client;
+}
+
+uint32_t net::engine::ShotKey(const Object* o)
+{
+    return KeyOf(o);
+}
+
+bool net::engine::ShotNow(const EntityState& e)
+{
+    return e.type == kEntityShot && e.f[kShotModel] == objects::explosion_fragments_127;
 }
 
 void net::engine::ClearShots()
 {
     gStarts.clear();
     gMadeHere.clear();
+    ClearShotVis();
 }
 
 void net::engine::CaptureShots(Snapshot& out)
 {
     std::unordered_map<uint32_t, EntityState> now;
     ForEachShot([&](Object* o) {
-        const uint32_t key = KeyOf(o);
-        if (now.count(key))
+        uint32_t key = KeyOf(o);
+        if (now.count(key) && gClient)
         {
-            return; // two live shots with one key: the first only (ids are unique in a snapshot)
+            return; // ids are unique in a snapshot
+        }
+        while (now.count(key))
+        {
+            key = (key * 0x9E3779B1u + 1) & 0xFFFFFF; // two live shots with one key: the second another, sent too
+            key = key ? key : 1;
+            SetKey(o, key, *MadeCount(o));
         }
         auto it = gStarts.find(key);
         const bool known = it != gStarts.end() && it->second.f[kShotModel] == o->mModel;
@@ -403,9 +478,27 @@ void net::engine::ApplyShots(const Snapshot& snap)
     }
     const uint32_t cycle = (uint32_t)w->f[kWorldCycle];
     std::unordered_map<uint32_t, Object*> live;
-    ForEachShot([&](Object* o) { live[KeyOf(o)] = o; });
+    std::vector<Object*> twice;
+    ForEachShot([&](Object* o) {
+        Object*& at = live[KeyOf(o)];
+        if (at)
+        {
+            twice.push_back(o); // a second with one key: the server's other one has another (CaptureShots)
+        }
+        else
+        {
+            at = o;
+        }
+    });
+    for (Object* o : twice)
+    {
+        o->Dealloc();
+        gShotsRemoved++;
+    }
     std::set<uint32_t> wanted;
     const ReachArea area(snap, 0.0f);
+    const ReachArea inner(snap, 2.0f); // what the server's interest radius surely took in (its foci are its own)
+    int made = 0;
     for (const EntityState& e : snap.entities)
     {
         if (e.type != kEntityShot)
@@ -413,21 +506,32 @@ void net::engine::ApplyShots(const Snapshot& snap)
             continue;
         }
         const uint32_t key = e.id - kShotIdBase;
+        const int model = e.f[kShotModel];
         wanted.insert(key);
         auto kept = live.find(key);
         if (kept != live.end())
         {
-            if (kept->second->mModel == objects::explosion_fragments_127 && e.f[kShotModel] == objects::explosion_fragments_127)
+            Object* o = kept->second;
+            if (o->mModel == model && (model != objects::explosion_113 || BlastKind(o) == e.f[kShotKind]))
             {
-                SetDebris(kept->second, e);
+                if (model == objects::explosion_fragments_127)
+                {
+                    SetDebris(o, e);
+                }
+                gShotsKept++;
+                continue;
             }
-            gShotsKept++;
-            continue;
+            o->Dealloc(); // another shot than the server's with its key: the server's is made instead
+            live.erase(kept);
+            gShotsRemoved++;
         }
-        const int model = e.f[kShotModel];
         if (!(Projectile(model) || (model == objects::explosion_113 && SyncedBlast(e.f[kShotKind]))))
         {
             continue; // a model or blast the server never sends (sanitize.cpp's rule: CreateExplosion takes any type)
+        }
+        if (made >= kMostMade || !RoomForShot())
+        {
+            continue; // a server making more than a fight does: what it can't have here
         }
         if (area.DistanceTo(Blocks(e.f[kShotX]), Blocks(e.f[kShotY])) > SnapshotReach(snap))
         {
@@ -440,6 +544,7 @@ void net::engine::ApplyShots(const Snapshot& snap)
             continue;
         }
         Object* o = MakeShot(e, key, cycle);
+        made++;
         gShotsMade += o != NULL;
         if (ShotLogOn())
         {
@@ -449,7 +554,8 @@ void net::engine::ApplyShots(const Snapshot& snap)
     }
     for (const auto& kv : live)
     {
-        if (!wanted.count(kv.first))
+        // Near the reach's edge or beyond it, the snapshot may have left it out: kept (its world here is a guess anyway)
+        if (!wanted.count(kv.first) && inner.Inside(kv.second->mSprite))
         {
             if (ShotLogOn())
             {
@@ -463,24 +569,6 @@ void net::engine::ApplyShots(const Snapshot& snap)
     for (auto it = gMadeHere.begin(); it != gMadeHere.end();)
     {
         it = wanted.count(*it) ? ++it : gMadeHere.erase(it);
-    }
-}
-
-void net::engine::ShotsTickStart()
-{
-    Ped* ped = gGhostTick && Cycle() == gGhostTick ? InGamePed(LocalPlayer()) : NULL;
-    Sprite* s = ped ? PedSprite(ped) : NULL;
-    if (s)
-    {
-        // A rocket the server never fires, made in every run of this tick: the snapshot of the first tick after it
-        // removes it
-        PortRand::Scope scope(0x7E000001u);
-        Object* o = gObject_5C->NewMovingObj(objects::rocket_bullet_128, s->mXy.x, s->mXy.y + Fix16(2), s->mZpos, Ang16((s16)0, (u8)0),
-                                             Ang16((s16)0, (u8)0), Fix16(0x800, 0), Fix16(0), Fix16(0));
-        if (o)
-        {
-            printf("net: test ghost shot key %06x\n", KeyOf(o));
-        }
     }
 }
 
@@ -498,30 +586,4 @@ void net::engine::ShotLog(bool server)
                (int)o->mModel, BlastKind(o), BlastKind(o) >= 0 ? (int)o->mpAny.pExplosion->mTimer : -1, OwnerOf(o), o->mSprite->mXy.x.ToFloat(),
                o->mSprite->mXy.y.ToFloat(), o->mSprite->mZpos.ToFloat());
     });
-}
-
-void net::engine::DebugShot(int player, int model)
-{
-    Ped* ped = InGamePed(player);
-    Sprite* s = ped ? PedSprite(ped) : NULL;
-    if (!s || !Projectile(model))
-    {
-        return;
-    }
-    if (!ped->mPedRefIdx)
-    {
-        ped->mPedRefIdx = gPedRefTable_7F8->AllocForPed(ped->mId);
-    }
-    // East of it, thrown east (a rocket flies on), as Weapon::throwable sets a throw off
-    gObject_5C->SetPendingDamageOwner(ped->mPedRefIdx);
-    Object* o = gObject_5C->NewMovingObj(model, s->mXy.x + Fix16(1), s->mXy.y, s->mZpos + Fix16(0x2000, 0), Ang16((s16)0, (u8)0),
-                                         Ang16((s16)0, (u8)0), Fix16(0x800, 0), -Fix16(0x20, 0), model == objects::rocket_bullet_128 ? Fix16(0) : Fix16(0x666, 0));
-    if (o && model == objects::grenade_obj_183 && o->mpAny.o8)
-    {
-        o->SetO8Timer(6);
-    }
-    if (o)
-    {
-        printf("net: test shot key %06x\n", KeyOf(o));
-    }
 }

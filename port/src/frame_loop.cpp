@@ -439,6 +439,10 @@ void BeginDraw()
     {
         PortInterp::Apply(sAlpha);
     }
+    else
+    {
+        PortInterp::ApplySlidesOnly(sAlpha);
+    }
     Trace('D');
     port_PresentContent(static_cast<unsigned long long>((sStepCount + static_cast<f64>(sAlpha)) * sStepNs));
     PortView::BeginDraw();

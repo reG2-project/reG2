@@ -34,6 +34,8 @@ bool GameRunning(); // a game with its players exists
 int PlayerCount();
 uint32_t LocalInput(); // what this machine's controls give for the next tick
 void SetPlayerInput(int player, uint32_t buttons); // for the next tick
+// A client's: whether another player's fire in the next tick is our guess (its pose shows, its weapon is not used)
+void SetFireGuessed(int player, bool guessed);
 // A server's: what the player's client typed with the next tick's key press (0: the game's table), for its chat line
 void SetPlayerTyped(int player, uint32_t buttons, uint16_t typed);
 uint16_t TypedChar(uint32_t buttons); // a client's: the character its key press in <buttons> typed here (0: none)
@@ -81,8 +83,11 @@ void ClientModeFrame();
 // Cars' attached objects (a tank's turret, a fire engine's cannon) back on their cars, after the client moved the cars
 // (a snapshot, the blend): the game puts them there in the car's own update, before that (Object::UpdateMovementAndEffects)
 void AnchorAttachments();
+// Before a client's frame is drawn: its other players' shots first shown slid from the gun, or flashed (shot_visuals.cpp)
+void ShotVisFrame();
 // After every tick, on the server too: what the game's own logic can leave behind that crashes it later (guards.cpp)
 void GuardPeds();
+void GuardFatalPhases(); // a client's: the server's peds' fatal phase steps held (also before each tick)
 
 // --- Snapshots (schema.cpp, snapshot.cpp, players.cpp) ---
 
@@ -147,6 +152,8 @@ int PlayerMoney(const EntityState& e); // the money on its HUD (Player::mScores)
 int TagSeconds(int slot); // a tag game's: the seconds the slot was "it" (the game's tag winner has the most)
 int PlayerDeaths(const EntityState& e);
 uint32_t PlayerCarId(const EntityState& e); // the NetId of the car it drives, 0 on foot
+uint32_t PlayerDoorCarId(const EntityState& e); // the car it is pulled out of or on its way into, 0: none
+bool ShotNow(const EntityState& e); // a shot sent as it is at each tick (a burning debris), not as it started
 int PlayerWeapon(const EntityState& e); // its weapon in hand (Player::mCurrWeaponIdx), -1: none
 int PlayerAmmo(const EntityState& e, int weapon); // 0..14 on foot, 15..27 a car's
 // A pickup entity's Object::mModel (objects:: in Source/enums.hpp: 200..227 weapons, 228.. power-ups)
@@ -169,9 +176,11 @@ bool PlayerInCar(int player); // in this game
 // How far a player's camera shows (blocks, centre to corner): it zooms out with speed
 float PlayerViewRadius(int player);
 // The spawning (a server's): the players the limits are for, and how many ticks ahead of this game each one's client
-// shows its player (0: here, a bot); its cameras' bounds move that far along their motion for each tick (spawn.cpp)
+// shows its player (0: here, a bot; a client has them from the snapshots); its cameras' bounds move that far along their
+// motion for each tick (spawn.cpp)
 void SetSpawnPlayers(int players);
 void SetSpawnLead(int player, int ticks);
+void InstallNetworkViews(bool on); // every player's view at the network view and its lead, on both ends (spawn.cpp)
 int SpawnLead(int player);
 std::string SpawnStats(); // for the log: the ambient traffic and peds, the moving objects, and their limits
 // A slot's name as the game shows it (over the player, in kill messages): Player::mPlayerName, up to 15
@@ -247,6 +256,7 @@ class SavedWorld
 void SaveGame(SavedWorld& out, uint32_t tick);
 void RestoreGame(const SavedWorld& in);
 bool Restorable(const SavedWorld& in); // saved with the rollback set as it is now
+void ResimFrom(uint32_t tick); // the ticks after <tick> are run again from the game as it is (no save restored)
 // The game restored to the snapshot's tick: whether any state it predicts differs from the snapshot's (compare.cpp)
 bool Differs(const Snapshot& snap);
 // One tick without drawing or sound, with every player's buttons (count: players)

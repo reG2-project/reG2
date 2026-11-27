@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 class Car;
+class Char;
 class Object;
 class Ped;
 class Player;
@@ -85,6 +86,7 @@ enum PlayerField
     kPlayerDeathEvents, // how often it died this game (wraps at 256): what a client carries out (kPlayerDeaths: the round's)
     kPlayerBonus, // its scoring bonuses this game (wraps at 256) << 4 | the last one's voice line (ScoreBonus)
     kPlayerInvulnerable, // Ped::mInvulnerability: how it reacts to cars and blasts (a client's takes no damage either way)
+    kPlayerReload, // its weapon's reload timer (Weapon::mReloadTimer): the ticks a held fire shoots on
     kPlayerPhase, // its phase (PhaseField)
 };
 enum PlayerState
@@ -137,6 +139,7 @@ enum WorldField
     kWorldPursuitTimer = kWorldPursuitState + 4,
     kWorldPursuitCrews = kWorldPursuitTimer + 4,
     kWorldPursuitChased = kWorldPursuitCrews + 4,
+    kWorldLead = kWorldPursuitChased + 4, // each player's lead (SpawnLead): its view is the same on both ends
 };
 enum CarField
 {
@@ -282,6 +285,16 @@ class ReachArea
     Foci mFoci;
     float mReach;
 };
+// A pool's free entries from its free list's head, up to 64
+template <class T> int FreeSlots(T* head)
+{
+    int n = 0;
+    for (; head && n < 64; head = head->mpNext)
+    {
+        n++;
+    }
+    return n;
+}
 // The one dummy ped every traffic car shares as its driver (Car::SpawnDriverPed, CarManager::mSpareDriver): no
 // ped of its own, never sent, moved, forced or removed
 bool IsSpareDriver(const Ped* ped);
@@ -305,7 +318,8 @@ void CapturePlayer(int slot, Snapshot& out);
 void CaptureWorld(Snapshot& out); // the world entity (world_entity.cpp)
 void ApplyWorld(const EntityState& w);
 void ApplySlots(const Snapshot& snap); // the slots in the game: the snapshot's
-void ApplyPlayer(const EntityState& e);
+void NoteSeats(const Snapshot& snap); // the cars its players sit in, before ApplyPlayer
+bool ApplyPlayer(const EntityState& e); // false: nothing more for it this apply (a death carried out)
 void SettlePlayerCar(const EntityState& e);
 void KillCredited(Ped* ped, int killerSlot); // the game's own death, credited to a player (-1: nobody)
 void KillNow(Ped* ped); // the game's own death (Ped::Kill), dead at once even when knocked down, at its landing when thrown
@@ -316,10 +330,11 @@ void ApplyFire(Ped* p, bool onFire); // on fire or not as the server has it, the
 void PhaseRecordFields(std::vector<FieldDesc>& out);
 extern const int kPedPhase;
 int32_t PhaseOf(const Ped* ped); // PhaseCode, without kPhaseInit
+int32_t PhaseTimer(const int32_t* f); // a phase record's timer, at most its phase's start value (a hostile server's too)
 void CapturePhases(const Ped* ped, EntityState& e, int base);
 void ApplyPhases(Ped* ped, const EntityState& e, int base, bool deadThere, Car* seat);
 void CancelPhase(Ped* ped); // on its feet, walking
-// Before each tick on a client, every ped: thrown, sinking or electrocuted to death only by KillNow
+// Before each tick on a client, every ped: thrown, sinking, electrocuted or lying to death only by KillNow
 void GuardPhases(Ped* ped);
 // Its throw's object while thrown (NULL: not thrown), moved across by as much as the ped's shown place (the blend; not in
 // height: below its floor it would fall through)
@@ -329,15 +344,24 @@ void ApplyThrow(Ped* ped, const EntityState& e, int base);
 void MoveThrow(Ped* ped, int32_t dx, int32_t dy); // raw Fix16
 void GuardThrow(Ped* ped);
 // gPortPedMayDie on a client: only the server's death (KillNow), or one in a car; another is held, the ped knocked down
+// (an ambient ped shown dead, ShowDeath)
 bool ClientPedMayDie(Ped* ped);
+// gPortCharSolid on a client: a player whose death it holds collides with nothing, as a corpse (the server's, or a guess)
+bool ClientCharSolid(const Char* c);
+bool PlayerDyingThere(const Ped* ped); // a player the newest snapshot has at 0 health: dying or dead there
+bool ClientPedMayFire(Ped* ped);
+int ShownDeathAge(const Ped* ped); // ticks since an ambient ped was shown dead here, -1: not shown dead
+void ForgetShownDeath(const Ped* ped);
+const int kShownDeathTicks = 15; // a death shown here the server's snapshots still don't have after this: undone
 // gPortPedMayGo on a client: a server's ped goes by the snapshots (RemoveUnsent), a death of the server's or with its car
 bool ClientPedMayGo(Ped* ped);
+bool IsServerPed(const Ped* p); // a player's, or mapped to a snapshot's ped (a client's own one isn't)
 bool InServerDeath(); // inside KillNow
-bool ClientMayPullOut(Ped* victim); // gPortMayPullOut on a client: a player is pulled out of its car by the server only
 extern int gDeathsHeld; // for the log
 extern int gPedsRevived; // for the log: corpses here the server has alive (ApplyPedState)
 void SnapCamera(Player* p); // the camera at its ped at once, not panning there
 void EndDeath(Player* p); // a death's or an arrest's countdown over at once, the player's part (slots.cpp)
+void InstallCarTurns(bool on); // a car ahead of one following it moves first (car_turns.cpp)
 void InstallStarts(bool on); // the players' peds past the script's and their start blocks (starts.cpp)
 void ZoneTurnBack(); // the restart zones' turn back one, as before the last respawn (starts.cpp)
 void ResetDeaths(int slot); // the round's death count the snapshots carry (a new round)
@@ -351,8 +375,7 @@ void ResetHudScores(Player* p); // the HUD's money, frags and multiplier as at a
 void SoundLogRestored(uint32_t tick);
 void SoundLogResimTick(bool applied);
 void SoundLogStop();
-void ProtectPlayers(); // the cars of player peds kept, every ped's fatal phase steps held (GuardPhases)
-void SeenByAll(); // every ped and car counts as seen: no removal off screen on a client
+void ProtectPlayers(); // the cars of player peds kept, the server's peds' fatal phase steps held (GuardPhases)
 
 // Cars (cars.cpp, car_ai.cpp)
 void CarPhysicsFields(std::vector<FieldDesc>& out);
@@ -453,8 +476,13 @@ void ShotMotionFields(std::vector<FieldDesc>& out);
 void CaptureShots(Snapshot& out);
 void ApplyShots(const Snapshot& snap);
 void InstallShots(bool on, bool client); // the game's hooks for the keys and a client's blasts
-void ShotsTickStart(); // a client's, before each tick (GTA2_NET_TESTGHOSTSHOT)
+uint32_t ShotKey(const Object* o); // its prediction key, 0: none
 void ClearShots(); // a new game
+// Other players' gun shots as a client shows them (shot_visuals.cpp): each made, each tick's start, a rollback to <tick>
+void ShotVisMade(Object* o);
+void ShotVisTick();
+void ShotVisRollback(uint32_t tick);
+void ClearShotVis();
 extern int gShotsKept, gShotsMade, gShotsRemoved, gShotsBeyond; // for the log
 
 // This game's live cars and peds (a mapped one may have been removed by the game since; stats.cpp)

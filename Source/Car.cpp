@@ -1643,6 +1643,13 @@ void CarManager::CarsService()
 
     mVisibleCarsCount = 0;
 
+#if defined(GTA2_PORT)
+    if (gPortUpdateCars)
+    {
+        gPortUpdateCars();
+    }
+    else
+#endif
     gCar_BC_Pool->mPool.UpdatePool();
 
 #if defined(GTA2_PORT)
@@ -5396,7 +5403,11 @@ void Car::ManageDespawning()
     bool bOnScreenForAnyPlayer = false;
     bool bIsNotSeen = true;
 
-    if (bSkip_recycling && !IsMediCar() && !IsCopCar() && !IsFbiCar())
+    if (bSkip_recycling && !IsMediCar() && !IsCopCar() && !IsFbiCar()
+#if defined(GTA2_PORT)
+        && !gPortServerDespawns
+#endif
+    )
     {
         return;
     }
@@ -5438,6 +5449,12 @@ void Car::ManageDespawning()
         }
     }
 
+#if defined(GTA2_PORT)
+    if (gPortServerDespawns)
+    {
+        return;
+    }
+#endif
     if (((IsCopCar() || IsFireTruck() || IsSwatVan() || IsTank() || IsGunJeep() ||
           IsFbiCar()) &&
          mLastSeenTimer == 300) ||
