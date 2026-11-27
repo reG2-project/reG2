@@ -779,8 +779,8 @@ second arena slot starts on a raised spot), a fighter walks at the nearest playe
 blocks of a spot for 5 s with nobody within 6 is wedged: the bot gets out and leaves it 30 s. A car still for a
 second backs out for one, the wheel turned the other way, then this way; still again after two back-outs within 2
 blocks, the bot gets out whoever is near (car stuck time: rammer 8.9 to 6.6 s per 5 minutes, hunter 7.0 to 5.8). After a fight on foot
-(the hunter: someone within 8 blocks), the hunter and the soldier stay on foot 5 s before going for a car. These brains draw no random numbers (only `human` and `nn` do) and their searches are bounded in cells, so an
-arena match of them repeats for a seed.
+(the hunter: someone within 8 blocks), the hunter and the soldier stay on foot 5 s before going for a car. These brains draw only their dodges' reaction times, from their own stream seeded by the slot (`BotBrain::Seed`), never
+the game's, and their searches are bounded in cells, so an arena match of them repeats for a seed.
 
 **Stuck meter**: each arena bot's line `net: arena <slot> <brain> stuck S s longest L s searches N failed F giveups G
 recoveries R in a car C s` counts the time it spent alive pressing on without getting anywhere (under 0.3 blocks in
@@ -803,8 +803,23 @@ Against a player standing still within a block (2 seeds), a hunter's shots that 
 212; between bots the frags stayed as they were (simple against simple, 8 seeds: 50 and 48; six bots on downtown and
 Industrial, 6 seeds each: 159 and 166). Fists hit within a quarter block and only knock a player under 30
 health down, so an unarmed bot punches only an unarmed target above that it hurt in the last 4 s, else it fetches a
-weapon. A car coming within a block in the next 20 ticks makes a bot on foot step aside, or jump when it is about to
-hit. Cars aren't in the walking map: a car's box (its sprite's size, its heading) within 3 blocks on the way makes the
+weapon. **Avoiding cars** (`CarDodge`, its knobs at the top): a bot on foot sees each car where it was a reaction time ago
+(8 to 14 ticks, 270 to 470 ms, drawn per bot and car), carried on at its speed then, so a car going straight is seen
+where it is and one that turns is seen late. A car so seen whose path passes within 1.4 blocks in the next 30 ticks is
+a threat, and so is a player's car within 4.5 blocks with its nose at the bot, however slow (a rammer backing off for
+a run-up). One in four threats first seen outside its facing (90 degrees either way) goes unnoticed. For a threat, that
+tick it steps off the car's path (its own side, or within half a block of the path the side it turns to sooner, with
+1.5 blocks walkable in a straight line), or jumps when the car is under 12 ticks off or there is no room, pressing
+jump every other tick so that it jumps again once landed (a jump clears the car: without the jump the run-over deaths
+doubled). It doesn't fight while dodging (a throw under way stays held, a grenade let go at 85 ticks), and the rammer
+and the hunter on foot on their way to a car dodge too. A car first seen near, one from behind unnoticed, or one that
+turns late still runs it over. Against the old rule (no delay, 1 block and 20 ticks, one jump under 6 ticks), on mp1
+and downtown with a rammer and two hunters against fighters on foot, run-over deaths per bot and 5 minutes went from
+1.01, 1.08, 0.88, 0.63 to 0.59, 0.96, 0.73, 0.47 (soldier, simple, hunter, rammer; 128 seeds) and with `--kit smg` from
+0.93, 1.48, 1.06, 0.80 to 0.56, 1.15, 0.90, 0.43 (64 seeds); the frags made from a car fell by 40% (the rammer's
+match 3.1 to 2.3), the soldier's frags rose 8%, the simple bot's stayed, the hunter's on foot fell 5%. With the delay
+and the old rule's moves the deaths were 2 to 3 times as many: the earlier, wider threat, the nose rule and the jumps
+make up for it. Cars aren't in the walking map: a car's box (its sprite's size, its heading) within 3 blocks on the way makes the
 walker head for the corner of it that keeps the way shortest and is clear, and jump over it when none is (stuck with a
 car at hand, a jump is its first way out). The pickup memory starts with the weapon pickups the bot's own game has (the
 map script makes them on both ends, listed every 10 s), so a client bot, which sees pickups within its area only, knows

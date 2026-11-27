@@ -1,6 +1,7 @@
 // port/net: the bot's view (what its client knows) and the simple bot (bot.hpp).
 #include "bot.hpp"
 #include <math.h>
+#include <random>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -341,6 +342,15 @@ class Thrower
     {
         return mHolding;
     }
+    // Attack while another rule decides (a dodge) during a throw: held on, a grenade let go at 85 ticks
+    uint32_t HoldOn(const net::BotView& v)
+    {
+        if (mHolding && (v.frame < mFrom || !Throwable(v.weapon) || (v.weapon == 5 && v.frame - mFrom >= 85)))
+        {
+            mHolding = false, mRestUntil = v.frame + 12;
+        }
+        return mHolding ? net::kBtnAttack : 0;
+    }
 
   private:
     static float Clamp(float x, float lo, float hi)
@@ -447,55 +457,90 @@ class PickupMemory
     }
     std::vector<Spot> mSpots;
 };
+// Dodging cars, the knobs: a car's path within kThreatMiss blocks in the next kThreatTicks, as seen kReactMin..kReactMax
+// ticks late, is a threat
+const float kThreatMiss = 1.4f, kThreatTicks = 30, kThreatSpeed = 0.08f; // blocks, ticks, blocks per tick
+const float kThreatRange = 12; // blocks: cars farther are not looked at
+const uint32_t kReactMin = 8, kReactMax = 14; // ticks: 270 to 470 ms
+const uint32_t kUnseenBehind = 4; // one in this many cars coming from outside its facing goes unnoticed
+const float kNoseRange = 4.5f, kNoseSpeed = 0.15f; // a player's car this near with its nose at the bot comes at this speed
+const float kJumpTicks = 12; // under this many ticks before the car passes: a jump (it clears the car), not a step
+const float kDodgeRoom = 1.5f; // blocks walkable in a straight line the way it steps
+const uint32_t kCarHistory = 24; // ticks of each car's positions kept
 
-// Cars driven at it: each car's move since the last tick it saw it, and the way out of one coming within a block in
-// the next 20 ticks (a jump when it is about to hit, else a step aside); 0 if none
+// Cars driven at it, seen a reaction time late (netcode.md, "Avoiding cars"): off a threat's path, or a jump when it is
+// about to hit. Its draws are its own, never the game's.
 class CarDodge
 {
   public:
+    void Seed(uint32_t seed)
+    {
+        mRandom.seed(seed);
+    }
+    // The buttons of a dodge, 0 if none
     uint32_t Think(const net::BotView& v)
     {
-        uint32_t b = 0;
-        std::vector<Last> now;
-        for (const net::BotView::Seen& s : v.seen)
+        if (!v.hasBody || v.health <= 0 || v.car || v.frame < mLastFrame)
         {
-            if (s.kind != net::BotView::Seen::kCar || hypotf(s.x - v.x, s.y - v.y) > 12)
+            mCars.clear();
+            mUntil = 0, mLastFrame = v.frame;
+            return 0;
+        }
+        mLastFrame = v.frame;
+        Track(v);
+        float first = kThreatTicks + 1, firstMx = 0, firstMy = 0, ux = 0, uy = 0;
+        for (Car& c : mCars)
+        {
+            float px = 0, py = 0, vx = 0, vy = 0;
+            int rot = 0;
+            if (!Seen(c, v.frame, &px, &py, &vx, &vy, &rot) || hypotf(px - v.x, py - v.y) > kThreatRange)
             {
                 continue;
             }
-            for (const Last& l : mLast)
+            float v2 = vx * vx + vy * vy;
+            const float dx = v.x - px, dy = v.y - py;
+            float t = v2 > 1e-6f ? (dx * vx + dy * vy) / v2 : 0, mx = dx - vx * t, my = dy - vy * t;
+            if (v2 < kThreatSpeed * kThreatSpeed || t <= 0 || t > kThreatTicks || hypotf(mx, my) > kThreatMiss)
             {
-                if (l.id != s.id || v.frame - l.frame > 3 || b || v.car)
+                const float a = rot * kPi / 720.0f, fx = sinf(a), fy = cosf(a), along = dx * fx + dy * fy;
+                const float ax = dx - fx * along, ay = dy - fy * along;
+                if (!c.driven || along <= 0 || along > kNoseRange || hypotf(ax, ay) > kThreatMiss)
                 {
                     continue;
                 }
-                const float dt = (float)(v.frame - l.frame), vx = (s.x - l.x) / dt, vy = (s.y - l.y) / dt, v2 = vx * vx + vy * vy;
-                const float px = v.x - s.x, py = v.y - s.y, t = (px * vx + py * vy) / (v2 > 1e-6f ? v2 : 1e-6f);
-                const float mx = px - vx * t, my = py - vy * t; // from its line to the bot, where it passes nearest
-                if (v2 < 0.08f * 0.08f || t <= 0 || t > 20 || hypotf(mx, my) > 1.0f)
-                {
-                    continue;
-                }
-                const bool fresh = v.frame - mLastDodge > 30;
-                mDodges += fresh;
-                if (fresh && v.stats)
-                {
-                    v.stats->dodges++;
-                }
-                mLastDodge = v.frame;
-                if (t < 6)
-                {
-                    b = net::kBtnJump | net::kBtnForward;
-                    continue;
-                }
-                // Away from its line, on the side the bot already is (either side when on it)
-                const float side = mx * vy - my * vx >= 0 ? 1.0f : -1.0f;
-                b = net::kBtnForward | Steer(TurnTo(v.rot, side * vy, -side * vx));
+                vx = fx * kNoseSpeed, vy = fy * kNoseSpeed, v2 = kNoseSpeed * kNoseSpeed;
+                t = along / kNoseSpeed, mx = ax, my = ay;
             }
-            now.push_back(Last{s.id, v.frame, s.x, s.y});
+            if (!c.drawn)
+            {
+                // Outside its facing (90 degrees either way) a car may go unnoticed
+                const bool behind = abs(TurnTo(v.rot, px - v.x, py - v.y)) > 360;
+                c.drawn = true, c.unseen = behind && mRandom() % kUnseenBehind == 0;
+                if (c.unseen && v.stats)
+                {
+                    v.stats->unseen++;
+                }
+            }
+            if (!c.unseen && t < first)
+            {
+                const float speed = sqrtf(v2);
+                first = t, firstMx = mx, firstMy = my, ux = vx / speed, uy = vy / speed;
+            }
         }
-        mLast.swap(now);
-        return b;
+        if (first > kThreatTicks)
+        {
+            return 0;
+        }
+        Step(v, first, firstMx, firstMy, ux, uy);
+        if (mJump)
+        {
+            return (v.frame % 2 ? 0 : net::kBtnJump) | net::kBtnForward; // a jump goes off on the press: landed, it jumps again
+        }
+        return net::kBtnForward | Steer(TurnTo(v.rot, mDx, mDy));
+    }
+    bool Dodging(const net::BotView& v) const
+    {
+        return v.frame < mUntil && v.hasBody && v.health > 0 && !v.car;
     }
     int Dodges() const
     {
@@ -503,13 +548,111 @@ class CarDodge
     }
 
   private:
-    struct Last
+    struct Car
     {
-        uint32_t id, frame;
-        float x, y;
+        uint32_t id, lag;
+        bool drawn, unseen; // drawn: whether it goes unnoticed, at the first time it came at the bot
+        bool driven; // by a player
+        std::vector<uint32_t> frames;
+        std::vector<int> rots;
+        std::vector<float> xs, ys;
     };
-    std::vector<Last> mLast;
-    uint32_t mLastDodge = 0;
+
+    // Each car in view's positions, for the last kCarHistory ticks it was seen without a break
+    void Track(const net::BotView& v)
+    {
+        std::vector<Car> now;
+        for (const net::BotView::Seen& s : v.seen)
+        {
+            if (s.kind != net::BotView::Seen::kCar || fabsf(s.z - v.z) > 1.0f)
+            {
+                continue;
+            }
+            Car* old = NULL;
+            for (Car& c : mCars)
+            {
+                old = c.id == s.id ? &c : old;
+            }
+            if (old && v.frame - old->frames.back() <= 3)
+            {
+                now.push_back(std::move(*old));
+            }
+            else
+            {
+                now.push_back(Car{s.id, kReactMin + (uint32_t)(mRandom() % (kReactMax - kReactMin + 1)), false, false, false, {}, {}, {}, {}});
+            }
+            Car& c = now.back();
+            c.driven = false;
+            for (const net::BotView::Seen& p : v.seen)
+            {
+                c.driven |= p.kind == net::BotView::Seen::kPlayer && p.inCar && hypotf(p.x - s.x, p.y - s.y) < 1.0f;
+            }
+            c.frames.push_back(v.frame), c.xs.push_back(s.x), c.ys.push_back(s.y), c.rots.push_back(s.rot);
+            if (c.frames.size() > kCarHistory)
+            {
+                c.frames.erase(c.frames.begin()), c.xs.erase(c.xs.begin()), c.ys.erase(c.ys.begin()), c.rots.erase(c.rots.begin());
+            }
+        }
+        mCars.swap(now);
+    }
+
+    // Where car <c> looks to be now: where it was its lag ago, carried on at its speed then; false if not seen so long
+    static bool Seen(const Car& c, uint32_t frame, float* pX, float* pY, float* pVx, float* pVy, int* pRot)
+    {
+        int a = -1;
+        for (int i = (int)c.frames.size() - 1; i >= 0 && a < 0; i--)
+        {
+            a = frame - c.frames[i] >= c.lag ? i : -1;
+        }
+        int b = a - 1;
+        while (b > 0 && c.frames[a] - c.frames[b] < 2)
+        {
+            b--;
+        }
+        if (a < 1 || b < 0 || c.frames[a] - c.frames[b] > 4)
+        {
+            return false;
+        }
+        const float dt = (float)(c.frames[a] - c.frames[b]), late = (float)(frame - c.frames[a]);
+        *pVx = (c.xs[a] - c.xs[b]) / dt, *pVy = (c.ys[a] - c.ys[b]) / dt;
+        *pX = c.xs[a] + *pVx * late, *pY = c.ys[a] + *pVy * late, *pRot = c.rots[a];
+        return true;
+    }
+
+    // Off the path of a car passing <t> ticks from now (mx, my: from its path to the bot; ux, uy: its way): to the bot's
+    // side, or when within half a block of the path to the side it turns to sooner, with room; else, or too late, a jump
+    void Step(const net::BotView& v, float t, float mx, float my, float ux, float uy)
+    {
+        if (v.frame - mLastStep > 30)
+        {
+            mDodges++;
+            if (v.stats)
+            {
+                v.stats->dodges++;
+            }
+        }
+        mLastStep = v.frame, mUntil = v.frame + 1;
+        const float side = mx * uy - my * ux >= 0 ? 1.0f : -1.0f; // (uy, -ux) points to the bot's side
+        const bool near = hypotf(mx, my) < 0.5f;
+        mJump = true;
+        int best = 1 << 30;
+        for (int i = 0; i < 2 && t >= kJumpTicks; i++)
+        {
+            const float s = i ? -side : side, dx = s * uy, dy = -s * ux;
+            const int turn = abs(TurnTo(v.rot, dx, dy)) + i; // its own side when level
+            if ((i && !near) || turn >= best || (v.map && !net::NavClear(*v.map, v.x, v.y, v.x + dx * kDodgeRoom, v.y + dy * kDodgeRoom)))
+            {
+                continue;
+            }
+            best = turn, mJump = false, mDx = dx, mDy = dy;
+        }
+    }
+
+    std::vector<Car> mCars;
+    std::mt19937 mRandom{std::random_device{}()}; // its own: on a server the game's stream is part of its state
+    uint32_t mUntil = 0, mLastStep = 0, mLastFrame = 0;
+    float mDx = 0, mDy = 0;
+    bool mJump = false;
     int mDodges = 0;
 };
 
@@ -630,6 +773,15 @@ class SimpleBot : public DecidingBot
                  mTargetDist, mWalker.route.path.size(), mDodge.Dodges(), mButtons, mWalker.route.none ? " (no route found)" : "");
         return line;
     }
+    void Seed(uint32_t seed) override
+    {
+        mDodge.Seed(seed);
+    }
+    // Stepping out of a car's way: the brains it is part of leave it to that whatever they do on foot
+    bool Dodging(const net::BotView& v) const
+    {
+        return mDodge.Dodging(v);
+    }
     // Without a good gun, and one worth fetching within 30 blocks
     bool WantsWeapon(const net::BotView& v) const
     {
@@ -652,7 +804,7 @@ class SimpleBot : public DecidingBot
         mMotions.See(v);
         if (const uint32_t dodge = mDodge.Think(v))
         {
-            return dodge;
+            return dodge | mThrower.HoldOn(v);
         }
         if (const uint32_t away = mFire.Think(v, mWalker))
         {
@@ -1021,6 +1173,10 @@ class RamBot : public DecidingBot
 class RammerBot : public DecidingBot
 {
   public:
+    void Seed(uint32_t seed) override
+    {
+        mFoot.Seed(seed);
+    }
     std::string Describe() const override
     {
         return (mDriving ? "driving: " + mCar.Describe() : "on foot: " + mFoot.Describe());
@@ -1037,7 +1193,7 @@ class RammerBot : public DecidingBot
         mDriving = v.car != 0 || (mCar.CarDistance(v) < (armed ? 12.0f : 30.0f) && mCommit.Settled(v) && v.frame - mNearAt > 150);
         // Both see every tick, so their timers and stuck checks stay right whichever decides
         const uint32_t foot = mFoot.Think(v), drive = mCar.Think(v);
-        return mDriving ? drive : foot;
+        return mDriving && !mFoot.Dodging(v) ? drive : foot;
     }
 
     SimpleBot mFoot;
@@ -1051,6 +1207,10 @@ class RammerBot : public DecidingBot
 class HunterBot : public DecidingBot
 {
   public:
+    void Seed(uint32_t seed) override
+    {
+        mFoot.Seed(seed);
+    }
     std::string Describe() const override
     {
         return (mDriving ? "driving: " + mCar.Describe() : "on foot: " + mFoot.Describe());
@@ -1068,7 +1228,7 @@ class HunterBot : public DecidingBot
         mDriving = v.car != 0 || (car < 10 && enemy > 8 && v.frame - mNearAt > 150 && mCommit.Settled(v) && !mFoot.WantsWeapon(v));
         // Both see every tick, so their timers and stuck checks stay right whichever decides
         const uint32_t foot = mFoot.Think(v), drive = mCar.Think(v);
-        return mDriving ? drive : foot;
+        return mDriving && !mFoot.Dodging(v) ? drive : foot;
     }
 
     SimpleBot mFoot;
@@ -1084,6 +1244,10 @@ class HunterBot : public DecidingBot
 class SoldierBot : public DecidingBot
 {
   public:
+    void Seed(uint32_t seed) override
+    {
+        mDodge.Seed(seed);
+    }
     std::string Describe() const override
     {
         char line[160];
@@ -1125,7 +1289,7 @@ class SoldierBot : public DecidingBot
         mMotions.See(v);
         if (const uint32_t dodge = mDodge.Think(v))
         {
-            return dodge;
+            return dodge | mThrower.HoldOn(v);
         }
         if (const uint32_t away = mFire.Think(v, mWalker))
         {
