@@ -314,6 +314,14 @@ class Player
         }
     }
 
+#if defined(GTA2_PORT)
+    // Port: the ped RespawnPlayer moved to its restart zone, dead there until the countdown ends, while mAuxPed is shown
+    inline bool IsWaitingToRespawn(const Ped* pPed) const
+    {
+        return mWastedOrBusted && mAuxPed && pPed == mPlayerPed;
+    }
+#endif
+
     // 9.6f 0x4219D0
     inline u8 get_idx() const
     {

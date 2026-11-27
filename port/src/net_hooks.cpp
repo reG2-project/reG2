@@ -7,7 +7,7 @@ void (*gPortSpriteMovedHook)(Sprite*);
 void (*gPortSpriteFreedHook)(Sprite*);
 void (*gPortIdleHook)();
 bool gPortNetFrameLoop;
-s32 gPortNetPaceMs = -1;
+s32 gPortNetPaceUs = -1;
 bool gPortNoDraw;
 
 bool gPortNoAudio;
@@ -56,6 +56,7 @@ u16 (*gPortChatChar)(Player*, s32);
 bool gPortProtectsPlayers;
 bool (*gPortScoreBonusHook)(Player* pPlayer, s32 voice);
 s32 (*gPortKillCamTicks)(Player* pPlayer, Player* pKiller);
+void (*gPortSpawnKit)(Player* pPlayer);
 Ped* (*gPortDeathViewPed)(Player* pPlayer, Ped* pAuxPed);
 void (*gPortCorpseKept)(Ped* pCorpse);
 int gPortNetRoundPad;

@@ -35,7 +35,7 @@ bool DrawLegs(const Sprite* pSprite, STexture* pTexture, u32 flags, const Vert* 
 // turns its roof gun toward the aim.
 void AimTurret(Car* pCar);
 // In Ped::ComputeAimAngle: true if the player's machine guns fire where he faces, without the original's
-// lock on a ped near the line of fire.
+// lock on a ped in front or on a nearby shooter (Ped::ComputeAimAngle).
 bool FreeAim(const Ped* pPed);
 // In Ped::UpdateFacingAngle, a ped standing to shoot: its aim at the player walking on foot leads him, a part of the
 // way his bullets need, as he can walk off his own aim to sidestep them.

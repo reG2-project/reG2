@@ -6636,6 +6636,14 @@ Ped* Ped::FindBestTargetPed(s32 max_x_check)
 
     if (!pNear)
     {
+#if defined(GTA2_PORT)
+        // Port: a player locks only on a ped in front; the original also took the nearest shooter within 4 blocks,
+        // even behind him (port/docs/netcode.md, "Open": removing this block restores it).
+        if (is_player())
+        {
+            return NULL;
+        }
+#endif
         Ped* pClosest;
         if (mPedGroup)
         {

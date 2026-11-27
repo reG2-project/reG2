@@ -151,6 +151,11 @@ void net::Arena::Think(const Snapshot& world, uint32_t tick)
     for (size_t i = 0; i < mBots.size(); i++)
     {
         Bot& bot = mBots[i];
+        if (bot.benched)
+        {
+            bot.buttons = 0;
+            continue;
+        }
         if (bot.brain || tick % kBotDecisionTicks == 0)
         {
             FillBotView(mView, world, (int)i, tick, mNavMap.get());
@@ -512,13 +517,19 @@ uint32_t net::Arena::Buttons(int slot) const
     return mBots[slot].buttons;
 }
 
+void net::Arena::Bench(int slot, bool benched)
+{
+    mBots[slot].benched = benched;
+    mBots[slot].buttons = 0;
+}
+
 void net::Arena::Finish(const Snapshot& world)
 {
     for (const EntityState& e : world.entities)
     {
         int p = 0;
         uint32_t b = 0;
-        if (engine::PlayerOf(e, &p, &b) && p < (int)mBots.size())
+        if (engine::PlayerOf(e, &p, &b) && p < (int)mBots.size() && !mBots[p].benched)
         {
             const Bot& bot = mBots[p];
             printf("net: arena %d %s frags %d deaths %d near %.3f dealt %d cars %d pickups %d\n", p, bot.kind.c_str(), bot.frags, bot.deaths, mTicks ? bot.closeness / mTicks : 0.0, bot.dealt, bot.cars, bot.pickups);

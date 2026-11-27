@@ -4,12 +4,13 @@
 #include <vector>
 #include "bitstream.hpp"
 #include "player_limit.hpp"
+#include <math.h>
 #include <stdint.h>
 #include <string>
 
 namespace net
 {
-const uint32_t kProtocolVersion = 49;
+const uint32_t kProtocolVersion = 52;
 const uint16_t kDefaultPort = 27920;
 const size_t kMaxPayload = 1372; // the largest unreliable ENet packet at any link MTU (1428: ENet's mtu 1400)
 // The link's MTU, IP packets (--mtu, 576 to 1428): 1280 by default, the smallest of the VPNs people play LAN games over
@@ -57,6 +58,7 @@ struct Hello
     std::string name; // empty, too long or taken: the server gives one
     uint32_t carInfo = 0; // data/nyc.gci's CRC-32 (the cars' physics, every map's)
     uint32_t session = 0, token = 0; // a reconnect: the welcome's, so the server gives the slot back as it was (0: a join)
+    bool bot = false; // a bot client (--bot): it plays but doesn't vote
 };
 
 // What a client needs to start the same network game as the server
@@ -70,6 +72,8 @@ struct Welcome
     uint16_t timeLimitMin = 10;
     uint16_t tickMs = 33;
     uint8_t police = 0;
+    uint8_t kit = 0; // what each player gets at every start and respawn: 0 nothing, 1 a machine gun (50) and armour
+    int8_t zoom = -1; // every player's camera zoom step (-5 to 5, the CAMERA ZOOM setting's; 0 the original's)
     uint32_t session = 0; // the server's run, drawn at its start: a client back after a drop finds another one if it restarted
     std::string name; // the player's name, as the server has it (another than the hello's if that was taken)
     std::string map; // the map's name (data/<map>.mmp)
@@ -80,6 +84,12 @@ struct Welcome
     uint32_t token = 0; // this slot's: a reconnect's hello shows it to have the slot back with its score
     uint16_t game = 0; // the server's game to take snapshots of (its snapshots' world.game): the next one during a map change
 };
+
+// How much more a zoom step (Welcome::zoom) shows than the original's view, each way
+inline float ViewScale(int zoom)
+{
+    return powf(1.125f, (float)-zoom);
+}
 
 struct Reject
 {
@@ -94,6 +104,7 @@ struct MapChange
     uint16_t game = 0; // the server's game on it (its snapshots' world.game)
     uint8_t players = 0; // that game's (the map's, at most the server's slots)
     uint8_t slot = 0; // the client's player index in it: the slots are renumbered from 0 (netcode.md, "Maps and players")
+    uint32_t endTick = 0; // the server tick the old game ends at: the client's ends at the same tick of its own
 };
 
 struct InputCmd

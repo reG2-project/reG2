@@ -145,6 +145,7 @@ void net::WriteHello(BitWriter& w, const Hello& m)
     w.Bits(m.carInfo, 32);
     w.Bits(m.session, 32);
     w.Bits(m.token, 32);
+    w.Bits(m.bot, 1);
 }
 
 bool net::ReadHello(BitReader& r, Hello& m)
@@ -157,6 +158,7 @@ bool net::ReadHello(BitReader& r, Hello& m)
         m.session = r.Bits(32);
         m.token = r.Bits(32);
     }
+    m.bot = r.BitsLeft() >= 1 && r.Bits(1);
     return ok && !r.Overflow();
 }
 
@@ -185,6 +187,8 @@ void net::WriteWelcome(BitWriter& w, const Welcome& m)
     w.VarU(m.timeLimitMin);
     w.VarU(m.tickMs);
     w.Bits(m.police, 8);
+    w.Bits(m.kit, 8);
+    w.Bits((uint32_t)(m.zoom + 5), 4);
     w.Bits(m.session, 32);
     WriteString(w, m.name);
     WriteString(w, m.map);
@@ -212,6 +216,8 @@ bool net::ReadWelcome(BitReader& r, Welcome& m)
     m.timeLimitMin = (uint16_t)r.VarU();
     m.tickMs = (uint16_t)r.VarU();
     m.police = (uint8_t)r.Bits(8);
+    m.kit = (uint8_t)r.Bits(8);
+    m.zoom = (int8_t)((int)r.Bits(4) - 5);
     m.session = r.Bits(32);
     bool ok = ReadString(r, m.name) && ReadString(r, m.map) && ReadString(r, m.gmp) && ReadString(r, m.sty) && ReadString(r, m.scr);
     ReadPrint(r, m.print);
@@ -223,7 +229,7 @@ bool net::ReadWelcome(BitReader& r, Welcome& m)
     }
     m.token = r.Bits(32);
     m.game = (uint16_t)r.Bits(16);
-    return ok && !r.Overflow() && m.slot < m.players && m.players <= kMaxPlayers;
+    return ok && !r.Overflow() && m.slot < m.players && m.players <= kMaxPlayers && m.zoom <= 5;
 }
 
 void net::WriteReject(BitWriter& w, const Reject& m)
@@ -286,6 +292,7 @@ void net::WriteMapChange(BitWriter& w, const MapChange& m)
     w.Bits(m.game, 16);
     w.Bits(m.players, BitsFor(kMaxPlayers));
     w.Bits(m.slot, BitsFor(kMaxPlayers));
+    w.VarU(m.endTick);
 }
 
 bool net::ReadMapChange(BitReader& r, MapChange& m)
@@ -295,6 +302,7 @@ bool net::ReadMapChange(BitReader& r, MapChange& m)
     m.game = (uint16_t)r.Bits(16);
     m.players = (uint8_t)r.Bits(BitsFor(kMaxPlayers));
     m.slot = (uint8_t)r.Bits(BitsFor(kMaxPlayers));
+    m.endTick = r.VarU();
     return ok && !r.Overflow() && m.players >= 1 && m.players <= kMaxPlayers;
 }
 

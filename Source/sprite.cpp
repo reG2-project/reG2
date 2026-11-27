@@ -1238,6 +1238,13 @@ void Sprite::Draw()
                 {
                     return;
                 }
+#if defined(GTA2_PORT)
+                // Port: a player's body waiting at its restart zone during the death countdown is not drawn
+                if (pPed->mPlayer->IsWaitingToRespawn(pPed))
+                {
+                    return;
+                }
+#endif
             }
         }
     }

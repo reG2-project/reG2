@@ -29,9 +29,9 @@ extern void (*gPortIdleHook)();
 // A network client's: reG2's frame loop runs its game (winmain.cpp), the netcode's frame hook after each step and
 // frames drawn in between; a server and a replay run the original's, a step then a frame
 extern bool gPortNetFrameLoop;
-// A network game's time between two steps in ms, apart from the step's game length (GetFrameDurationMs): a client's
-// pacing, 0 for a replay (no waiting); negative: the step's length
-extern s32 gPortNetPaceMs;
+// A network game's time between two steps in microseconds, apart from the step's game length (GetFrameDurationMs): a
+// client's pacing, 0 for a replay (no waiting); negative: the step's length
+extern s32 gPortNetPaceUs;
 // A headless dedicated server's: the original's frame path (winmain.cpp) runs no Game::Draw after a step, as nobody
 // sees it and the steps don't depend on it (port/docs/netcode.md, "The game loop")
 extern bool gPortNoDraw;
@@ -205,6 +205,8 @@ extern bool (*gPortScoreBonusHook)(Player* pPlayer, s32 voice);
 // Asked as a player is wasted (Player::Wasted), with the player who killed it (NULL: none): the ticks its death's
 // countdown runs longer. NULL but in a network game, whose kill cam then shows the killer
 extern s32 (*gPortKillCamTicks)(Player* pPlayer, Player* pKiller);
+// Called as a player starts (Player::InitPlayerPed) and respawns: a network game's weapons and armour for it. NULL: none
+extern void (*gPortSpawnKit)(Player* pPlayer);
 // The ped a wasted or busted player's view follows (Player::Service, camera mode 2) in place of its corpse or arrested
 // self, pAuxPed. NULL but in a network game: the killer's during the kill cam
 extern Ped* (*gPortDeathViewPed)(Player* pPlayer, Ped* pAuxPed);

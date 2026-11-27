@@ -6,6 +6,8 @@
 #include "../transport/transport.hpp"
 #include "../dev/client_probe.hpp"
 #include "bot.hpp"
+#include "link_warning.hpp"
+#include "pacing.hpp"
 #include "recording.hpp"
 #include "round_flow.hpp"
 #include "session.hpp"
@@ -128,10 +130,10 @@ class Client
     void FastForward(int ticks); // the ticks a jump forward skips, run at once, saved
     void AnnounceRound();
     void OnMapChange(BitReader& r);
-    // The server's game on <scr> (number <game>, of <players>, ours <slot>): this one ends after <pauseTicks> and that
+    // The server's game on <scr> (number <game>, of <players>, ours <slot>): this one ends after our <endTick> and that
     // one starts; false, and we left to the menu, if this machine hasn't the map's files as the server has them
     bool ChangeGame(const std::string& map, const std::string& gmp, const std::string& sty, const std::string& scr, const MapPrint& print,
-                    int game, int players, int slot, int pauseTicks);
+                    int game, int players, int slot, uint32_t endTick);
     void StartOver(); // a new game (the next map): synced again from its first snapshot
     void Resync(const Snapshot& snap);
     void Reconcile(const Snapshot& snap);
@@ -141,7 +143,7 @@ class Client
     void Blend(const std::vector<engine::Pose>& shown);
     void RecordShown(); // what this tick shows, once its snapshot's correction is blended in (the display error)
     void PrintStats(const Snapshot& snap);
-    int PacedTickMs() const;
+    int PacedTickUs();
     void SetNextInputs(uint32_t local);
     void SendCommands();
     uint32_t Lead() const; // ticks to run ahead of the newest snapshot
@@ -165,7 +167,6 @@ class Client
     int PeerPing(int slot) const; // PlayerRow::ping's: -1 unknown, -2 an arena bot
     std::string RoundCorner() const;
     void BotRound(); // a bot readies up and votes
-    uint32_t BotMapChoice() const; // the map a bot votes for in the results (1-based)
     bool TakePong(const TransportEvent& e); // a pong (the ping's round trip measured): not for the frame
     void SendPing();
 
@@ -186,6 +187,7 @@ class Client
     uint32_t mTakenTick = 0; // the newest snapshot this game took (our ack: the server counts us in the game by it)
     int mSlack = 0; // how many ticks early our commands reach the server (newest command - next tick)
     bool mSlackKnown = false;
+    Pacer mPacer;
     uint32_t mJumpTick = 0; // our tick at the last jump
     bool mNewSnapshot = false;
 
@@ -218,6 +220,8 @@ class Client
     };
     LinkStats mLink;
     std::string mLinkShown;
+    LinkWarning mWarning; // the bad connection icon
+    LinkLevel mWarningShown = kLinkGood;
     long long mPingShownMs = 0, mLastSnapshotMs = 0, mReconnectMs = 0, mPingSentMs = 0;
     std::vector<TransportEvent> mPending; // what Idle polled, for the next frame
     int mReconnects = 0; // attempts since the connection dropped
@@ -233,6 +237,9 @@ class Client
     int mMarks = 0; // mark key presses (F12 or the key under Esc) (ChooseInput)
     engine::Round mRound; // the last one announced
     int mGeneration = 0; // engine::GameGeneration's, of the game running
+    long long mGameStartMs = 0; // when this game started here (0: the join's game)
+    uint32_t mSyncFrame = 0; // the frame of this game's first sync
+    uint32_t mGameJumps = 0, mGameCatchUps = 0; // this game's Resyncs and FastForwards
     int mServerGame = -1; // the server's game we take snapshots of (the welcome's, the next after a map change)
     uint32_t mMarkFrame = 0;
     bool mLeft = false; // left the server (the pause menu's LEAVE GAME, a kick, a lost server)

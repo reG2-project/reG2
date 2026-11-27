@@ -316,7 +316,7 @@ void Reset()
     ApplySettings();
 }
 
-Action Next(s32 stepMs, bool forceStep, bool noDraw)
+Action Next(s32 stepUs, bool forceStep, bool noDraw)
 {
     const unsigned long long now = port_NowNs();
     if (!sStarted)
@@ -327,7 +327,7 @@ Action Next(s32 stepMs, bool forceStep, bool noDraw)
     }
     sAccumulated += now - sLast;
     sLast = now;
-    sStepNs = static_cast<unsigned long long>(stepMs) * 1000000;
+    sStepNs = static_cast<unsigned long long>(stepUs) * 1000;
     Stats(now);
 
     if (forceStep || noDraw)

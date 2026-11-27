@@ -14,7 +14,7 @@ enum Action
 };
 
 // The step duration and whether the game asks for a step now (screen size change, no-draw debug mode).
-Action Next(s32 stepMs, bool forceStep, bool noDraw);
+Action Next(s32 stepUs, bool forceStep, bool noDraw);
 
 // Around ExecuteGame and around DrawAndFlip.
 void BeforeStep();

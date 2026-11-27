@@ -6,8 +6,9 @@
 #   churn   two bot clients staying while two others join and leave, four times (stopped: SIGTERM, Ctrl-C): no
 #           crash, no CHECK line, nobody turned away as the server being full
 #   rounds  the round flow: two bot clients ready up, play a round, vote for the next map and follow; a third joins late
-#   maps    a map rotation, a round of 15 s each (the clock 4 times as fast): two bot clients follow every map change and
-#           play the resimulated ticks' sounds on a later map, no crash, no CHECK line
+#   maps    a map rotation, a round of 15 s each (the clock 4 times as fast): two bot clients follow every map change,
+#           ending the old game within 3 ticks of the server, and play the resimulated ticks' sounds on a later map, no
+#           crash, no CHECK line
 #   soak    a server and three bot clients, the clock 10 times as fast: 10 minutes of play in 60 s, no crash
 #   throws  blasts beside a server's bots and one set on fire, a bot client watching: it shows each player thrown as the
 #           server has it at that tick, with its outcome, and hears a player's flying death land as the server does (no thud)
@@ -170,8 +171,8 @@ maps() {
   sleep $secs
   kill $(jobs -p) 2>/dev/null
   wait 2>/dev/null
-  local changes crashes checks followed=1 heard=1 gunfire=1 b
-  changes=$(grep -c "net: the next map:" "$OUT/maps_server.log")
+  local changes crashes checks followed=1 heard=1 gunfire=1 aligned=1 b
+  changes=$(grep -c "), the next map:" "$OUT/maps_server.log")
   crashes=$(grep -l "crashed" "$OUT"/maps_*.log | wc -l | tr -d ' ')
   checks=$(cat "$OUT"/maps_*.log | grep -c "net: CHECK")
   for b in rammer soldier; do
@@ -179,21 +180,25 @@ maps() {
     [ $(grep -c "a new game" "$OUT/maps_$b.log") -ge $((changes - 1)) ] || followed=0
     # the sound log plays the resimulated ticks' sounds on a later map too (its ticks are that map's game cycle)
     awk '/a new game/ { n++ } /net: [1-9][0-9]* sounds of the resimulated ticks played/ && n { ok = 1 } END { exit !ok }' "$OUT/maps_$b.log" || heard=0
+    # Each map change's old game ends on the client within 3 ticks of the server's (its tick, which runs its lead ahead)
+    awk 'NR == FNR { if (/\), a new game/) { s[++n] = $3 + 0 } next } /\), a new game/ { c = $5 + 1; d = c - s[++m]; if (m <= n && (d > 3 || d < -3)) {
+           bad = 1; print "  maps: m_'$b' started map change " m " at tick " c ", the server at " s[m] } } END { exit bad || !m }' \
+      "$OUT/maps_server.log" "$OUT/maps_$b.log" || aligned=0
   done
   # On every later map m_rammer hears the others' gunfire as the server's listener at its place does: at least half
   # the shots' samples of a map the server heard 20 of (the last map's, maybe cut short, not counted)
   if grep -q "as player 3 of" "$OUT/maps_rammer.log"; then
-    awk '/net: the next map:/ { n++ } /^sfx: / && / weapon/ && !/\/p3 / && n { s[n]++ } END { for (i = 1; i < n; i++) print i, s[i] + 0 }' \
+    awk '/\), the next map:/ { n++ } /^sfx: / && / weapon/ && !/\/p3 / && n { s[n]++ } END { for (i = 1; i < n; i++) print i, s[i] + 0 }' \
       "$OUT/maps_server.log" > "$OUT/maps_gunfire_server.txt"
     awk '/a new game/ { n++ } /^sfx: / && / weapon/ && !/\/p3 / && n { c[n]++ } END { for (i = 1; i <= n; i++) print i, c[i] + 0 }' \
       "$OUT/maps_rammer.log" > "$OUT/maps_gunfire_client.txt"
     awk 'NR == FNR { s[$1] = $2; next } ($1 in s) && s[$1] >= 20 && $2 * 2 < s[$1] { bad = 1; print "  maps: map " $1 + 1 ", the others gunfire: " $2 " samples for m_rammer, " s[$1] " for the server" }
          END { exit bad }' "$OUT/maps_gunfire_server.txt" "$OUT/maps_gunfire_client.txt" || gunfire=0
   fi
-  if [ "$changes" -lt 3 ] || [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $followed = 0 ] || [ $heard = 0 ] || [ $gunfire = 0 ]; then
-    fail "maps: $changes map changes, clients followed: $followed, resimulated sounds on a later map: $heard, the others' gunfire heard: $gunfire, $crashes crashed, $checks CHECK lines ($BUILD/net_check/maps_*.log)"
+  if [ "$changes" -lt 3 ] || [ "$crashes" != 0 ] || [ "$checks" != 0 ] || [ $followed = 0 ] || [ $aligned = 0 ] || [ $heard = 0 ] || [ $gunfire = 0 ]; then
+    fail "maps: $changes map changes, clients followed: $followed, at the server's tick: $aligned, resimulated sounds on a later map: $heard, the others' gunfire heard: $gunfire, $crashes crashed, $checks CHECK lines ($BUILD/net_check/maps_*.log)"
   else
-    pass "maps: $changes map changes, both clients followed, both played the resimulated ticks' sounds on a later map, m_rammer heard the others' gunfire there as the server did"
+    pass "maps: $changes map changes, both clients followed at the server's tick, both played the resimulated ticks' sounds on a later map, m_rammer heard the others' gunfire there as the server did"
   fi
 }
 
@@ -288,6 +293,7 @@ throws() {
   local result
   result=$(awk '
     /THROW server tick [0-9]+: p[01] / { k = $5 $6; if ($12 ~ /^8\/2[456]$/) s[k] = $12; if ($24 == 1) { burn[$6]++} }
+    function val(name, i) { for (i = 1; i < NF; i++) if ($i == name) return $(i + 1) + 0; return -1 }
     # The tick each server throw started at: a client that has no snapshot of it yet shows its own prediction
     /THROW server tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { t = $5 + 0; prev = (t - 1) ":" $6; sstart[$5 $6] = (prev in sstart) ? sstart[prev] : t }
     # Not the throw that ends a jack the client predicted ahead of the server (checked below): the ticks in a row after
@@ -295,8 +301,8 @@ throws() {
     /THROW client tick [0-9]+: p[01] / { t = $5 + 0; if ($12 == "8/17" && t > 830) { door[$6] = t; drun[$6] = 1 } else if (t != last[$6] + 1 || $12 !~ /^8\//) drun[$6] = 0; last[$6] = t }
     # And the tick each client throw started at, by its char timeout (500 at the start, 2 less a tick; a fatal one 300
     # after the first): one predicted after the newest snapshot, predicted again from there at each snapshot or not
-    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { t = $5 + 0; o = $(NF - 2) + 0; cstart[$5 $6] = t - (o > 300 ? (500 - o) / 2 : 1 + (300 - o) / 2) }
-    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ && !(drun[$6] && ($5 + 0 - door[$6] <= 12 || ($6 == victim && $5 + 0 < sfirst))) { c[$5 $6] = $12; csnap[$5 $6] = $NF + 0 }
+    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ { t = $5 + 0; o = val("timeout"); cstart[$5 $6] = t - (o > 300 ? (500 - o) / 2 : 1 + (300 - o) / 2) }
+    /THROW client tick [0-9]+: p[01] / && $12 ~ /^8\/2[456]$/ && !(drun[$6] && ($5 + 0 - door[$6] <= 12 || ($6 == victim && $5 + 0 < sfirst))) { c[$5 $6] = $12; csnap[$5 $6] = val("snap") }
     /THROW server tick [0-9]+: p1 / { sp[$5 + 0] = $12 }
     # The client player jacks p0 or p1 (from 830), twice: the server calls the first off at the door, pulls on the second
     # 10 ticks after its jacker got there. The client predicts both pulls at once: the first back in its seat soon after
@@ -304,7 +310,7 @@ throws() {
     /test phase 4: player 2 jacks player/ { victim = "p" $NF }
     /test phase 4: jack called off at tick/ { calloff = $NF + 0 }
     /THROW server tick [0-9]+: p[01] / && $5 + 0 > 830 && $6 == victim && $12 == "8/17" { jackServer++; if (!sfirst) sfirst = $5 + 0 }
-    /THROW client tick [0-9]+: p[01] / && $5 + 0 > 830 && $6 == victim && $12 ~ /^8\// { cv[$5 + 0] = $12; if ($12 == "8/17") jackClient++ }
+    /THROW client tick [0-9]+: p[01] / && $5 + 0 > 830 && $6 == victim && $12 ~ /^8\// { cv[$5 + 0] = $12; cvsnap[$5 + 0] = val("snap"); if ($12 == "8/17") jackClient++ }
     /THROW client tick [0-9]+: p1 / { cp[$5 + 0] = $12; cstored[$5 + 0] = $14 }
     /THROW server tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ { delete own[$5 + 0]; sown[$5 + 0] = 1 }
     /THROW client tick [0-9]+: p2 / && $12 ~ /^8\/2[07]$/ && !(($5 + 0) in sown) { own[$5 + 0] = 1 }
@@ -322,9 +328,13 @@ throws() {
       # Pulled out of its car (8/17): the client starts it from the server alone, never while the server has it seated or walking
       for (t in sp) if (sp[t] == "8/17") pulled++
       for (t in cp) if (cp[t] == "8/17") { pullShown++; if ((t in sp) && sp[t] != "8/17" && t < 830) pullWrong++ }
-      # The jacks: the cancelled pull shown before the call-off, none of it 12 ticks after until the second pull here
+      # The jacks: the cancelled pull shown before the call-off, none of it 12 ticks after until the second pull here, once
+      # a snapshot 7 ticks past the call-off came (a client running further ahead of the server learns of it later)
       cfirst = 0; for (t in cv) if (t + 0 > calloff + 12 && cv[t] == "8/17" && (!cfirst || t + 0 < cfirst)) cfirst = t + 0
-      for (t in cv) { if (t + 0 <= calloff + 4 && cv[t] == "8/17") cancelShown++; if (t + 0 >= calloff + 12 && (!cfirst || t + 0 < cfirst)) cancelLate++ }
+      for (t in cv) {
+        if (t + 0 <= calloff + 4 && cv[t] == "8/17") cancelShown++
+        if (t + 0 >= calloff + 12 && cvsnap[t] >= calloff + 7 && (!cfirst || t + 0 < cfirst)) cancelLate++
+      }
       lead = calloff && sfirst && cfirst ? sfirst - cfirst : -1
       # The own player of the client (p2) drowned or electrocuted there alone: cancelled by the next snapshots
       for (t in own) { ownTicks++; run = 0; for (u = t; u in own; u--) run++; if (run > ownRun) ownRun = run }

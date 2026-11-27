@@ -16,6 +16,7 @@ const net::SessionEnv& net::Env()
         e.inputLog = getenv("GTA2_NET_INPUTLOG") != NULL;
         e.fwdLog = getenv("GTA2_NET_FWDLOG") != NULL;
         e.frameLog = getenv("GTA2_NET_FRAMELOG") != NULL;
+        e.paceLog = getenv("GTA2_NET_PACELOG") != NULL;
         e.jerkLog = getenv("GTA2_NET_JERKLOG") ? (atoi(getenv("GTA2_NET_JERKLOG")) >= 2 ? 2 : 1) : 0;
         e.noForward = getenv("GTA2_NET_NOFORWARD") && atoi(getenv("GTA2_NET_NOFORWARD"));
         e.holdFire = getenv("GTA2_NET_HOLDFIRE") && atoi(getenv("GTA2_NET_HOLDFIRE"));
@@ -53,6 +54,7 @@ const net::SessionEnv& net::Env()
         e.replayOn = getenv("GTA2_NET_REPLAYON") ? atoi(getenv("GTA2_NET_REPLAYON")) : 0;
         e.say = getenv("GTA2_NET_SAY");
         e.botVoteMap2 = getenv("GTA2_NET_BOTMAP2") != NULL;
+        e.botVoteMap = e.botVoteMap2 && atoi(getenv("GTA2_NET_BOTMAP2")) > 2 ? atoi(getenv("GTA2_NET_BOTMAP2")) : 2;
         e.scoreboard = getenv("GTA2_NET_SCOREBOARD") && !strcmp(getenv("GTA2_NET_SCOREBOARD"), "1");
         e.testWanted = getenv("GTA2_NET_TESTWANTED");
         e.fuzz = 0, e.fuzzRate = 20;

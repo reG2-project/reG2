@@ -23,6 +23,8 @@ struct NetworkGame
     int fragLimit = 10;
     int timeLimitMin = 10;
     int police = 0;
+    int kit = 0; // Welcome::kit
+    int zoom = -1; // Welcome::zoom
     int tickMs = 33;
 };
 // Before WinMain: the game boots this network game (with -N on its command line)
@@ -42,7 +44,8 @@ void SetPlayerTyped(int player, uint32_t buttons, uint16_t typed);
 uint16_t TypedChar(uint32_t buttons); // a client's: the character its key press in <buttons> typed here (0: none)
 // The length of a network tick (the game's own setting offers 50, 40 or 33 ms)
 void SetTickMs(int ms);
-void SetPaceMs(int ms); // the time between two steps, apart from their game length (0: no waiting, -1: that length)
+long long GameNowUs(); // the game's clock (GTA2_SPEED's), in microseconds
+void SetPaceUs(int us); // the time between two steps, apart from their game length (0: no waiting, -1: that length)
 // The client's pause menu (port/src/pause_menu.cpp), over the game going on: Escape opens it, a key while open is its own
 // (with the character it typed), and what was chosen in it is taken once
 bool MenuOpen();
@@ -119,6 +122,8 @@ inline bool IsCarId(uint32_t id)
 {
     return id >= kCarIdBase && id < kPedIdBase;
 }
+// <x, y, z> (raw Fix16) inside a plain solid block (not air, not a slope): a ped there is drawn under its top
+bool InsideBlock(int32_t x, int32_t y, int32_t z);
 // A position field (Fix16 raw: 14 fraction bits) in blocks
 inline float Blocks(int32_t raw)
 {
@@ -222,10 +227,10 @@ void AddChatLine(const std::string& line);
 void SetNetPanel(const std::vector<std::string>& lines);
 // One line drawn large in the middle of the frame (the game's message font) until changed; empty: none
 void SetNetBanner(const std::string& text);
-// The next map, a game of <players> with this machine's as <localPlayer>: this one ends after <pauseTicks> and that one starts at once, without the frontend
-// (winmain.cpp, gPortNextNetworkGame); KeepMapChange every frame until then. GameGeneration counts the games, for
-// the session to start over when it changes
-void ChangeMap(const std::string& gmp, const std::string& sty, const std::string& scr, int players, int localPlayer, int pauseTicks);
+// The next map, a game of <players> with this machine's as <localPlayer>: this one ends after the netcode's <endTick>
+// (<tick> now) and that one starts at once, without the frontend (winmain.cpp, gPortNextNetworkGame); KeepMapChange
+// every frame until then. GameGeneration counts the games, for the session to start over when it changes
+void ChangeMap(const std::string& gmp, const std::string& sty, const std::string& scr, int players, int localPlayer, uint32_t tick, uint32_t endTick);
 // The first of a map's files that isn't in data/ (the game's fatal error if it opened it); empty: all are
 std::string MissingMapFile(const std::string& gmp, const std::string& sty, const std::string& scr);
 // data/<name>'s CRC-32, read as the game opens it (0: it can't be read)
@@ -236,7 +241,7 @@ void LeaveForMenu();
 bool LeftForMenu();
 bool GameClosed(); // the game ended by closing (its window): the program ends
 void StopNetworkGame();
-void KeepMapChange();
+void KeepMapChange(uint32_t tick); // the netcode's tick that just ran
 int GameGeneration();
 int SnapshotGame(const Snapshot& snap); // the server's GameGeneration at it (-1: no world in it)
 bool MapChangePending();
@@ -293,6 +298,14 @@ struct Pose
 };
 void Poses(std::vector<Pose>& out);
 void SetPose(const Pose& p);
+// A ped's correction smoothed in the drawing only (PortInterp::SetOffset): its drawn offset from the game's place after
+// this step, raw Fix16 and Ang16; false: no ped on foot of that id. PedOffset: the offset now (0 without one)
+bool SetPedOffset(uint32_t id, int32_t dx, int32_t dy, int32_t drot);
+bool PedOffset(uint32_t id, int32_t* dx, int32_t* dy, int32_t* drot);
+// Around a reconcile: the dead it moved, and the corpses it made of players shown alive, drawn gliding from where they
+// were shown (PortInterp::GlideFrom); the game keeps the server's place
+void NoteShownDead();
+void GlideDead();
 bool PoseOf(const EntityState& e, Pose* out); // a snapshot entity's, as Poses has them (players on foot, cars, peds)
 
 // --- Bots (navmap.cpp): the static map as a bot may know it. For every cell the height a walker is at, and which of
@@ -340,6 +353,8 @@ void DrawOverlay(); // the game calls it while drawing (Game::Draw, gPortDrawOve
 // A client's connection, over the frame: <corner> small at the bottom right (the ping), <centre> across the middle
 // (an outage); empty: nothing
 void SetNetStatus(const std::string& corner, const std::string& centre);
+// A client's bad connection icon, over the corner's lines: 0 none, 1 lag, 2 no snapshots (LinkLevel)
+void SetNetWarning(int level);
 // The scoreboard, over the middle of the frame instead of the round's panel while shown (scoreboard.cpp): the map's title,
 // two lines under it, the players by score (their name in their HUD colour, the local one marked)
 struct Scoreboard

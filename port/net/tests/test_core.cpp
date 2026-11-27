@@ -261,6 +261,7 @@ void TestMessages()
     w.maps = {"mp1-6p", "mp2-6p", "downtown-6p"};
     w.token = 0xC0FFEE11;
     w.game = 513;
+    w.zoom = -5;
     net::BitWriter bw;
     net::WriteWelcome(bw, w);
     net::BitReader br(bw.Data().data(), bw.ByteCount());
@@ -270,7 +271,7 @@ void TestMessages()
     CHECK(got.slot == 2 && got.players == 6 && got.gameType == 3 && got.fragLimit == 25 && got.gmp == w.gmp &&
           got.scr == w.scr && got.serverTick == 123456 && got.maps == w.maps && got.session == w.session && got.name == w.name &&
           got.map == w.map && got.print.gmp == w.print.gmp && got.print.sty == 7 && got.print.scr == 9 && got.token == w.token &&
-          got.game == 513);
+          got.game == 513 && got.zoom == -5);
 
     // The most player slots, the last one this client's; one more is refused
     for (int players : {net::kMaxPlayers, net::kMaxPlayers + 1})
@@ -295,7 +296,12 @@ void TestMessages()
     net::BitReader hr2(hw2.Data().data(), hw2.ByteCount());
     net::Hello hgot;
     CHECK(hr2.Bits(8) == net::kMsgHello && net::ReadHello(hr2, hgot) && hgot.version == net::kProtocolVersion && hgot.build == hello.build &&
-          hgot.name == "me" && hgot.carInfo == 0xFFFFFFFF && hgot.session == hello.session && hgot.token == hello.token);
+          hgot.name == "me" && hgot.carInfo == 0xFFFFFFFF && hgot.session == hello.session && hgot.token == hello.token && !hgot.bot);
+    hello.bot = true;
+    net::BitWriter hw3;
+    net::WriteHello(hw3, hello);
+    net::BitReader hr3(hw3.Data().data(), hw3.ByteCount());
+    CHECK(hr3.Bits(8) == net::kMsgHello && net::ReadHello(hr3, hgot) && hgot.bot && hgot.token == hello.token);
 
     // A command and a notice: a line of text each, cut at 120 characters
     for (net::MsgType type : {net::kMsgCommand, net::kMsgNotice})
@@ -333,6 +339,7 @@ void TestMessages()
     mc.game = 513;
     mc.players = (uint8_t)net::kMaxPlayers;
     mc.slot = (uint8_t)(net::kMaxPlayers - 1);
+    mc.endTick = 123456789;
     net::BitWriter mw;
     net::WriteMapChange(mw, mc);
     net::BitReader mr(mw.Data().data(), mw.ByteCount());
@@ -340,7 +347,7 @@ void TestMessages()
     net::MapChange mgot;
     CHECK(net::ReadMapChange(mr, mgot) && mgot.gmp == mc.gmp && mgot.sty == mc.sty && mgot.scr == mc.scr && mgot.game == 513 && mgot.map == mc.map &&
           mgot.print.sty == 12345 && mgot.print.gmp == 0 && mgot.players == net::kMaxPlayers &&
-          mgot.slot == net::kMaxPlayers - 1);
+          mgot.slot == net::kMaxPlayers - 1 && mgot.endTick == 123456789);
 
     // The last two have a key press: what it typed follows each (0xE9: an AZERTY's é)
     net::InputCmd cmds[5] = {{100, 1, 0}, {101, 1, 0}, {102, 0x10, 0}, {103, 0x3FFFFF, 0xE9}, {104, 0x3FFFFF, 'q'}};
@@ -692,6 +699,15 @@ void TestSpawnSpots()
             }
         }
     }
+    // The zone whose nearest other player is farthest, the first in turn among equals
+    const std::vector<net::SpawnZone> four = {{10, 10, 2, 2}, {50, 10, 2, 2}, {10, 50, 2, 2}, {50, 50, 2, 2}};
+    CHECK(net::SafeZone(four, 0, {}) == 0);
+    CHECK(net::SafeZone(four, 2, {}) == 2);
+    CHECK(net::SafeZone(four, 0, {{100, 100}}) == 0); // the farthest
+    CHECK(net::SafeZone(four, 0, {{13, 11}}) == 3); // 1 block from zone 0
+    CHECK(net::SafeZone(four, 1, {{13, 11}, {51, 20}}) == 2);
+    CHECK(net::SafeZone(four, 0, {{11, 11}, {51, 11}, {11, 51}, {45, 45}}) == 3);
+    CHECK(net::SafeZone(four, 2, {{31, 31}}) == 2); // as far from every zone: the first in turn
     printf("spawn spots ok\n");
 }
 

@@ -30,7 +30,7 @@ struct ServerConfig
     uint16_t port = kDefaultPort;
     engine::NetworkGame game; // game.players: <slots>
     int slots = 10; // the players on every map (--players, else NET_MAX_PLAYERS)
-    float interestRadius = 24.0f; // blocks around a client's player and its view that its snapshots cover (players: always)
+    float interestRadius = 24.0f; // at zoom 0 (ParseOptions scales it), blocks around a client's player and its view that its snapshots cover (players: always)
     int packets = 4; // a snapshot's packets at most (--packets, 1..8): a busy area's goes in parts
     LinkShape link; // the link conditioner (tests)
     std::vector<std::string> arena; // bot brains playing the first slots on the server itself (--arena)
@@ -58,7 +58,9 @@ class Server
         bool used = false;
         uint32_t peer = 0;
         std::string name;
+        bool bot = false; // a bot client's (its hello): it plays but doesn't vote; kept with the name of one that left
         uint32_t token = 0; // the welcome's: a reconnect shows it to have this slot back as it was
+        uint32_t joined = 0; // mJoins at its welcome
         uint32_t leftTick = 0; // the tick its connection went (a map change keeps the slot of one that may come back)
         uint32_t lastCmdTick = 0; // the newest command tick received (late ones too)
         uint32_t cmdTick[kRing] = {}; // received commands by tick % kRing
@@ -106,12 +108,16 @@ class Server
     void SendPings();
     void OnHello(uint32_t peer, BitReader& r);
     std::string Refusal(const Hello& hello, bool read) const; // why a hello's client can't play here ("": it can)
-    int FreeSlot(const std::string& name) const; // the slot a joining <name> gets (mSlots.size(): none)
+    bool KeptForReturn(const Slot& s) const;
+    int FreeSlot(const std::string& name, bool bot, bool kept) const; // the slot a joining <name> gets (mSlots.size(): none)
+    int BotSlotForPerson() const;
+    void MakeRoom(int slot);
+    void RecallArenaBots();
     int ReturningSlot(const Hello& hello) const; // the slot a reconnect's token is for, in use or not (-1: none)
     void OnCommands(int slot, BitReader& r);
     void StartGameOnce();
     void PollTransport();
-    bool Deserted() const; // nobody to play for: no client connected or connecting, no arena bot
+    bool Deserted() const; // nobody to play for: no client connected or connecting, no arena
     void OnEvent(const TransportEvent& e);
     void SetNextInputs(const Snapshot& world);
     void RunRounds(const Snapshot& world); // the round flow's tick and what it asks for
@@ -137,6 +143,7 @@ class Server
     std::vector<TransportEvent> mPending; // what Idle polled, for the next frame
     std::unordered_map<uint32_t, long long> mHelloWait; // peers connected that haven't said hello: since when (ms)
     uint32_t mTick = 0;
+    uint32_t mJoins = 0; // welcomes so far
     bool mStarted = false;
     uint32_t mGameStartTick = 0; // the tick the running game started at: its snapshots' first
     Stats mStats;

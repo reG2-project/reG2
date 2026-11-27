@@ -316,6 +316,8 @@ int main()
         uint32_t tick = 1;
         net::RoundActions a = f.Tick(tick, players);
         CHECK(!a.newRound && a.changeMap < 0 && f.State().phase == net::kPhaseResults && f.State().winner == 2);
+        f.Command(++tick, 1, "/map 1", players, a); // a bot's choice doesn't count
+        CHECK(!f.State().mapChoice[1] && a.notices.back().second == "Bots don't vote");
         f.Command(++tick, 0, "/map 2", players, a);
         CHECK(f.State().mapChoice[0] == 2);
         players[1].score = 0;

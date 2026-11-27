@@ -1,8 +1,7 @@
 // port/net (port/docs/netcode.md, "Maps and players"): where a network game's players start. The map's script gives
 // as many peds as it has PLAYER_PEDs; the players past them get one at the restart zones, as Handle_PLAYER_PED and
 // Player::InitPlayerPed make one, in a look of their own. A ped starting at a restart zone (those, a join, a respawn)
-// takes the block of it its slot picks (core/spawn_spots.hpp), from the map only, so the server and its clients place
-// them alike at any tick.
+// takes the block of it its slot picks (core/spawn_spots.hpp), at the zone farthest from the other living players.
 #include "internal.hpp"
 #include "../core/spawn_spots.hpp"
 #include "Source/Char_Pool.hpp"
@@ -85,7 +84,24 @@ int SlotOf(const Player* player, const Ped* ped)
     return -1;
 }
 
-// Ped::SpawnCharInZone: the player's block of <zone> (or of the next restart zones)
+// Where the other living players are, but <slot>: a wasted one's ped waits at its restart zone already
+std::vector<net::SpawnPlace> OtherPlayers(int slot)
+{
+    std::vector<net::SpawnPlace> others;
+    for (s32 i = 0; gGame_0x40 && i < gGame_0x40->mNumPlayers; i++)
+    {
+        const Player* p = gGame_0x40->mPlayers[i];
+        float px = 0, py = 0;
+        if (i != slot && p && p->mInUse && p->mPlayerPed && (!p->mPlayerPed->isDead() || p->mWastedOrBusted) && net::engine::PlayerPosition(i, &px, &py))
+        {
+            others.push_back(net::SpawnPlace{px, py});
+        }
+    }
+    return others;
+}
+
+// Ped::SpawnCharInZone: the player's block of the restart zone farthest from the other players (net::SafeZone, from
+// <zone> in turn), and of the next ones
 bool StartBlock(Ped* ped, gmp_map_zone* zone, s32* x, s32* y, s32* z)
 {
     const int slot = SlotOf(NULL, ped);
@@ -94,7 +110,12 @@ bool StartBlock(Ped* ped, gmp_map_zone* zone, s32* x, s32* y, s32* z)
     {
         if (zones[i] == zone)
         {
-            return SlotBlock(zones, (int)i, slot, x, y, z);
+            std::vector<net::SpawnZone> rects;
+            for (gmp_map_zone* r : zones)
+            {
+                rects.push_back(net::SpawnZone{r->mX, r->mY, r->mW, r->mH});
+            }
+            return SlotBlock(zones, net::SafeZone(rects, (int)i, OtherPlayers(slot)), slot, x, y, z);
         }
     }
     return false; // not a player's, or not a restart zone: the game's own spot

@@ -34,6 +34,7 @@
 #include <dlfcn.h>
 #include <execinfo.h>
 #endif
+#include "port/src/interpolation.hpp"
 #include "port/src/net_hooks.hpp"
 #include "port/src/rand/owner.hpp"
 #include "port/src/rand/state.hpp"
@@ -635,6 +636,46 @@ void net::engine::DebugCheckStaleLinks(const char* where, uint32_t snapTick)
     {
         printf("net: stale link check: %llu checks, %llu stale links seen\n", (unsigned long long)gStaleChecks,
                (unsigned long long)gStaleLinks);
+    }
+}
+
+void net::engine::DebugCheckShown(const char* where)
+{
+    static uint8_t sWrong[MAX_PLAYERS];
+    static int sInside[MAX_PLAYERS]; // frames in a row
+    if (!Debug().checkGrid || !gGame_0x40 || !gMap_0x370)
+    {
+        return;
+    }
+    for (int i = 0; i < PlayerCount() && i < MAX_PLAYERS; i++)
+    {
+        Player* p = GetPlayer(i);
+        Ped* ped = p && p->mInUse ? p->mPlayerPed : NULL;
+        Sprite* s = ped && !ped->mCar && !ped->isDead() ? CharSprite(ped) : NULL;
+        if (!s)
+        {
+            sWrong[i] = 0;
+            sInside[i] = 0;
+            continue;
+        }
+        // Sprite::Draw's reasons to leave it out, and a place inside a plain block, whose top is drawn over it: for a
+        // frame it can be a slope's height carried onto a flat block, which the next tick rounds to its level. Not a
+        // thrown ped (its char follows the throw's object, which ends in a wall alike on every end), nor a drowning
+        // one, sinking to the map's bottom
+        const bool thrown = PhaseOf(ped) == kPhaseThrown || PhaseOf(ped) == kPhaseSinking;
+        sInside[i] = !thrown && InsideBlock(s->mXy.x.mValue, s->mXy.y.mValue, s->mZpos.mValue) ? sInside[i] + 1 : 0;
+        const bool waiting = p->IsWaitingToRespawn(ped);
+        const bool invisible = ped->mBf21C.bInvisible && !p->mPowerUpTimers[power_up_indices::Invisibility_11] && !p->IsUser();
+        const bool inside = sInside[i] >= 2;
+        const uint8_t wrong = (waiting ? 1 : 0) | (invisible ? 2 : 0) | (inside ? 4 : 0);
+        if (wrong & ~sWrong[i])
+        {
+            printf("net: CHECK frame %u %s: player %d alive but not shown:%s%s%s, at (%.2f, %.2f, %.3f), ped state %d/%d\n", gDebugFrame,
+                   where, i, waiting ? " drawn as its body waiting to respawn" : "", invisible ? " invisible without the power-up" : "",
+                   inside ? " inside a block" : "", s->mXy.x.ToFloat(), s->mXy.y.ToFloat(), s->mZpos.ToFloat(), (int)ped->mPedState1,
+                   (int)ped->mPedState2);
+        }
+        sWrong[i] = wrong;
     }
 }
 
@@ -1449,8 +1490,8 @@ std::string DeathLogPed(const char* name, Ped* ped)
     std::string out = buf;
     if (c && s)
     {
-        snprintf(buf, sizeof(buf), " char %d/%d anim %d frame %d spr %d layer %d at %.2f,%.2f", (int)c->mPedState1, (int)c->mPedState2,
-                 (int)c->mAnimationState, (int)c->mAnimationFrame, (int)s->mTypeSpriteIdx, (int)s->mDrawLayer, s->mXy.x.ToFloat(),
+        snprintf(buf, sizeof(buf), " char %d/%d cs %d anim %d frame %d spr %d layer %d at %.2f,%.2f", (int)c->mPedState1, (int)c->mPedState2,
+                 (int)c->mCharState, (int)c->mAnimationState, (int)c->mAnimationFrame, (int)s->mTypeSpriteIdx, (int)s->mDrawLayer, s->mXy.x.ToFloat(),
                  s->mXy.y.ToFloat());
         out += buf;
     }
@@ -1462,32 +1503,88 @@ std::string DeathLogPed(const char* name, Ped* ped)
 }
 } // namespace
 
-void net::engine::DebugDeathLog()
+void net::engine::DebugDeathLog(bool server)
 {
     const uint32_t frame = gDebugFrame;
     static const bool on = getenv("GTA2_NET_DEATHLOG") != NULL;
     static int sAfter[MAX_PLAYERS];
+    // What stood for the player last frame (its ped, then its corpse while the player's, then kept), drawn there
+    struct Shown
+    {
+        const Sprite* mpSprite;
+        s16 mId;
+        float mX, mY;
+        int mAnim;
+        bool mCorpse;
+        int mKeptFrames; // its corpse followed after the respawn
+    };
+    static Shown sShown[MAX_PLAYERS];
     if (!on || !gGame_0x40)
     {
         return;
     }
+    const char* end = server ? "server" : "client";
     for (int i = 0; i < PlayerCount() && i < MAX_PLAYERS; i++)
     {
         Player* p = GetPlayer(i);
         Ped* ped = p ? p->mPlayerPed : NULL;
-        if (!p || !ped || i == LocalPlayer())
+        Shown& last = sShown[i];
+        if (!p || !ped || !ped->mGameObject || (!server && i == LocalPlayer()))
         {
+            last.mpSprite = NULL;
             continue;
         }
         const bool odd = ped->mPedState1 == ped_state_1::immobilized_8 || ped->isDead() || p->mWastedOrBusted || p->mAuxPed ||
             ped->mHealth < 100;
         sAfter[i] = odd ? 10 : sAfter[i] - 1;
+        // The corpse once there is, then the same sprite after the respawn (kept), else the ped
+        Ped* aux = p->mAuxPed && p->mAuxPed->mGameObject ? p->mAuxPed : NULL;
+        const Sprite* s = aux ? aux->mGameObject->mSpritePtr : NULL;
+        const Char* c = aux ? aux->mGameObject : NULL;
+        bool kept = false;
+        if (!s && last.mpSprite && last.mCorpse && last.mpSprite->mInstanceId == last.mId && last.mKeptFrames < 150)
+        {
+            for (Ped* q = gPedPool->mPool.mpPrev; q && !c; q = q->mpNext)
+            {
+                c = q->mGameObject && q->mGameObject->mSpritePtr == last.mpSprite && q->isDead() ? q->mGameObject : NULL;
+            }
+            s = c ? last.mpSprite : NULL;
+            kept = s != NULL;
+        }
+        if (!s)
+        {
+            c = ped->mGameObject;
+            s = c->mSpritePtr;
+        }
+        if (!s)
+        {
+            last.mpSprite = NULL;
+            continue;
+        }
+        float x = s->mXy.x.ToFloat(), y = s->mXy.y.ToFloat();
+        float gx, gy;
+        if (PortInterp::GlideOffset(s, &gx, &gy))
+        {
+            x += gx, y += gy;
+        }
+        const bool corpse = s != ped->mGameObject->mSpritePtr;
+        const float dx = x - last.mX, dy = y - last.mY, d = sqrtf(dx * dx + dy * dy);
+        if (last.mpSprite && corpse && !last.mCorpse)
+        {
+            printf("net: frame %u, %s deathjump p%d %.2f\n", frame, end, i, d);
+        }
+        else if (last.mpSprite && corpse && (d > 0.01f || c->mAnimationState != last.mAnim))
+        {
+            printf("net: frame %u, %s corpsemove p%d %.3f anim %d frame %d%s\n", frame, end, i, d, (int)c->mAnimationState,
+                   (int)c->mAnimationFrame, kept ? " kept" : "");
+        }
+        last = Shown{s, s->mInstanceId, x, y, (int)c->mAnimationState, corpse, kept ? last.mKeptFrames + 1 : 0};
         if (sAfter[i] <= 0)
         {
             continue;
         }
-        printf("net: frame %u, tick %u, death p%d: wasted %d count %d cam %d%s%s\n", frame, gpRng ? (uint32_t)gpRng->get_cur_rng() : 0, i,
-               (int)p->mWastedOrBusted, (int)p->mDeathCountdown, (int)p->mCameraMode, DeathLogPed("ped", ped).c_str(),
+        printf("net: frame %u, tick %u, %s death p%d: wasted %d count %d cam %d%s%s\n", frame, gpRng ? (uint32_t)gpRng->get_cur_rng() : 0,
+               end, i, (int)p->mWastedOrBusted, (int)p->mDeathCountdown, (int)p->mCameraMode, DeathLogPed("ped", ped).c_str(),
                DeathLogPed("aux", p->mAuxPed).c_str());
     }
 }

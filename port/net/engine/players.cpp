@@ -931,6 +931,12 @@ Ped* net::engine::ViewedPed(Player* p)
     return p->mCameraMode == 2 && p->mAuxPed ? DeathViewPed(p, p->mAuxPed) : p->mPlayerPed;
 }
 
+void net::engine::SpawnKit(Player* p)
+{
+    p->AddWeaponWithAmmo(weapon_type::smg, 50);
+    p->mPowerUpTimers[power_up_indices::Armor_3] = 10; // Player::CollectPowerUp's
+}
+
 s32 net::engine::KillCamTicks(Player* p, Player* killer)
 {
     const bool cam = killer && killer != p && p->get_idx() < MAX_PLAYERS && killer->get_idx() < MAX_PLAYERS;

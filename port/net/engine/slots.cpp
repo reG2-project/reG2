@@ -4,6 +4,7 @@
 // as the map script's PLAYER_PED makes one (ScriptThread::Handle_PLAYER_PED) and Player::InitPlayerPed
 // sets it up, but with the slot's own weapons kept: InitPlayerPed would allocate a new set each time.
 #include "internal.hpp"
+#include "port/src/net_hooks.hpp"
 #include "Source/Char_Pool.hpp"
 #include "Source/Game.hpp"
 #include "Source/GameSession.hpp"
@@ -173,6 +174,10 @@ void net::engine::PutInGame(int slot, bool freshScore)
             ped->ResetForPlayerRespawn();
         }
         EndDeath(p);
+        if (gPortSpawnKit)
+        {
+            gPortSpawnKit(p);
+        }
         // Its camera there too, not panning over for seconds: until it sees the ped, the ped counts as off screen, and
         // a dead player ped off screen for 200 ticks is freed as a corpse (Ped::PoolUpdate), with the player still
         // pointing at it (a crash at its respawn, or once the memory is another ped)
@@ -227,6 +232,10 @@ void net::engine::PutInGame(int slot, bool freshScore)
     p->mAuxGameCamera.UpdateFollowPedCamera(ped);
     p->mAuxGameCamera.CommitPendingTarget();
     p->mAuxCamActive = false;
+    if (gPortSpawnKit)
+    {
+        gPortSpawnKit(p);
+    }
 }
 
 // For a slot that joins and every slot of a new game, not only at a round's start: else the server's players have

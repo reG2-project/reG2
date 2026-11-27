@@ -23,6 +23,7 @@
 #include "Source/rng.hpp"
 #include "Source/sprite.hpp"
 #include "Source/GameSession.hpp"
+#include "Source/map_0x370.hpp"
 #include <ctype.h>
 #include <math.h>
 #include <string.h>
@@ -142,6 +143,17 @@ bool net::engine::OnMap(const Fix16& x, const Fix16& y, uint32_t id)
     }
     printf("net: CHECK entity %u moved off the map, to (%.2f, %.2f): not moved\n", id, x.ToFloat(), y.ToFloat());
     return false;
+}
+
+bool net::engine::InsideBlock(int32_t x, int32_t y, int32_t z)
+{
+    const int32_t bx = x >> 14, by = y >> 14, bz = z >> 14;
+    if (!gMap_0x370 || bx < 0 || bx > 255 || by < 0 || by > 255 || bz < 0 || bz > 7)
+    {
+        return false;
+    }
+    const gmp_block_info* block = gMap_0x370->GetBlock(bx, by, bz);
+    return block && GET_BLOCK_TYPE(block->mSlopeType) != AIR && GET_SLOPE_BITS(block->mSlopeType) == 0;
 }
 
 void net::engine::MovePed(Ped* ped, const Fix16& x, const Fix16& y, const Fix16& z, const Ang16& rot)
@@ -269,6 +281,7 @@ void net::engine::OfferMenu(int ready, const std::string& vote)
 
 bool port_PadMode(); // compat/src/pad.cpp
 double port_ClockSpeed(); // compat/src/kernel.cpp: GTA2_SPEED
+unsigned long long port_NowNs(); // compat/src/video_port.cpp
 
 void net::engine::SetRoundPad(bool results)
 {
@@ -313,9 +326,14 @@ void net::engine::SetTickMs(int ms)
     }
 }
 
-void net::engine::SetPaceMs(int ms)
+long long net::engine::GameNowUs()
 {
-    gPortNetPaceMs = ms;
+    return (long long)(port_NowNs() / 1000);
+}
+
+void net::engine::SetPaceUs(int us)
+{
+    gPortNetPaceUs = us;
 }
 
 void net::engine::SeedRandom(uint32_t seed)
@@ -446,6 +464,106 @@ bool net::engine::PoseOf(const EntityState& e, Pose* out)
         return true;
     }
     return false;
+}
+
+namespace
+{
+// The dead as shown before a reconcile: every corpse's sprite, and each player's place and whether it was wasted
+struct ShownDead
+{
+    Sprite* mpSprite;
+    s16 mId;
+    int32_t mX, mY;
+};
+std::vector<ShownDead> gShownDead;
+int32_t gShownPlayer[MAX_PLAYERS][2];
+bool gShownAlive[MAX_PLAYERS];
+// A corpse the reconcile moved glides there this many ticks; further than kGlideFar it jumps
+const double kGlideTicks = 10;
+const int32_t kGlideFar = 2 << 14;
+
+void GlideFromShown(Sprite* s, int32_t x, int32_t y)
+{
+    const int32_t dx = x - s->mXy.x.mValue, dy = y - s->mXy.y.mValue;
+    if ((dx || dy) && abs(dx) <= kGlideFar && abs(dy) <= kGlideFar)
+    {
+        PortInterp::GlideFrom(s, dx / 16384.0f, dy / 16384.0f, kGlideTicks);
+    }
+}
+} // namespace
+
+void net::engine::NoteShownDead()
+{
+    gShownDead.clear();
+    for (Ped* p = gPedPool->mPool.mpPrev; p; p = p->mpNext)
+    {
+        if (Sprite* s = p->isDead() ? CharSprite(p) : NULL)
+        {
+            gShownDead.push_back(ShownDead{s, s->mInstanceId, s->mXy.x.mValue, s->mXy.y.mValue});
+        }
+    }
+    for (int i = 0; i < PlayerCount() && i < MAX_PLAYERS; i++)
+    {
+        Player* p = GetPlayer(i);
+        Sprite* s = p && p->mInUse && p->mPlayerPed && !p->mWastedOrBusted ? CharSprite(p->mPlayerPed) : NULL;
+        gShownAlive[i] = s != NULL;
+        gShownPlayer[i][0] = s ? s->mXy.x.mValue : 0;
+        gShownPlayer[i][1] = s ? s->mXy.y.mValue : 0;
+    }
+}
+
+void net::engine::GlideDead()
+{
+    for (const ShownDead& d : gShownDead)
+    {
+        if (d.mpSprite->mInstanceId == d.mId)
+        {
+            GlideFromShown(d.mpSprite, d.mX, d.mY);
+        }
+    }
+    // A player wasted by the reconcile: its corpse from where the player was shown
+    for (int i = 0; i < PlayerCount() && i < MAX_PLAYERS; i++)
+    {
+        Player* p = GetPlayer(i);
+        Sprite* s = p && gShownAlive[i] && p->mWastedOrBusted && p->mAuxPed ? CharSprite(p->mAuxPed) : NULL;
+        if (s)
+        {
+            GlideFromShown(s, gShownPlayer[i][0], gShownPlayer[i][1]);
+        }
+    }
+    gShownDead.clear();
+}
+
+namespace
+{
+Sprite* OffsetSprite(uint32_t id)
+{
+    using namespace net::engine;
+    Ped* ped = IsPlayerId(id) ? InGamePed((int)id - 1) : id >= kPedIdBase ? ReplicaPed(id) : NULL;
+    return ped && !ped->mCar ? CharSprite(ped) : NULL;
+}
+} // namespace
+
+bool net::engine::SetPedOffset(uint32_t id, int32_t dx, int32_t dy, int32_t drot)
+{
+    Sprite* s = OffsetSprite(id);
+    if (s)
+    {
+        PortInterp::SetOffset(s, dx / 16384.0f, dy / 16384.0f, drot);
+    }
+    return s != NULL;
+}
+
+bool net::engine::PedOffset(uint32_t id, int32_t* dx, int32_t* dy, int32_t* drot)
+{
+    f32 fx = 0, fy = 0;
+    s32 rot = 0;
+    const Sprite* s = OffsetSprite(id);
+    const bool on = s && PortInterp::OffsetOf(s, &fx, &fy, &rot);
+    *dx = (int32_t)(fx * 16384.0f);
+    *dy = (int32_t)(fy * 16384.0f);
+    *drot = rot;
+    return on;
 }
 
 void net::engine::SetPose(const Pose& pose)

@@ -18,7 +18,8 @@ namespace
 {
 const int kSaves = 32; // ticks a snapshot may be behind and still be reconciled (about 1 s)
 const int kMaxFastForward = 8; // ticks our commands may come late and be caught up at once (FastForward); more: a jump
-const int kMaxAhead = 20; // ticks our commands may be early beyond two before a jump back; from 12 on, slower pacing
+const uint32_t kMaxMapChangePause = 300; // ticks a map change's end may be off; further: a bad end tick
+const int kMaxAhead = 20; // ticks our commands may be early beyond two before a jump back
 const int kStallMs = 700; // no snapshot for this long: the connection is out (ENet drops it after 5 to 10 s)
 const int kReconnectMs = 3000; // between attempts to connect again
 const int kGiveUpMs = 30000; // reconnecting this long: the server is gone, back to the menu
@@ -72,9 +73,12 @@ void net::Client::Welcomed(const Welcome& welcome, engine::NetworkGame* pGame)
     pGame->timeLimitMin = welcome.timeLimitMin;
     pGame->tickMs = welcome.tickMs;
     mTickMs = welcome.tickMs ? welcome.tickMs : 33;
+    mPacer.Reset(mTickMs * 1000);
     mGameType = welcome.gameType;
     mFragLimit = (int)welcome.fragLimit;
     pGame->police = welcome.police;
+    pGame->kit = welcome.kit;
+    pGame->zoom = welcome.zoom;
     pGame->gmp = welcome.gmp;
     pGame->sty = welcome.sty;
     pGame->scr = welcome.scr;
@@ -152,6 +156,7 @@ int net::Client::PollConnect(engine::NetworkGame* pGame, std::string* error)
             hello.build = mConfig.build;
             hello.name = mConfig.name;
             hello.carInfo = engine::DataFileCrc("nyc.gci");
+            hello.bot = !mConfig.bot.empty() && !Env().botVoteMap2;
             BitWriter w;
             WriteHello(w, hello);
             mTransport->Send(0, kChannelReliable, w.Data().data(), w.ByteCount(), true);
@@ -397,9 +402,15 @@ void net::Client::OnSnapshot(BitReader& r)
     mReceived[h.tick % kRing] = snap;
     mForwarded[h.tick % kRing] = h.forwarded;
     mLatestTick = h.tick;
+    mWarning.OnSnapshot(NowMs(), h.tick);
     mLink.snapshots++;
     mSlack = (int)h.lastCmdTick - (int)(h.tick + 1);
     mSlackKnown = mSynced && h.lastCmdTick > mJumpTick; // it has heard of the ticks since our last jump
+    mPacer.OnSnapshot(engine::GameNowUs(), h.tick);
+    if (mSlackKnown)
+    {
+        mPacer.OnSlack(mSlack);
+    }
     mNewSnapshot = true;
     mLastSnapshotMs = NowMs();
 }
@@ -487,7 +498,9 @@ void net::Client::RecordShown()
         float x, y;
         if (engine::PlayerPosition(i, &x, &y))
         {
-            rec.players.push_back(engine::ReplicaPos{(uint32_t)i + 1, x, y});
+            int32_t ox, oy, orot; // as drawn
+            engine::PedOffset((uint32_t)i + 1, &ox, &oy, &orot);
+            rec.players.push_back(engine::ReplicaPos{(uint32_t)i + 1, x + engine::Blocks(ox), y + engine::Blocks(oy)});
         }
     }
     rec.shownTick = mTick;
@@ -590,6 +603,7 @@ void net::Client::Reconcile(const Snapshot& snap)
     }
     std::vector<engine::Pose> before; // what this frame would have shown, to blend the correction in
     engine::Poses(before);
+    engine::NoteShownDead();
     const engine::LocalChat chat = engine::TakeLocalChat();
     using Clock = std::chrono::steady_clock;
     const auto us = [](Clock::time_point a, Clock::time_point b) {
@@ -628,6 +642,10 @@ void net::Client::Reconcile(const Snapshot& snap)
     mLink.reconciles++;
     engine::ApplyScores(snap);
     Blend(before);
+    if (Env().blend > 0 && Env().blend < 1)
+    {
+        engine::GlideDead();
+    }
 }
 
 // The ticks after <s> again, to ours, with the inputs we used (other players: their last known input)
@@ -723,13 +741,29 @@ void net::Client::Blend(const std::vector<engine::Pose>& shown)
             }
         }
         mProbe.Correction(mFrame, n, dx, dy, dr, mReceived[mLatestTick % kRing]);
+        const bool self = n.id == (uint32_t)mSlot + 1 || (selfCar && n.id == selfCar);
+        if (!engine::IsCarId(n.id))
+        {
+            // A ped's blend is drawn only: the game keeps the corrected place (a blended one can be inside a block, a
+            // slope's or a fall's height carried over its edge), drawn off it by a part of the error shown
+            int32_t ox, oy, orot;
+            engine::PedOffset(n.id, &ox, &oy, &orot);
+            const int32_t ex = b.x + ox - n.x, ey = b.y + oy - n.y;
+            const int32_t er = ((b.rot + orot - n.rot) % 1440 + 1440 + 720) % 1440 - 720;
+            const float error = sqrtf((float)ex * ex + (float)ey * ey) / (float)kFar;
+            const float alpha = self ? env.blendSelf : env.blend + (env.blendFar - env.blend) * (error < 1 ? error : 1);
+            const bool snap = jumped || abs(ex) > kFar || abs(ey) > kFar || abs(dz) > kFar || alpha >= 1 || alpha <= 0;
+            const float keep = snap ? 0.0f : 1.0f - alpha;
+            engine::SetPedOffset(n.id, (int32_t)(ex * keep), (int32_t)(ey * keep), (int32_t)(er * keep));
+            continue;
+        }
         if (jumped || abs(dz) > kFar || (!dx && !dy && !dz && !dr))
         {
             continue;
         }
         // A larger part of a larger error (it shows the wrong place longer), and its own part for the local player
         const float error = sqrtf((float)dx * dx + (float)dy * dy) / (float)kFar;
-        const float alpha = n.id == (uint32_t)mSlot + 1 || (selfCar && n.id == selfCar) ? env.blendSelf : env.blend + (env.blendFar - env.blend) * (error < 1 ? error : 1);
+        const float alpha = self ? env.blendSelf : env.blend + (env.blendFar - env.blend) * (error < 1 ? error : 1);
         if (alpha >= 1 || alpha <= 0)
         {
             continue; // the corrected state as it is
@@ -999,7 +1033,7 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
             else if (type == kMsgReject && mConnected && ReadReject(r, reject))
             {
                 printf("net: frame %u, the server put us out: %s\n", mFrame, Printable(reject.reason).c_str());
-                const bool shown = reject.reason == "kicked by vote" || reject.reason == "the server closed";
+                const bool shown = reject.reason == "kicked by vote" || reject.reason == "the server closed" || reject.reason == "a player took your slot";
                 LeaveToMenu(shown ? reject.reason.c_str() : "the server put us out");
             }
             else if (type == kMsgReject && !mConnected && ReadReject(r, reject))
@@ -1019,6 +1053,7 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
             hello.build = mConfig.build;
             hello.name = mConfig.name;
             hello.carInfo = engine::DataFileCrc("nyc.gci");
+            hello.bot = !mConfig.bot.empty() && !Env().botVoteMap2;
             hello.session = mSession; // the server gives us our slot back by them, with its score
             hello.token = mToken;
             BitWriter w;
@@ -1041,18 +1076,20 @@ void net::Client::HandleEvents(const std::vector<TransportEvent>& events)
     }
 }
 
-// The server's next map: this game ends with the server's (after the same pause) and the next starts on it
+// The server's next map: this game ends at the server's end tick, as the server's does, and the next starts on it
 void net::Client::OnMapChange(BitReader& r)
 {
     MapChange m;
     if (ReadMapChange(r, m))
     {
-        ChangeGame(m.map, m.gmp, m.sty, m.scr, m.print, m.game, m.players, m.slot, 90);
+        // Not synced, our ticks don't run: at once
+        const uint32_t end = mSynced ? std::min(m.endTick, mTick + kMaxMapChangePause) : 0;
+        ChangeGame(m.map, m.gmp, m.sty, m.scr, m.print, m.game, m.players, m.slot, end);
     }
 }
 
 bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, const std::string& sty, const std::string& scr, const MapPrint& print,
-                             int game, int players, int slot, int pauseTicks)
+                             int game, int players, int slot, uint32_t endTick)
 {
     std::string missing;
     if (players <= slot)
@@ -1067,8 +1104,8 @@ bool net::Client::ChangeGame(const std::string& map, const std::string& gmp, con
         LeaveToMenu(missing.c_str());
         return false;
     }
-    printf("net: frame %u, the next map: %s%s\n", mFrame, scr.c_str(), slot != mSlot ? (", as player " + std::to_string(slot)).c_str() : "");
-    engine::ChangeMap(gmp, sty, scr, players, slot, pauseTicks);
+    printf("net: frame %u, tick %u (%lld ms), the next map: %s%s\n", mFrame, mTick, NowMs(), scr.c_str(), slot != mSlot ? (", as player " + std::to_string(slot)).c_str() : "");
+    engine::ChangeMap(gmp, sty, scr, players, slot, mTick, endTick);
     mNextSlot = slot;
     mScr = scr;
     mMapTitle = MapTitle(map);
@@ -1081,6 +1118,7 @@ void net::Client::StartOver()
     mGeneration = engine::GameGeneration();
     mSlot = mNextSlot;
     mSynced = false;
+    mWarning.Reset();
     mNewSnapshot = false;
     mTakenTick = 0;
     // The old game ran on through the map change's pause into the new one's first ticks: its inputs (sent as commands
@@ -1103,7 +1141,10 @@ void net::Client::StartOver()
     mKnownTick = 0;
     mBot.reset(); // and its map of the old one
     mNavMap.reset();
-    printf("net: frame %u, a new game\n", mFrame);
+    mGameStartMs = NowMs();
+    mSyncFrame = 0;
+    mGameJumps = mGameCatchUps = 0;
+    printf("net: frame %u, tick %u (%lld ms), a new game\n", mFrame, mTick, mGameStartMs);
     engine::PrintSoundDiag(("frame " + std::to_string(mFrame) + ", the new game").c_str());
 }
 
@@ -1133,6 +1174,8 @@ void net::Client::FastForward(int ticks)
     mSlackKnown = false; // until a snapshot answers commands for the new ticks
     mJumpTick = mTick;
     mStats.fastForwards++;
+    mGameCatchUps++;
+    mWarning.OnCatchUp(NowMs());
     printf("net: frame %u, our commands came late: %d ticks run at once\n", mFrame, ticks);
 }
 
@@ -1145,7 +1188,15 @@ void net::Client::Resync(const Snapshot& snap)
     if (mSynced)
     {
         mStats.jumps++;
+        mGameJumps++;
+        mWarning.OnCatchUp(NowMs());
         printf("net: frame %u, a jump to tick %u (our commands %d ticks off two early)\n", mFrame, mTick, off);
+    }
+    else
+    {
+        mSyncFrame = mFrame;
+        printf("net: frame %u, synced at tick %u, server %u (%lld ms, %lld after this game's start)\n", mFrame, mTick, snap.tick, NowMs(),
+               mGameStartMs ? NowMs() - mGameStartMs : 0);
     }
     mSynced = true;
     mSlackKnown = false; // until a snapshot answers commands for the new ticks
@@ -1292,16 +1343,16 @@ void net::Client::PrintStats(const Snapshot& snap)
     mStats = Stats();
 }
 
-// Keep our commands about two ticks early: a little faster when they are late, slower when far ahead
-int net::Client::PacedTickMs() const
+// Our ticks at the server's measured rate, slower or faster as our commands are early or late (pacing.hpp)
+int net::Client::PacedTickUs()
 {
-    if (!mSynced || !mSlackKnown)
+    const int us = mPacer.NextUs(mSynced && mSlackKnown);
+    if (Env().paceLog && mTick % 30 == 0)
     {
-        return mTickMs;
+        printf("net: frame %u, pace: our commands %d ticks early (%.2f on average%s), the server's tick %.2f ms, ours %.2f ms\n", mFrame,
+               mSlack, mPacer.SlackAverage(), mPacer.SlackKnown() ? "" : ", not counted", mPacer.ServerTickUs() / 1000, us / 1000.0);
     }
-    // Late: a quarter faster; far ahead: a fifth slower, before it comes to a jump (kMaxAhead); 3 or more: a tenth slower,
-    // as every tick early lengthens the prediction of the others (a server that lost ticks leaves us there)
-    return mSlack < 1 ? mTickMs * 3 / 4 : mSlack - 2 > 12 ? mTickMs + mTickMs / 5 : mSlack > 2 ? mTickMs + mTickMs / 10 : mTickMs;
+    return us;
 }
 
 // The next tick's inputs: ours (predicted and sent), the others' last known
@@ -1392,7 +1443,7 @@ void net::Client::Rejoined(const Welcome& welcome)
         LeaveToMenu("the server has us back as another player");
         return;
     }
-    if (otherGame && !ChangeGame(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, welcome.game, welcome.players, welcome.slot, 1))
+    if (otherGame && !ChangeGame(welcome.map, welcome.gmp, welcome.sty, welcome.scr, welcome.print, welcome.game, welcome.players, welcome.slot, 0))
     {
         return;
     }
@@ -1405,6 +1456,7 @@ void net::Client::Rejoined(const Welcome& welcome)
     mLatestTick = 0;
     mServerGame = welcome.game;
     mLastSnapshotMs = NowMs();
+    mWarning.Reset();
     for (Snapshot& s : mReceived)
     {
         s = Snapshot();
@@ -1471,6 +1523,13 @@ void net::Client::ShowStatus()
         centre = "Connection interrupted";
     }
     engine::SetNetStatus(RoundCorner() + (mConnected && mPingShown ? mLinkShown + "ping " + std::to_string(mPingShown) : ""), centre);
+    const LinkLevel level = mLeft ? kLinkGood : mWarning.Update(now, mConnected, mSynced, mPingMs);
+    if (level != mWarningShown)
+    {
+        printf("net: frame %u, link warning %d (ping %u, usual %u)\n", mFrame, (int)level, mPingMs, mWarning.Baseline());
+        mWarningShown = level;
+    }
+    engine::SetNetWarning(level);
 }
 
 void net::Client::SendLeave(const std::string& why)
@@ -1535,7 +1594,7 @@ void net::Client::Frame()
 void net::Client::Step()
 {
     mFrame++;
-    engine::KeepMapChange();
+    engine::KeepMapChange(mTick);
     if (engine::GameGeneration() != mGeneration)
     {
         StartOver();
@@ -1596,13 +1655,18 @@ void net::Client::Step()
         TakeSnapshot();
         AnnounceRound();
     }
+    if (mSynced && mSyncFrame && mFrame == mSyncFrame + 90)
+    {
+        printf("net: frame %u, 90 frames after the sync: tick %u, server %u, our commands %d ticks early; %u jumps, %u catch-ups at once since\n", mFrame,
+               mTick, mLatestTick, mSlackKnown ? mSlack : -99, mGameJumps, mGameCatchUps);
+    }
     if (mSynced)
     {
         RecordShown();
     }
     mProbe.Jerk(mFrame, mSlot, mSynced, mReceived[mLatestTick % kRing], mReceived[(mLatestTick - 1) % kRing]);
     engine::SetTickMs(mTickMs); // every frame: a restore brings back the game's tick length too
-    engine::SetPaceMs(mReplay ? 0 : PacedTickMs()); // the server's tick length in the game, only the wait paced
+    engine::SetPaceUs(mReplay ? 0 : PacedTickUs()); // the server's tick length in the game, only the wait paced
     SetNextInputs(local);
     if (mSynced)
     {
@@ -1968,30 +2032,6 @@ void net::Client::ShowScoreboard(const std::vector<engine::PlayerRow>& players, 
     engine::SetScoreboard(&board);
 }
 
-// A bot's map in the results: one of the others, picked by its slot and the frame (a vote among bots isn't always the
-// same map); map 2 for a test (GTA2_NET_BOTMAP2)
-uint32_t net::Client::BotMapChoice() const
-{
-    if (Env().botVoteMap2 || mMaps.size() < 2)
-    {
-        return mMaps.size() > 1 ? 2 : 1;
-    }
-    auto lower = [](std::string t) {
-        std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) { return (char)tolower(c); });
-        return t;
-    };
-    const std::string now = lower(mScr.substr(0, mScr.rfind('.')));
-    std::vector<uint32_t> others;
-    for (size_t m = 0; m < mMaps.size(); m++)
-    {
-        if (lower(mMaps[m]) != now)
-        {
-            others.push_back((uint32_t)m + 1);
-        }
-    }
-    return others.empty() ? 1 : others[(mSlot * 7 + mFrame) % others.size()];
-}
-
 void net::Client::BotRound()
 {
     // Not synced: the round is the last game's still, its flags by the slots before a map change renumbered them
@@ -2005,11 +2045,11 @@ void net::Client::BotRound()
     {
         SendCommand("/ready");
     }
-    else if (r.phase == kPhaseResults && !mMaps.empty() && mSlot < kRoundSlots && !r.mapChoice[mSlot])
+    else if (Env().botVoteMap2 && r.phase == kPhaseResults && !mMaps.empty() && mSlot < kRoundSlots && !r.mapChoice[mSlot])
     {
-        SendCommand("/map " + std::to_string(BotMapChoice()));
+        SendCommand("/map " + std::to_string((int)mMaps.size() >= Env().botVoteMap ? Env().botVoteMap : 1));
     }
-    else if (r.voteKind != kVoteNone && mSlot < kRoundSlots && !((r.voteYes | r.voteNo) >> mSlot & 1))
+    else if (Env().botVoteMap2 && r.voteKind != kVoteNone && mSlot < kRoundSlots && !((r.voteYes | r.voteNo) >> mSlot & 1))
     {
         SendCommand(r.voteKind == kVoteKick && r.voteArg == mSlot ? "/no" : "/yes"); // anything but its own kick
     }

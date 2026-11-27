@@ -881,7 +881,7 @@ class SimpleBot : public DecidingBot
             const bool standing = best <= (fists ? 0.2f : 1.2f);
             uint32_t b = standing ? Steer(err) : mWalker.Walk(v, target->id, target->x, target->y, target->z);
             // Standing, the last 20 degrees by one-tick taps (12 units each: a held turn overshoots). A shot goes where
-            // it faces, or a machine gun's to the ped it locks on to, within 16 degrees of that (Ped::ComputeAimAngle).
+            // it faces, or a machine gun's to the ped it locks on to (Ped::ComputeAimAngle).
             if (standing && !b && abs(err) > 16 && v.frame % 3 == 0)
             {
                 b = err > 0 ? net::kBtnLeft : net::kBtnRight;

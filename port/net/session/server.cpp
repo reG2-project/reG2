@@ -266,14 +266,23 @@ std::string net::Server::Refusal(const Hello& hello, bool read) const
     return "";
 }
 
-// The slot this name had (a client back after its connection dropped: the same player), else the first free one
-// that nobody left, else the first free one
-int net::Server::FreeSlot(const std::string& name) const
+// A slot whose person dropped lately: kept for a reconnect
+bool net::Server::KeptForReturn(const Slot& s) const
 {
-    int any = (int)mSlots.size(), unclaimed = any;
+    const uint32_t tps = 1000 / (mConfig.game.tickMs > 0 ? mConfig.game.tickMs : 33);
+    return !s.used && !s.bot && !s.name.empty() && mTick - s.leftTick < kComeBackSec * tps;
+}
+
+// The slot this name had (a client back after its connection dropped: the same player), else the first free one
+// that nobody left, else the first free one. A slot kept for a person's reconnect only with <kept>, never for a bot
+int net::Server::FreeSlot(const std::string& name, bool bot, bool kept) const
+{
+    const int none = (int)mSlots.size();
+    int any = none, unclaimed = none, held = none;
     for (int i = (int)mSlots.size() - 1; i >= 0; i--)
     {
-        if (mSlots[i].used)
+        const bool forReturn = KeptForReturn(mSlots[i]);
+        if (mSlots[i].used || (bot && forReturn))
         {
             continue;
         }
@@ -281,10 +290,76 @@ int net::Server::FreeSlot(const std::string& name) const
         {
             return i;
         }
-        any = i;
+        held = forReturn ? i : held;
+        any = forReturn ? any : i;
         unclaimed = mSlots[i].name.empty() ? i : unclaimed;
     }
-    return unclaimed < (int)mSlots.size() ? unclaimed : any;
+    return unclaimed < none ? unclaimed : any < none ? any : kept ? held : none;
+}
+
+// The bot whose slot a person joining a full server takes: the last arena bot, else the bot client that joined last
+// (-1: none)
+int net::Server::BotSlotForPerson() const
+{
+    int arena = -1, client = -1;
+    for (int i = 0; i < (int)mSlots.size(); i++)
+    {
+        const Slot& s = mSlots[i];
+        arena = s.used && s.peer == kArenaPeer ? i : arena;
+        client = s.used && s.bot && s.peer != kArenaPeer && (client < 0 || s.joined > mSlots[client].joined) ? i : client;
+    }
+    return arena >= 0 ? arena : client;
+}
+
+// A bot out for a person: its ped goes, a bot client is told why and disconnected, an arena bot stands aside
+void net::Server::MakeRoom(int slot)
+{
+    Slot& s = mSlots[slot];
+    const std::string name = s.name;
+    if (s.peer == kArenaPeer)
+    {
+        mArena.Bench(slot, true);
+    }
+    else
+    {
+        BitWriter w;
+        Reject reject;
+        reject.reason = "a player took your slot";
+        WriteReject(w, reject);
+        mTransport->Send(s.peer, kChannelReliable, w.Data().data(), w.ByteCount(), true);
+        mTransport->Flush();
+        mTransport->Disconnect(s.peer);
+    }
+    printf("net: player %d (%s) makes room for a player\n", slot, name.c_str());
+    mRounds.Left(slot);
+    s = Slot(); // the name and token aren't kept for a return
+    if (!engine::MapChangePending())
+    {
+        engine::NeverInGame(slot);
+    }
+    Notice(-1, name + " left for a player");
+}
+
+// An arena bot back in its slot once no person has it or may come back to it: the server keeps its bots
+void net::Server::RecallArenaBots()
+{
+    for (int i = 0; mStarted && !engine::MapChangePending() && i < mArena.Count(); i++)
+    {
+        Slot& s = mSlots[i];
+        if (s.used || KeptForReturn(s))
+        {
+            continue;
+        }
+        s = Slot();
+        s.used = true;
+        s.peer = kArenaPeer;
+        s.name = "bot" + std::to_string(i);
+        mArena.Bench(i, false);
+        engine::PutInGame(i, true);
+        engine::SetPlayerName(i, s.name.c_str());
+        printf("net: %s is back as player %d\n", s.name.c_str(), i);
+        Notice(-1, s.name + " joined");
+    }
 }
 
 // A client back after its connection dropped, whose old connection may not have timed out here yet
@@ -325,7 +400,14 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
         }
         const int back = ReturningSlot(hello);
         std::string name = back >= 0 ? mSlots[back].name : PlayerName(hello.name, std::vector<std::string>());
-        int slot = back >= 0 ? back : FreeSlot(name);
+        const int none = (int)mSlots.size();
+        int slot = back >= 0 ? back : FreeSlot(name, hello.bot, false), room = -1;
+        if (slot == none)
+        {
+            // A person before any bot: one's slot, rather than one kept for a person who dropped
+            room = hello.bot ? -1 : BotSlotForPerson();
+            slot = room >= 0 ? room : FreeSlot(name, hello.bot, true);
+        }
         if (back < 0 && slot < (int)mSlots.size() && mSlots[slot].name != name)
         {
             name = PlayerName(name, taken); // a new player: a name nobody in the game has
@@ -346,6 +428,10 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
         }
         else
         {
+            if (slot == room)
+            {
+                MakeRoom(room);
+            }
             Slot& s = mSlots[slot];
             const bool stillIn = back >= 0 && s.used; // its old connection hasn't timed out: dropped, the player stays
             if (stillIn)
@@ -358,6 +444,8 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
             s.peer = peer;
             s.name = name;
             s.token = token;
+            s.bot = hello.bot;
+            s.joined = ++mJoins;
             Welcome welcome;
             welcome.slot = (uint8_t)slot;
             welcome.players = (uint8_t)mSlots.size();
@@ -366,6 +454,8 @@ void net::Server::OnHello(uint32_t peer, BitReader& r)
             welcome.timeLimitMin = (uint16_t)mConfig.game.timeLimitMin;
             welcome.tickMs = (uint16_t)mConfig.game.tickMs;
             welcome.police = (uint8_t)mConfig.game.police;
+            welcome.kit = (uint8_t)mConfig.game.kit;
+            welcome.zoom = (int8_t)mConfig.game.zoom;
             welcome.session = mSession;
             welcome.name = name;
             welcome.map = mMap < mConfig.voteMaps.size() ? mConfig.voteMaps[mMap].name : "";
@@ -410,6 +500,10 @@ void net::Server::OnCommands(int slot, BitReader& r)
     }
     if (ack > s.ackTick && ack <= mTick)
     {
+        if (mStarted && mGeneration > 0 && s.ackTick < mGameStartTick && ack >= mGameStartTick)
+        {
+            printf("net: tick %u (%lld ms), player %d has the new game (%u ticks after its start)\n", mTick, NowMs(), slot, mTick - mGameStartTick);
+        }
         s.ackTick = ack;
     }
     for (int i = 0; i < n; i++)
@@ -512,7 +606,7 @@ void net::Server::OnReceive(const TransportEvent& e)
 
 namespace
 {
-const float kFullRateRadius = 12.0f; // blocks: beyond, an entity the client has gets new state every kFarAgeTicks
+const float kFullRateRadius = 12.0f; // blocks at the original's zoom: beyond, an entity the client has gets new state every kFarAgeTicks
 const int kFarAgeTicks = 3;
 } // namespace
 
@@ -521,6 +615,7 @@ const int kFarAgeTicks = 3;
 std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::vector<const EntityState*>& area, const Snapshot* base, const engine::Foci& foci) const
 {
     const Schema& schema = engine::NetSchema();
+    const float fullRate = kFullRateRadius * ViewScale(mConfig.game.zoom);
     std::vector<Item> items(area.size());
     for (size_t i = 0; i < area.size(); i++)
     {
@@ -543,11 +638,11 @@ std::vector<net::Server::Item> net::Server::PriceArea(const Slot& s, const std::
             }
             it.agedBits = EntryBits(schema, it.had, it.aged);
             it.priority = (float)(age + 1) / (1.0f + Distance(*it.now, foci) / 6.0f);
-            // Off screen with a margin (a view is 8 to 11 blocks centre to corner), new state every third tick when it
+            // Off screen with a margin (a view at zoom 0 is 8 to 11 blocks centre to corner), new state every third tick when it
             // costs more than its age: the client's own simulation keeps it within a pixel meanwhile (netcode.md, "Drift")
             const auto last = s.lastFresh.find(it.now->id);
             it.hold = last != s.lastFresh.end() && mTick - last->second < (uint32_t)kFarAgeTicks &&
-                      Distance(*it.now, foci) > kFullRateRadius && it.freshBits > it.agedBits;
+                      Distance(*it.now, foci) > fullRate && it.freshBits > it.agedBits;
         }
         else
         {
@@ -880,7 +975,7 @@ void net::Server::Idle()
 
 bool net::Server::Deserted() const
 {
-    if (!mStarted || !mPending.empty() || !mHelloWait.empty())
+    if (!mStarted || !mPending.empty() || !mHelloWait.empty() || mArena.Count())
     {
         return false;
     }
@@ -917,9 +1012,11 @@ void net::Server::OnEvent(const TransportEvent& e)
             printf("net: player %d (%s) left\n", slot, mSlots[slot].name.c_str());
             const std::string name = mSlots[slot].name;
             const uint32_t token = mSlots[slot].token;
+            const bool bot = mSlots[slot].bot;
             mSlots[slot] = Slot();
             mSlots[slot].name = name; // kept for its return
             mSlots[slot].token = token;
+            mSlots[slot].bot = bot;
             mSlots[slot].leftTick = mTick;
             if (!engine::MapChangePending()) // else the next game's start leaves the slot out
             {
@@ -1010,7 +1107,7 @@ std::vector<net::RoundPlayer> net::Server::RoundPlayers(const Snapshot& world) c
     for (size_t i = 0; i < mSlots.size(); i++)
     {
         players[i].in = mSlots[i].used && (engine::MapChangePending() || engine::SlotInGame((int)i)); // the pause: the next game's slots
-        players[i].voter = mSlots[i].used && mSlots[i].peer != kArenaPeer;
+        players[i].voter = mSlots[i].used && mSlots[i].peer != kArenaPeer && !mSlots[i].bot;
         players[i].alwaysReady = mSlots[i].peer == kArenaPeer;
         players[i].name = mSlots[i].name;
         // A client has the game once it acknowledged one of its snapshots (it was loading the map till then)
@@ -1187,7 +1284,7 @@ void net::Server::ChangeToMap(int map)
     const uint32_t tps = 1000 / (mConfig.game.tickMs > 0 ? mConfig.game.tickMs : 33);
     for (size_t i = 0; i < mSlots.size(); i++)
     {
-        taken[i] = mSlots[i].used;
+        taken[i] = mSlots[i].used || (int)i < mArena.Count(); // arena bot i plays slot i: those stay where they are
         kept[i] = !mSlots[i].used && !mSlots[i].name.empty() && mTick - mSlots[i].leftTick < kComeBackSec * tps;
     }
     const int open = (int)mSlots.size();
@@ -1213,7 +1310,7 @@ void net::Server::ChangeToMap(int map)
     mPrint.gmp = engine::DataFileCrc(m.gmp);
     mPrint.sty = engine::DataFileCrc(m.sty);
     mPrint.scr = engine::DataFileCrc(m.scr);
-    printf("net: the next map: %s\n", m.name.c_str());
+    printf("net: tick %u (%lld ms), the next map: %s\n", mTick, NowMs(), m.name.c_str());
     MapChange change;
     change.map = m.name;
     change.print = mPrint;
@@ -1222,6 +1319,10 @@ void net::Server::ChangeToMap(int map)
     change.scr = m.scr;
     change.game = (uint16_t)(engine::GameGeneration() + 1);
     change.players = (uint8_t)mSlots.size();
+    // A fresh game of the round flow's (its countdown next) comes after its results: a quarter second for the clients to
+    // hear of it. Else (an arena's rotation, bots only) the pause shows the winner. The new game's first tick is 1 after
+    const int pause = mRounds.State().phase == kPhaseCountdown ? 7 : 45;
+    change.endTick = mTick + (uint32_t)pause;
     for (size_t i = 0; i < mSlots.size(); i++)
     {
         if (mSlots[i].used && mSlots[i].peer != kArenaPeer)
@@ -1232,9 +1333,7 @@ void net::Server::ChangeToMap(int map)
             mTransport->Send(mSlots[i].peer, kChannelReliable, w.Data().data(), w.ByteCount(), true);
         }
     }
-    // A fresh game of the round flow's (its countdown next) comes after its results: half a second for the clients to
-    // hear of it. Else (an arena's rotation, bots only) the pause shows the winner
-    engine::ChangeMap(m.gmp, m.sty, m.scr, (int)mSlots.size(), 0, mRounds.State().phase == kPhaseCountdown ? 15 : 90);
+    engine::ChangeMap(m.gmp, m.sty, m.scr, (int)mSlots.size(), 0, mTick, change.endTick);
 }
 
 void net::Server::Shutdown()
@@ -1275,6 +1374,7 @@ void net::Server::StartOver()
 {
     mGeneration = engine::GameGeneration();
     mStarted = false;
+    printf("net: tick %u (%lld ms), a new game\n", mTick, NowMs());
     for (Slot& s : mSlots)
     {
         s.ackTick = 0; // the old game's snapshots are no baseline: full ones again
@@ -1319,7 +1419,7 @@ void net::Server::PrintStats(const Snapshot& world)
 void net::Server::Frame()
 {
     mTick++; // the tick that just ran
-    engine::KeepMapChange();
+    engine::KeepMapChange(mTick);
     if (engine::GameGeneration() != mGeneration)
     {
         StartOver();
@@ -1327,6 +1427,7 @@ void net::Server::Frame()
     engine::GuardPeds();
     StartGameOnce();
     PollTransport();
+    RecallArenaBots();
     mProbe.Tests(mTick, (int)mSlots.size());
     Snapshot world;
     engine::Capture(world);

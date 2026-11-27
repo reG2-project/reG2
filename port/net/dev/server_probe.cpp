@@ -155,6 +155,7 @@ void net::ServerProbe::Captured(uint32_t tick, const Snapshot& world)
     engine::DumpPeds(tick, true);
     engine::StartRandLog();
     engine::ComfortServerTick(tick);
+    engine::DebugDeathLog(true);
     if (!Env().jerkLog)
     {
         return;

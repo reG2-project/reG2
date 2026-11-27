@@ -14,6 +14,7 @@ struct SessionEnv
     bool corrLog, animLog, inputLog;
     bool fwdLog; // GTA2_NET_FWDLOG: at each snapshot, the other players' controls the server forwarded
     bool frameLog; // GTA2_NET_FRAMELOG: each frame's time, its step's and its reconciliation's
+    bool paceLog; // GTA2_NET_PACELOG: every 30 ticks, a client's slack, the server's measured tick and its own pace
     bool compare; // the comparison check: the prediction against each snapshot, field by field
     bool stats; // GTA2_NET_STATS: a client shows its loss, snapshot rate, lead and resimulation with the ping
     bool snapCheck; // GTA2_NET_SNAPCHECK: the server adds each entity's hash to its snapshots, a client checks them
@@ -42,7 +43,8 @@ struct SessionEnv
     const char* testTrain; // <tick>:<player>:<train>[,...]: server players put at the wheel of a train (train + 10: it reverses)
     const char* say; // <frame>:<command>[;...]: a client's test commands to the server ("/kick r_b")
     uint32_t fuzz, fuzzRate; // GTA2_NET_FUZZ=<seed>[:<per mille>]: a client turns that many of each snapshot's fields to random values (20)
-    bool botVoteMap2; // GTA2_NET_BOTMAP2: a bot client votes map 2 in the results (a test sees the map change)
+    bool botVoteMap2; // GTA2_NET_BOTMAP2[=<n>]: a bot client joins as a person and votes map 2 (n if above 2) in the results (a test sees the map change)
+    int botVoteMap;
     uint32_t botIdleFrom, botIdleTo; // GTA2_NET_BOTIDLE=<tick>:<tick>: a client's bot or a server's arena bots press nothing in those ticks (a test drives them)
     bool scoreboard; // GTA2_NET_SCOREBOARD=1: a client shows the scoreboard as if its key were held (captures)
 };
