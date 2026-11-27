@@ -243,13 +243,22 @@ bool net::Arena::Exchange(const std::vector<float>& message, bool done)
 void net::Arena::Score(const Snapshot& world)
 {
     std::vector<Bot::Body> bodies(mBots.size());
-    std::vector<float> cars;
+    std::vector<float> cars, carSpeeds; // blocks per tick since the last tick (0 for a car new to it)
+    std::vector<CarPos> carsNow;
     std::vector<std::pair<uint32_t, int>> damage; // each car's id and Car::mDamage
     for (const EntityState& e : world.entities)
     {
         if (e.type == engine::kEntityCar)
         {
-            cars.push_back(engine::Blocks(e.f[0])), cars.push_back(engine::Blocks(e.f[1]));
+            const float x = engine::Blocks(e.f[0]), y = engine::Blocks(e.f[1]);
+            cars.push_back(x), cars.push_back(y);
+            float speed = 0;
+            for (const CarPos& c : mLastCars)
+            {
+                speed = c.id == e.id ? hypotf(x - c.x, y - c.y) : speed;
+            }
+            carSpeeds.push_back(speed);
+            carsNow.push_back(CarPos{e.id, x, y});
             damage.push_back(std::make_pair(e.id, CarDamage(e)));
         }
         int p = 0;
@@ -267,6 +276,7 @@ void net::Arena::Score(const Snapshot& world)
             body.throwables = engine::PlayerAmmo(e, 4) + engine::PlayerAmmo(e, 5);
         }
     }
+    mLastCars.swap(carsNow);
     // A new round sets every score back to 0: no frag or death that tick
     bool newRound = false;
     for (size_t i = 0; i < mBots.size(); i++)
@@ -279,10 +289,12 @@ void net::Arena::Score(const Snapshot& world)
         Bot& bot = mBots[i];
         const int frags = newRound ? 0 : me.frags - bot.last.frags, deaths = newRound ? 0 : me.deaths - bot.last.deaths;
         float nearest = 1e9f, shooterDist = 1e9f, nearestOnFoot = 1e9f, nearestInCar = 1e9f, carDist = 1e9f;
+        bool movingCar = false;
         for (size_t c = 0; c + 1 < cars.size(); c += 2)
         {
-            const float d = hypotf(cars[c] - me.x, cars[c + 1] - me.y);
+            const float d = hypotf(cars[c] - me.x, cars[c + 1] - me.y), speed = carSpeeds[c / 2];
             carDist = d < carDist ? d : carDist;
+            movingCar |= d < 1.5f && speed >= 0.1f && speed < 2; // faster: put back somewhere, not driven
         }
         int shooter = -1;
         for (size_t j = 0; j < mBots.size(); j++)
@@ -326,6 +338,8 @@ void net::Arena::Score(const Snapshot& world)
             bot.frags += frags, bot.deaths += deaths;
             bot.carDeaths += deaths > 0 && (me.car || bot.last.car) ? deaths : 0;
             bot.carFrags += frags > 0 && (me.car || bot.last.car) ? frags : 0;
+            const bool runOver = !me.car && !bot.last.car && bot.movingCarAt && mTicks + 1 - bot.movingCarAt <= 30;
+            bot.runOvers += deaths > 0 && runOver ? deaths : 0;
             bot.droveThisLife &= deaths == 0;
             if (me.car && !bot.droveThisLife)
             {
@@ -355,6 +369,7 @@ void net::Arena::Score(const Snapshot& world)
         }
         if (me.health > 0)
         {
+            bot.movingCarAt = !me.car && movingCar ? mTicks + 1 : bot.movingCarAt;
             bot.aliveTicks++;
             bot.armedTicks += me.guns > 0;
             bot.farTicks += nearest > 12;
@@ -526,6 +541,7 @@ void net::Arena::Finish(const Snapshot& world)
                    bot.longestIdle / 30.0, bot.retreatTicks / 30.0, bot.turnbacks);
             printf("net: arena %d %s car frags %d far %.1f s in a car %.1f s\n", p, bot.kind.c_str(), bot.carFrags, bot.farTicks / 30.0,
                    bot.carTicks / 30.0);
+            printf("net: arena %d %s dodges %u unseen %u run over %d\n", p, bot.kind.c_str(), bot.nav.dodges, bot.nav.unseen, bot.runOvers);
         }
     }
     printf("net: arena search cells per tick: mean %.0f max %llu\n", mTicks ? (double)mExpanded / mTicks : 0.0, (unsigned long long)mMaxExpanded);

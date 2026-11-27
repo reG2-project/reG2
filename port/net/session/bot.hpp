@@ -30,6 +30,7 @@ enum BotButton : uint32_t
 struct BotNavStats
 {
     uint32_t searches = 0, failed = 0, giveUps = 0, recoveries = 0, avoided = 0; // avoided: ticks going round a car
+    uint32_t dodges = 0, unseen = 0; // steps out of a car's way; cars coming at it it never noticed
     uint64_t expanded = 0; // cells looked at by its searches
 };
 

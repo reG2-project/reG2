@@ -852,6 +852,9 @@ nose. The meter's line `car frags F far X s in a car C s` counts frags made in a
 nobody within 12 blocks and in a car. Over 64 seeds on mp1 and downtown, with and without `--kit smg`, the rammer's
 frags went from 463 to 1097 (in a car 512 to 487), the cars it took from 3709 to 1969 and its idle time from 9.5 to
 2.2 s per match; the hunter's and the soldier's frags rose, the simple bot's rose with the kit and fell 8% without.
+The meter's line `dodges D unseen U run over R` counts the dodges a bot on foot began, the cars coming at it it never
+noticed, and its deaths on foot within 30 ticks of a car moving 0.1 blocks a tick or more within 1.5 blocks of it (the
+game keeps no cause of death: a shot by a car passing counts too); `bot_bench.sh` gives them per bot and 5 minutes.
 A bot client still takes the keyboard's key events (Escape and the pause menu, the chat), so `GTA2_INPUT` can press
 them in a test.
 

@@ -476,7 +476,12 @@ class CarDodge
                 {
                     continue;
                 }
-                mDodges += v.frame - mLastDodge > 30;
+                const bool fresh = v.frame - mLastDodge > 30;
+                mDodges += fresh;
+                if (fresh && v.stats)
+                {
+                    v.stats->dodges++;
+                }
                 mLastDodge = v.frame;
                 if (t < 6)
                 {

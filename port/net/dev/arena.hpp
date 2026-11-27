@@ -78,6 +78,14 @@ class Arena
         int carDeaths = 0; // deaths in a car
         int carFrags = 0; // frags made in a car (run over, or its guns)
         uint32_t farTicks = 0, carTicks = 0; // alive with nobody alive within 12 blocks; alive in a car
+        // Run over: died on foot within 30 ticks of a car moving 0.1 blocks a tick or more within 1.5 blocks of it
+        int runOvers = 0;
+        uint32_t movingCarAt = 0; // the tick + 1 it was last so near one, 0: never
+    };
+    struct CarPos
+    {
+        uint32_t id;
+        float x, y;
     };
     void MeterFire(Bot& bot);
     void Meter(Bot& bot, const Bot::Body& me, float carDist);
@@ -90,6 +98,7 @@ class Arena
     std::unique_ptr<engine::NavMap> mNavMap;
     BotView mView;
     std::vector<engine::PickupSpot> mPickups; // the game's weapon pickups, listed every 10 s
+    std::vector<CarPos> mLastCars; // last tick's, for their speeds
     uint32_t mTicks = 0;
     uint64_t mExpanded = 0, mMaxExpanded = 0; // all bots' search cells, in total and in the worst tick
     int mSocket = -1; // to the trainer

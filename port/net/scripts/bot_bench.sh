@@ -4,7 +4,8 @@
 #   MAPS, SEEDS, TICKS, BRAINS override the defaults below, ARGS adds server options (--kit smg). Prints per map and
 #   brain the stuck seconds per bot and 5 minutes (of which in a car), the longest stretch, failed searches and
 #   give-ups; then frags, deaths, idle seconds, retreats and turnbacks, quick car switches; then the share of aimed fire
-#   blocked by a car or a wall, deaths in a car and seconds in a burning car; then the search cells per tick.
+#   blocked by a car or a wall, deaths in a car and seconds in a burning car; then the cars dodged, those never
+#   noticed and the deaths run over on foot; then the search cells per tick.
 set -u
 BIN=$(realpath "${BIN:-build_linux/reg2}")
 DATA=${DATA:?the game data folder}
@@ -32,6 +33,7 @@ for m in $MAPS; do
     / idle .* retreats / { idl[$4] += $6; if ($9 > lidl[$4]) lidl[$4] = $9; ret[$4] += $12; tb[$4] += $15 }
     / car switches under 5 s / { sw[$4] += $10 }
     / shots blocked by a car / { bcar[$4] += $10; bwall[$4] += $15; aimed[$4] += $18; cdth[$4] += $25; burn[$4] += $30 }
+    / dodges .* unseen / { dodg[$4] += $6; uns[$4] += $8; rov[$4] += $11 }
     /search cells per tick/ { runs++; mean += $8; if ($10 > max) max = $10 }
     END {
       scale = 9000 / ticks
@@ -41,6 +43,8 @@ for m in $MAPS; do
         map, k, frg[k] / n[k], dth[k] / n[k], idl[k] / n[k] * scale, lidl[k], ret[k] / n[k] * scale, tb[k] / n[k] * scale, sw[k] / n[k] * scale
       for (k in n) printf "%-14s %-8s fire blocked by a car %5.1f%% by a wall %5.1f%% of %6.1f s aimed/bot/5min  deaths in a car %4.2f/bot  in a burning car %5.1f s/bot/5min\n",
         map, k, aimed[k] ? 100 * bcar[k] / aimed[k] : 0, aimed[k] ? 100 * bwall[k] / aimed[k] : 0, aimed[k] / n[k] * scale, cdth[k] / n[k], burn[k] / n[k] * scale
+      for (k in n) printf "%-14s %-8s dodges %5.1f unnoticed %4.1f per bot/5min  run over %4.2f per bot/5min (%d)\n",
+        map, k, dodg[k] / n[k] * scale, uns[k] / n[k] * scale, rov[k] / n[k] * scale, rov[k]
       if (runs) printf "%-14s search cells per tick: mean %.0f, max %d\n", map, mean / runs, max
     }'
 done
