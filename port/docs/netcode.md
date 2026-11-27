@@ -421,7 +421,16 @@ steps don't depend on it, an arena's world is the same tick by tick without it),
   whose ped the server has alive (the paramedics revived it, `AmbulanceService`) is revived as they do it.
 - **A server's ped goes by the snapshots only** (`ClientPedMayGo`, `gPortPedMayGo` in `Ped::Deallocate`): the client's
   own AI doesn't free a ped the snapshots carry (one boarding a train, a group's cleanup); a server's death and a ped
-  in a car going with its car (`Car::KillContainedPeds`) do.
+  in a car going with its car (`Car::KillContainedPeds`) do. A player's corpse (`Player::Wasted` clones the player's
+  ped, `mPlayer` included) is the client's own until the respawn: held as the server's, every death left one for good,
+  and a long game's ped pool filled up.
+- **A player's corpse stays after the respawn** (`gPortCorpseKept` in `Player::Wasted`, `CorpseKept`): where the
+  original frees it, both ends turn it into a dead pedestrian (no player, camera, group, weapons, wanted level or
+  voice, an id of its own), which the game frees as any corpse, 40 ticks off every player's screen
+  (`gPedOffscreenDespawnTime`). The server sends it as any ped and the client adopts its own corpse for it (only a
+  corpse adopts a corpse). The two countdowns end a few ticks apart: a server's corpse waits while the client still has
+  the player's there (made, it would die again), and a client's own waits 30 ticks for the server's before it goes as
+  any of its own. A corpse in a car goes as in the original. Single player keeps the original's.
 - **A player's pull out of its car is predicted** (it can be undone, unlike a death): a jacker the client predicts, its own
   player or another, pulls the seated player out at the door as the game does. While the server's jacker is still on
   its way in, the pull stands (its victim stays where the pull put it, not in the server's seat); once the server's
@@ -527,7 +536,10 @@ the killer's respawn, a killer gone) cuts to one more than 6 blocks off, as the 
 slowly. Every wasted player's countdown has the 90 ticks, a killer or not, so the respawn's tick never depends on
 which killer each end found; only what the view follows does. The killer is in the rollback set, and from the death on
 the interest covers it too, so its surroundings are there at the cut. A death by anything else (the police, a fall, its
-own rocket) stays on the corpse; a busted player respawns as in the original.
+own rocket) stays on the corpse; a busted player respawns as in the original. Looking away, the view no longer keeps the
+corpse's car: a wreck or a sunk car goes once no view has it (`Car::IsCarInConditionsToDespawn`), and the corpse would
+lie in a freed car, which the car radio reads (`Player::GetPlayerCar`). So the car the player's `GetPlayerCar` returns
+is never despawned, as the original's view never leaves it.
 
 A ped's AI state is applied only while it is on foot on both sides (a driver in the same car gets its objectives but
 not its states). Its phase goes first, whatever it does (on its way to a car too); its states and its char's movement
@@ -958,6 +970,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `winmain.cpp` | `gPortNextNetworkGame`, `gPortLeaveNetworkGame`, `gPortNetFrameLoop`, `gPortNoDraw` | a map change goes to the next game; a client that left goes to the network page; a client runs reG2's frame loop; a headless server draws nothing |
 | `map_0x370.cpp` | a file static in port builds | the restart zones' turn, a function's static in the original: registered from the start, so rolled back and sent |
 | `sprite.cpp` | `gPortSpriteMovedHook` | a sprite moved: the grid check (`GTA2_NET_CHECKGRID`) |
+| `sprite.cpp` | `gPortSpriteFreedHook` | a sprite freed: the stale link check (`GTA2_NET_CHECKSTALE`) |
 | `port/src/rumble.cpp` | `gPortNoRumble` | no vibration on a server (its local player is a remote one) or in a client's resimulation |
 | `sound_obj.cpp` | `gPortSoundRequestsHook` | a client's sound log: what a frame asks for, and what resimulated ticks owe added to it |
 | `port/compat/src` | `gPortIdleHook`, `gPortNoAudio`, `gPortCrashHook` | polling while a frame waits (`window.cpp`), no sound on a server (`miles.cpp`), the crash report (`main.cpp`) |
@@ -978,6 +991,7 @@ The netcode's hooks, declared in `port/src/net_hooks.hpp`; those in `Source/` ar
 | `Hud.cpp` | `PortHudTextPalette` (`port/src/player_looks.hpp`) | the names over the players and the tag times in the port's looks' colours (the fonts have 9 remaps) |
 | `Player.cpp`, `Hud.cpp` | `PortLookOf` (`port/src/player_looks.hpp`) | each look's HUD colour and arrow from one table, three more looks than the original's |
 | `Player.cpp` | `gPortKillCamTicks`, `gPortDeathViewPed` | the kill cam: a player wasted by another has a longer death countdown (`Player::Wasted`), whose end its view spends on the killer (`Player::Service`, camera mode 2) |
+| `Player.cpp` | `gPortCorpseKept` | a wasted player's corpse stays at its respawn as a dead pedestrian (`Player::Wasted`), freed off screen as the others |
 | `TagGame.cpp` | `gPortTagTimeCounts` | the tag game counts the "it" seconds without the game's time limit, which the original counts by |
 | `sound_obj.cpp`, `Player.cpp`, `char.cpp` | `gPortPlayersDeathCry` | a player cries out at its death as the other peds do (`HandlePedVoiceEvent`, voice event 4), from its corpse, or from its car when it died in one (`ProcessCar`); a fatal landing or lethal fall has the cry instead of the thud, on a client too, where its `Ped::Kill` is held; the cry has a sample index of its own (16), apart from the voice's; the cry is first in the mixer's queue (priority 0) to its end (`AddReleasingSounds` leaves its priority); the ped respawned elsewhere (`Player::Wasted`) drops the event |
 | `sound_obj.cpp` | `gPortFullQueueRanked` | a sample asked for when the mixer's request queue is full is ranked among all the others (`AddDetailsToRequestedOrderList`); the original's search stops at the slot it takes and loses the sample at that place |
@@ -1090,7 +1104,8 @@ tick, then runs on its own; each later snapshot is compared with its save of tha
 field after how many ticks each entity first differed. Below the fields, `GTA2_NET_DUMPPEDS` dumps every ped's bytes
 on both ends (`port/net/scripts/ped_diff.py` names the members that differ) and `GTA2_NET_RANDLOG` each `rand()` draw's
 caller and whether an owner drew it (`port/net/scripts/rand_diff.py` counts them per tick and function, `--stream` the
-game's stream's only).
+game's stream's only). With `GTA2_NET_COMPARE` a client logs them too, prints each tick at which the game's stream isn't the
+server's, and `rand_diff.py --tick <tick>` lists that tick's stream draws on both ends.
 
 ### Environment variables
 
@@ -1132,6 +1147,7 @@ off by default:
 | `GTA2_NET_POSELOG=1` | both | every tick, each player on foot: its fire held (`Ped::mBf21C.bAttacking`, the firing pose), its weapon, animation and whether it moves |
 | `GTA2_NET_TRAINLOG=1` | both | every train's place and state at every 150th tick of the game's cycle (the same tick on both ends) |
 | `GTA2_NET_CHECKGRID=1` | both | the collision grid checked after every move, a sprite moved off the map reported with the code that moved it, a rollback block whose pointee moved since the set was taken, on a client a ped driving a car that has another driver or leaving it through another car, and on both the weapon pool's lists looping or sharing a weapon and a ped holding a weapon it would free wrongly (a freed one, a player slot's, a car's, another ped's), a tank, fire truck or gun jeep without its roof turret, and a collision grid row that isn't a sorted list of pool cells and links, after every tick, restore and apply (`net: CHECK` lines) |
+| `GTA2_NET_CHECKSTALE=1` | both | no sprite grid links a freed sprite (id 0), after every tick, restore and apply: each one found printed with where its sprite was freed (its kind, owner, model and backtrace), and a count every 20000 checks (`net: CHECK` lines) |
 | `GTA2_NET_SNAPCHECK=1` | server | every entity's hash in the snapshots, checked by the clients, and the snapshot sanity check run on the server's own world (`net: CHECK` lines) |
 | `GTA2_NET_DUMPPEDS=<file>[:<from>:<to>]`, `GTA2_NET_RANDLOG=<file>:<from>:<to>` | both | the divergence check's dumps |
 | `GTA2_NET_NAVDUMP=<file.pgm>` | client bot | the bots' map as a picture |
@@ -1143,7 +1159,7 @@ off by default:
 | `GTA2_NET_TESTGHOSTSHOT=<tick>` | client | a rocket beside the local player at that tick of the game's cycle, in every run of it: one the server never has |
 | `GTA2_NET_SHOTVIS=0` | client | other players' late shots drawn where they are, their muzzle flashes only while the world still has them ("Other players' shots shown") |
 | `GTA2_NET_SHOTSKEW=1` | client | its shots' keys none of the server's (the shots step's red run) |
-| `GTA2_NET_TESTPHASE=<tick>:<player>[:<what>],...` | server | the player on foot drowned (0) or electrocuted (1), seated in a car beside it (2), pulled out of its car (3); 10 to 13: the ambient ped nearest it drowned, electrocuted, knocked down, or blown up |
+| `GTA2_NET_TESTPHASE=<tick>:<player>[:<what>],...` | server | the player on foot drowned (0) or electrocuted (1), seated in a car beside it (2), pulled out of its car (3), its car moved into mp1's water at (54.5, 160.5) to sink (5); 10 to 13: the ambient ped nearest it drowned, electrocuted, knocked down, or blown up |
 | `GTA2_NET_TESTLOCALPHASE=<tick>:<what>,...` | client | its own player drowned (0), electrocuted (1) or knocked down (2) before each run of that tick, live and resimulated (the server never has it) |
 | `GTA2_NET_TESTPATIENTS=<tick>:<player>:<n>[:<blocks>],...` | server | the n ambient peds nearest the player (at least that many blocks away) set on fire: the ambulance comes for their corpses |
 | `GTA2_NET_TESTSTREAK=<tick>:<player>,...` | server | a kill streak's bonus, as the 20th kill in a row gives it |

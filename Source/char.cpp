@@ -1040,6 +1040,13 @@ void Char::UpdateAnimState()
                         pDriver = NULL;
                         mFrameTimer = 0;
                     }
+                    // A full ped pool: the robbed dummy driver can't be made, the jacker waits
+                    if (pDriver && pDriver->get_occupation() == ped_ocupation_enum::dummy_driver_4 &&
+                        !PortRoomForPeds(1, true, "a robbed driver"))
+                    {
+                        pDriver = NULL;
+                        mFrameTimer = 0;
+                    }
 #endif
                     if (pDriver)
                     {
@@ -6608,6 +6615,9 @@ static inline Fix16 GetLength_inline_5538A0(Fix16_Point& p)
 }
 
 MATCH_FUNC(0x5538A0)
+#if defined(GTA2_PORT)
+// Its body object can be NULL (a full object pool): the knocked down states then end the ped (Char::UpdateAnimState)
+#endif
 #define SPAWN_KNOCKDOWN_OBJ(speed)                                                      \
     gObject_5C->NewMovingObj(objects::ped_pushed_110,                     \
                                            this->mSpritePtr->mXy.x,    \
@@ -6664,7 +6674,13 @@ void Char::HandleCarImpact(Car* pCar, u8 not_used, Fix16 x, Fix16 y)
             else
             {
                 this->mpPed->mpObj2C = SPAWN_KNOCKDOWN_OBJ(vecLen);
+#if defined(GTA2_PORT)
+                if (mpPed->mpObj2C)
+#endif
                 this->mpPed->mpObj2C->mObj3c->mZSpeed = kFP16Zero_6FD9E4;
+#if defined(GTA2_PORT)
+                if (mpPed->mpObj2C)
+#endif
                 this->mpPed->mpObj2C->SetDamageOwner(this->mpPed->mPedRefIdx);
                 this->mpPed->ChangeNextPedState1(ped_state_1::immobilized_8);
                 this->mpPed->ChangeNextPedState2(ped_state_2::knocked_recover_24);
@@ -6690,8 +6706,17 @@ void Char::HandleCarImpact(Car* pCar, u8 not_used, Fix16 x, Fix16 y)
                 else
                 {
                     this->mpPed->mpObj2C = SPAWN_KNOCKDOWN_OBJ(vecLen / gFix16_Two);
+#if defined(GTA2_PORT)
+                    if (mpPed->mpObj2C)
+#endif
                     this->mpPed->mpObj2C->mObj3c->mZSpeed = kFpPoint05_6FD9B0;
+#if defined(GTA2_PORT)
+                    if (mpPed->mpObj2C)
+#endif
                     this->mpPed->mpObj2C->mObj3c->mbAirborne = 1;
+#if defined(GTA2_PORT)
+                    if (mpPed->mpObj2C)
+#endif
                     this->mpPed->mpObj2C->SetDamageOwner(this->mpPed->mPedRefIdx);
                     this->mpPed->ChangeNextPedState1(ped_state_1::immobilized_8);
 
@@ -6727,8 +6752,17 @@ void Char::HandleCarImpact(Car* pCar, u8 not_used, Fix16 x, Fix16 y)
                     }
                     this->mpPed->ChangeNextPedState1(ped_state_1::immobilized_8);
                     this->mpPed->mpObj2C = SPAWN_KNOCKDOWN_OBJ(vecLen / gFix16_Two);
+#if defined(GTA2_PORT)
+                    if (mpPed->mpObj2C)
+#endif
                     this->mpPed->mpObj2C->mObj3c->mZSpeed = kFpPoint1_6FD824;
+#if defined(GTA2_PORT)
+                    if (mpPed->mpObj2C)
+#endif
                     this->mpPed->mpObj2C->mObj3c->mbAirborne = 1;
+#if defined(GTA2_PORT)
+                    if (mpPed->mpObj2C)
+#endif
                     this->mpPed->mpObj2C->SetDamageOwner(this->mpPed->mPedRefIdx);
                     if (mpPed->mInvulnerability > 0)
                     {
@@ -6756,7 +6790,13 @@ void Char::HandleCarImpact(Car* pCar, u8 not_used, Fix16 x, Fix16 y)
             if (this->mpPed->mInvulnerability > 0)
             {
                 this->mpPed->mpObj2C = SPAWN_KNOCKDOWN_OBJ(vecLen / gFix16_Two);
+#if defined(GTA2_PORT)
+                if (mpPed->mpObj2C)
+#endif
                 this->mpPed->mpObj2C->mObj3c->mZSpeed = kFP16Zero_6FD9E4;
+#if defined(GTA2_PORT)
+                if (mpPed->mpObj2C)
+#endif
                 this->mpPed->mpObj2C->SetDamageOwner(this->mpPed->mPedRefIdx);
                 this->mpPed->ChangeNextPedState1(ped_state_1::immobilized_8);
                 this->mpPed->ChangeNextPedState2(ped_state_2::knocked_recover_24);
@@ -6800,18 +6840,27 @@ void Char::HandleGenericImpact(Ang16 ang, Fix16 impact_x, Fix16 impact_z, char_t
         {
             mpPed->mPedRefIdx = gPedRefTable_7F8->AllocForPed(mpPed->mId);
         }
+#if defined(GTA2_PORT)
+        if (mpPed->mpObj2C)
+#endif
         mpPed->mpObj2C->SetDamageOwner(mpPed->mPedRefIdx);
         mpPed->ChangeNextPedState1(ped_state_1::immobilized_8);
 
         switch (impact_type)
         {
             case 0:
+#if defined(GTA2_PORT)
+                if (mpPed->mpObj2C)
+#endif
                 mpPed->mpObj2C->mObj3c->mZSpeed = kFP16Zero_6FD9E4;
                 mpPed->ChangeNextPedState2(ped_state_2::knocked_recover_24);
                 mPedState2 = ped_state_2::knocked_recover_24;
                 break;
 
             case 1:
+#if defined(GTA2_PORT)
+                if (mpPed->mpObj2C)
+#endif
                 mpPed->mpObj2C->mObj3c->mZSpeed = impact_z;
                 if (mpPed->mInvulnerability > 0)
                 {
@@ -6838,6 +6887,9 @@ void Char::HandleGenericImpact(Ang16 ang, Fix16 impact_x, Fix16 impact_z, char_t
                 break;
 
             case 2:
+#if defined(GTA2_PORT)
+                if (mpPed->mpObj2C)
+#endif
                 mpPed->mpObj2C->mObj3c->mZSpeed = impact_z;
                 if (mpPed->mInvulnerability > 0)
                 {

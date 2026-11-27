@@ -13,6 +13,7 @@
 #include "Source/Ped.hpp"
 #include "Source/Player.hpp"
 #include "Source/char.hpp"
+#include "Source/rng.hpp"
 #include "Source/sprite.hpp"
 #include <algorithm>
 #include <stdio.h>
@@ -52,6 +53,41 @@ int gEvicted;
 int gOccupiedKept;
 int gPedsRemade;
 int gPedsKept; // deallocations of the server's peds refused (ClientPedMayGo)
+int gCorpsesKept, gCorpsesAdopted, gCorpsesWaited, gCorpsesDropped; // the players' corpses kept (each resimulation too)
+
+// The players' corpses this game kept at their respawns (gPortCorpseKept), by their ids and game cycles: one waits a
+// while for the server's to adopt it (MapPed) before it goes as this game's own (RemoveUnsent)
+struct KeptCorpse
+{
+    s32 id;
+    s32 cycle;
+};
+std::unordered_map<const Ped*, KeptCorpse> gKeptCorpses;
+const s32 kCorpseWaitTicks = 30;
+
+// A live ped (never a stale key's) kept as a corpse here less than kCorpseWaitTicks ago
+bool NewKeptCorpse(const Ped* p)
+{
+    auto it = gKeptCorpses.find(p);
+    const s32 age = it != gKeptCorpses.end() ? gpRng->get_cur_rng() - it->second.cycle : -1;
+    return age >= 0 && age < kCorpseWaitTicks && it->second.id == p->mId && p->isDead();
+}
+
+// A player's corpse here that the server already kept at its respawn (the two countdowns end a few ticks apart)
+bool CorpseStillPlayers(const EntityState& e)
+{
+    for (int i = 0; i < PlayerCount(); i++)
+    {
+        Player* player = GetPlayer(i);
+        Ped* aux = player && player->mInUse ? player->mAuxPed : NULL;
+        Sprite* s = aux ? CharSprite(aux) : NULL;
+        if (s && aux->isDead() && (u8)aux->mRemap == (u8)e.f[kPedRemap] && Near(s, e.f[kPedX], e.f[kPedY], kAdoptRadius))
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 // Room to create a car or a ped without running a pool dry (Pool::Allocate doesn't check, and SpawnPedAt leaks its
 // ped when no char is left): a margin for the game's own allocations
@@ -361,7 +397,10 @@ Ped* MapPed(Pass& a, const EntityState& e, Car* serverCar)
         {
             serverCar->SetDriver(NULL);
             ped = gPedManager->SpawnDriver(serverCar);
-            SetPedKind(ped, e);
+            if (ped) // NULL: a full pool (port/src/pool/guard.hpp)
+            {
+                SetPedKind(ped, e);
+            }
         }
     }
     if (!ped && !serverCar)
@@ -370,11 +409,17 @@ Ped* MapPed(Pass& a, const EntityState& e, Car* serverCar)
         {
             Sprite* s = CharSprite(p);
             if (!a.mapped.count(p) && s && !p->mCar && p->IsActive() && (u8)p->mRemap == (u8)e.f[kPedRemap] &&
-                Near(s, e.f[kPedX], e.f[kPedY], kAdoptRadius))
+                p->isDead() == PedDeadThere(e) && Near(s, e.f[kPedX], e.f[kPedY], kAdoptRadius))
             {
                 ped = p;
+                gCorpsesAdopted += NewKeptCorpse(p);
                 break;
             }
+        }
+        if (!ped && PedDeadThere(e) && CorpseStillPlayers(e))
+        {
+            gCorpsesWaited++;
+            return NULL; // adopted once this game keeps it too: made, it would die again here
         }
         if (!ped && RoomForPed())
         {
@@ -520,7 +565,7 @@ void RemoveUnsent(const Pass& a, const Snapshot& snap)
             continue;
         }
         Ped* q = it->second;
-        if (q->mCar && q->mEnterCarAsPassenger && !q->IsActive())
+        if (q->mCar && q->mEnterCarAsPassenger)
         {
             // A passenger the server doesn't have: out of its car's list (Deallocate leaves it there), then gone
             q->mCar->mPassengersList.RemovePed_471240(q);
@@ -555,6 +600,11 @@ void RemoveUnsent(const Pass& a, const Snapshot& snap)
         if (!a.owned.count(p) && !a.mapped.count(p) && !passenger && !IsSpareDriver(p) && (p->mGameObject || p->mCar) &&
             p->IsActive() && !area.Beyond(PedSprite(p)))
         {
+            if (NewKeptCorpse(p))
+            {
+                continue; // the server's may come yet: it keeps it at its own respawn's tick
+            }
+            gCorpsesDropped += gKeptCorpses.count(p) > 0;
             p->Deallocate();
         }
     }
@@ -678,6 +728,12 @@ void net::engine::PrintReplicaLog()
         printf("net: %d removals of the server's peds by this game refused\n", gPedsKept);
         gPedsKept = 0;
     }
+    if (gCorpsesKept + gCorpsesAdopted + gCorpsesWaited + gCorpsesDropped)
+    {
+        printf("net: players' corpses: %d kept at their respawns, %d adopted by the server's, %d of the server's waited for, "
+               "%d dropped (none there)\n", gCorpsesKept, gCorpsesAdopted, gCorpsesWaited, gCorpsesDropped);
+        gCorpsesKept = gCorpsesAdopted = gCorpsesWaited = gCorpsesDropped = 0;
+    }
     if (gPedsRevived)
     {
         printf("net: %d corpses of this game's alive on the server, revived\n", gPedsRevived);
@@ -762,6 +818,19 @@ void net::engine::ClearReplicas()
     gPeds.clear();
     gCarIds.clear();
     gPedIds.clear();
+    gKeptCorpses.clear();
+}
+
+void net::engine::CorpseKept(Ped* p)
+{
+    const s32 now = gpRng->get_cur_rng();
+    for (auto it = gKeptCorpses.begin(); it != gKeptCorpses.end();)
+    {
+        const s32 age = now - it->second.cycle;
+        it = age < 0 || age >= kCorpseWaitTicks ? gKeptCorpses.erase(it) : ++it;
+    }
+    gKeptCorpses[p] = KeptCorpse{p->mId, now};
+    gCorpsesKept++;
 }
 
 // --- The owners of random draws (port/src/rand/owner.hpp): an entity's key is the server's net id ---
@@ -954,7 +1023,8 @@ void net::engine::SetReplicaPose(const Pose& p)
     }
 }
 
+// A player's corpse (Player::Wasted's clone) keeps the player's mPlayer but is this game's own: the game frees it at the respawn
 bool net::engine::IsServerPed(const Ped* p)
 {
-    return p->mPlayer || gPedKeys.count(p);
+    return (p->mPlayer && p->mPlayer->mPlayerPed == p) || gPedKeys.count(p);
 }

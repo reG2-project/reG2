@@ -21,6 +21,8 @@ extern void (*gPortCrashHook)();
 // After a sprite moved (Sprite::InvalidateZColAndBBoxes, every setter of its place calls it); NULL but for a check
 // (GTA2_NET_CHECKGRID: one moved off the map)
 extern void (*gPortSpriteMovedHook)(Sprite*);
+// Before a sprite goes back to its pool (Sprite::PoolDeallocate); NULL but for a check (GTA2_NET_CHECKSTALE)
+extern void (*gPortSpriteFreedHook)(Sprite*);
 // While the game waits for its next step: the netcode's polling, so a ping is answered at once and neither a step nor
 // a frame wait adds to the round trip
 extern void (*gPortIdleHook)();
@@ -206,6 +208,9 @@ extern s32 (*gPortKillCamTicks)(Player* pPlayer, Player* pKiller);
 // The ped a wasted or busted player's view follows (Player::Service, camera mode 2) in place of its corpse or arrested
 // self, pAuxPed. NULL but in a network game: the killer's during the kill cam
 extern Ped* (*gPortDeathViewPed)(Player* pPlayer, Ped* pAuxPed);
+// Called as a wasted player's corpse stays at its respawn as a dead pedestrian (Player::Wasted). NULL: it goes, as in
+// the original; set in a network game
+extern void (*gPortCorpseKept)(Ped* pCorpse);
 // A network client's round keys on the gamepad (port_NetRoundPad, compat/src/pad.cpp): 0 none (no network game), 1
 // Back shows the scoreboard, 2 the round's results: also the d-pad and A as the arrows and Enter (a map)
 extern int gPortNetRoundPad;

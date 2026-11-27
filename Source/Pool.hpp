@@ -2,6 +2,37 @@
 #include "types.hpp"
 #if defined(GTA2_PORT)
 #include "../port/src/rand/owner.hpp" // PortRand::Scope: who a random draw belongs to (port/docs/netcode.md)
+#include "../port/src/pool/guard.hpp"
+#endif
+
+#if defined(GTA2_PORT)
+// Room in a pool for n entries, within GTA2_POOL_LIMIT's cap (tests) if any. False records the refusal
+#define PORT_POOL_ROOM_METHODS(head)                                                                    \
+    static PortPool::Info* PortInfo()                                                                   \
+    {                                                                                                   \
+        static PortPool::Info* sInfo = PortPool::Register(__PRETTY_FUNCTION__, PoolSize);               \
+        return sInfo;                                                                                   \
+    }                                                                                                   \
+    s32 PortFree(s32 upTo = PoolSize) const                                                             \
+    {                                                                                                   \
+        s32 n = 0;                                                                                      \
+        for (const PoolType* p = head; p && n < upTo; p = p->mpNext)                                    \
+        {                                                                                               \
+            n++;                                                                                        \
+        }                                                                                               \
+        return n;                                                                                       \
+    }                                                                                                   \
+    bool PortRoom(s32 n = 1)                                                                            \
+    {                                                                                                   \
+        PortPool::Info* info = PortInfo();                                                              \
+        const s32 need = n + (info->limit ? PoolSize - info->limit : 0);                                \
+        if (head && (need <= 1 || PortFree(need) >= need))                                              \
+        {                                                                                               \
+            return true;                                                                                \
+        }                                                                                               \
+        PortPool::Refused(info, PoolSize - PortFree(need));                                             \
+        return false;                                                                                   \
+    }
 #endif
 
 // A free list only, with O(1) allocate and deallocate: unlike Pool, no list of the used items
@@ -27,8 +58,18 @@ class PoolBasic
         mpHead = 0;
     }*/
 
+#if defined(GTA2_PORT)
+    PORT_POOL_ROOM_METHODS(mpHead)
+#endif
+
     PoolType* Allocate()
     {
+#if defined(GTA2_PORT)
+        if (!PortRoom())
+        {
+            return NULL; // full: the caller skips its creation (port/src/pool/guard.hpp)
+        }
+#endif
         PoolType* pNew = mpHead;
         mpHead = pNew->mpNext;
         pNew->PoolAllocate();
@@ -92,8 +133,18 @@ class Pool
         mpPrev = NULL;
     }
 
+#if defined(GTA2_PORT)
+    PORT_POOL_ROOM_METHODS(mpStart)
+#endif
+
     PoolType* Allocate()
     {
+#if defined(GTA2_PORT)
+        if (!PortRoom())
+        {
+            return NULL; // full: the caller skips its creation (port/src/pool/guard.hpp)
+        }
+#endif
         PoolType* pNew = mpStart;
         mpStart = pNew->mpNext;
         pNew->mpNext = mpPrev;
@@ -105,6 +156,12 @@ class Pool
     // alloc_append_4254A0
     PoolType* AllocateAppend()
     {
+#if defined(GTA2_PORT)
+        if (!PortRoom())
+        {
+            return NULL;
+        }
+#endif
         // Pop from free list
         PoolType* obj = mpStart;
         mpStart = obj->mpNext;
@@ -131,6 +188,12 @@ class Pool
 
     PoolType* AllocateUntracked()
     {
+#if defined(GTA2_PORT)
+        if (!PortRoom())
+        {
+            return NULL;
+        }
+#endif
         PoolType* pNew = this->mpStart;
         this->mpStart = pNew->mpNext;
         pNew->mpNext = 0;

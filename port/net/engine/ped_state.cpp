@@ -522,6 +522,11 @@ bool StartCarTransition(Ped* p, const net::EntityState& e)
 
 int net::engine::gPedsRevived;
 
+bool net::engine::PedDeadThere(const EntityState& e)
+{
+    return e.f[kStates + kState1] == ped_state_1::dead_9;
+}
+
 bool net::engine::ApplyPedState(Ped* p, const EntityState& e)
 {
     // Knocked down, a ped the server killed dies as it gets up (Ped::Kill stored its dead_9): thrown, it is carried out

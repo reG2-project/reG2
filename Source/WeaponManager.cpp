@@ -8,6 +8,20 @@
 #include "root_sound.hpp"
 
 DEFINE_GLOBAL(WeaponPool*, gWeapon_30_Pool, 0x707014);
+#if defined(GTA2_PORT)
+// Weapon slots the other peds' and the cars' weapons leave for a player's kit (15 at a spawn: Player.cpp)
+static const s32 kPortPlayerWeaponReserve = 16;
+
+static bool PortRoomForWeapon(bool forPlayer)
+{
+    if (gWeapon_30_Pool->mPool.PortRoom(forPlayer ? 1 : 1 + kPortPlayerWeaponReserve))
+    {
+        return true;
+    }
+    PortPool::Skipped("a weapon");
+    return false;
+}
+#endif
 DEFINE_GLOBAL(WeaponManager*, gWeapon_8, 0x707018);
 // Read only in Weapon.cpp, defined here: see the comment there.
 DEFINE_GLOBAL_INIT(Ang16, kAng12_706D5E, Ang16(48), 0x706D5E);
@@ -24,6 +38,12 @@ u8 default_ammo_5FF778[40] = {10u, 10u, 5u,  20u, 5u, 5u, 10u, 20u, 20u, 10u, 10
 MATCH_FUNC(0x5e3c10)
 Weapon* WeaponManager::allocate_ped_weapon(s32 weapon_kind, Ped* pPed, u8 ammo)
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForWeapon(pPed && pPed->is_player()))
+    {
+        return NULL;
+    }
+#endif
     Weapon* pNewWeap = gWeapon_30_Pool->AllocateUnlinked();
     pNewWeap->init();
     mRefCount++;
@@ -46,6 +66,12 @@ void WeaponManager::deallocate(Weapon* pWeapon)
 MATCH_FUNC(0x5e3ce0)
 Weapon* WeaponManager::allocate_car_weapon(s32 weapon_kind, Car* pCar, u8 ammo)
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForWeapon(false))
+    {
+        return NULL;
+    }
+#endif
     Weapon* pWeapon = gWeapon_30_Pool->Allocate();
     pWeapon->init();
     pWeapon->set_idx(weapon_kind);
@@ -88,6 +114,12 @@ bool WeaponManager::add_car_weapon(s32 weapon_kind, u8 ammo, Car* pCar)
     {
         pWeapon = allocate_car_weapon(weapon_kind, pCar, ammo);
         bAddedAmmo = true;
+#if defined(GTA2_PORT)
+        if (!pWeapon)
+        {
+            return false; // a full weapon pool
+        }
+#endif
     }
 
     if (bAddedAmmo)
@@ -104,6 +136,9 @@ bool WeaponManager::add_car_weapon(s32 weapon_kind, u8 ammo, Car* pCar)
         if (pCar->mDriver)
         {
             pCar->mDriver->mCarWeapon = gWeapon_8->allocate_ped_weapon(weapon_kind, pCar->mDriver, 99u);
+#if defined(GTA2_PORT)
+            if (pCar->mDriver->mCarWeapon)
+#endif
             pCar->mDriver->mCarWeapon->mCar = pCar;
         }
     }

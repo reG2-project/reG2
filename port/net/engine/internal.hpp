@@ -350,6 +350,7 @@ bool ClientPedMayDie(Ped* ped);
 bool ClientCharSolid(const Char* c);
 bool PlayerDyingThere(const Ped* ped); // a player the newest snapshot has at 0 health: dying or dead there
 bool ClientPedMayFire(Ped* ped);
+bool PedDeadThere(const EntityState& e); // a snapshot's ped is a corpse there
 int ShownDeathAge(const Ped* ped); // ticks since an ambient ped was shown dead here, -1: not shown dead
 void ForgetShownDeath(const Ped* ped);
 const int kShownDeathTicks = 15; // a death shown here the server's snapshots still don't have after this: undone
@@ -446,6 +447,7 @@ Car* ReplicaCar(uint32_t netId); // this game's car for a server car, if it has 
 Ped* ReplicaPed(uint32_t netId); // and ped
 const std::unordered_map<uint32_t, Car*>& ReplicaCars();
 void ClearReplicas(); // a new game: nothing mapped (rounds.cpp)
+void CorpseKept(Ped* p); // gPortCorpseKept: a player's corpse kept at its respawn, for the server's to adopt here
 const std::unordered_map<uint32_t, Ped*>& ReplicaPeds();
 void ReplicaPoses(std::vector<Pose>& out); // the cars and peds of Poses/SetPose
 void SetReplicaPose(const Pose& p);

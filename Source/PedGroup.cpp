@@ -392,6 +392,14 @@ MATCH_FUNC(0x4c9680)
 void PedGroup::PromoteMemberToLeader(u8 idx)
 {
     Ped* pSwapPed = gPedPool->Allocate();
+#if defined(GTA2_PORT)
+    // A full ped pool: the swap goes through scratch storage, as it only holds the leader's stats for a moment
+    alignas(Ped) static unsigned char sScratch[sizeof(Ped)];
+    if (!pSwapPed)
+    {
+        pSwapPed = reinterpret_cast<Ped*>(sScratch);
+    }
+#endif
 
     Weapon* leaderWeapon = mPedLeader->mSelectedWeapon;
     Weapon* memberWeapon = mPedList[idx]->mSelectedWeapon;
@@ -466,6 +474,12 @@ void PedGroup::PromoteMemberToLeader(u8 idx)
         mPedLeader->mGroupIdx = 99;
     }
 
+#if defined(GTA2_PORT)
+    if (pSwapPed == reinterpret_cast<Ped*>(sScratch))
+    {
+        return;
+    }
+#endif
     if (pSwapPed->mPedType == ped_type::script_created_5)
     {
         pSwapPed->PoolAllocate();

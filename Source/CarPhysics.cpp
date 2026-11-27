@@ -1746,7 +1746,12 @@ void CarPhysics::SpawnSkidSegment(s32 box_idx, Fix16_Point wheel_offset, s32 sur
 
             Ang16 r = skid_vec.GetAngle();
             len = skid_vec.GetLength_all_out_of_line_abs();
+#if defined(GTA2_PORT)
+            // Skid marks leave 64 sprite shapes for the others: each mark takes two (collision and visual)
+            if (len > kFP16Zero_6FE20C && PortPool::RoomOrSkip(gSpriteShapePool->mPool.PortRoom(2 + 64), "a skid mark"))
+#else
             if (len > kFP16Zero_6FE20C)
+#endif
             {
                 Object* pObj =
                     gObject_5C->NewPhysicsObj(get_skid_obj_type(surface, len), obj_x, obj_y, mCp3, r);

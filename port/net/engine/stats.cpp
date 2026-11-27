@@ -6,6 +6,7 @@
 #include "Source/sprite.hpp"
 #include <math.h>
 #include <set>
+#include <vector>
 
 namespace
 {
@@ -30,6 +31,29 @@ void net::engine::PoolUse(int* pCars, int* pPeds, int* pChars)
     {
         --*pChars;
     }
+}
+
+void net::engine::ShapeUse(int* pSprites, int* pShapes, int* pUnheld)
+{
+    const int n = (int)(sizeof(gSpritePool->mPool.mPool) / sizeof(gSpritePool->mPool.mPool[0]));
+    std::vector<char> free(n);
+    for (Sprite* s = gSpritePool->mPool.mpHead; s; s = s->mpNext)
+    {
+        free[s - gSpritePool->mPool.mPool] = 1;
+    }
+    int held = 0;
+    *pSprites = 0;
+    for (int i = 0; i < n; i++)
+    {
+        const Sprite* s = &gSpritePool->mPool.mPool[i];
+        if (!free[i])
+        {
+            ++*pSprites;
+            held += (s->mpCollisionShape != NULL) + (s->mpVisualShape != NULL);
+        }
+    }
+    *pShapes = 5031 - gSpriteShapePool->mPool.PortFree();
+    *pUnheld = *pShapes - held;
 }
 
 void net::engine::ReplicaStats(const Snapshot& snap, int* pCars, int* pPeds, float* pMaxDrift)

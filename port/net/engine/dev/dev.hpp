@@ -14,7 +14,7 @@ namespace engine
 // The debug switches (GTA2_NET_*), read once (checks.cpp)
 struct DebugFlags
 {
-    bool carDiff, selfLog, animLog, soundLog, checkGrid, pickupLog;
+    bool carDiff, selfLog, animLog, soundLog, checkGrid, pickupLog, checkStale;
 };
 const DebugFlags& Debug();
 bool DebugGridOk(const char* where, Car* car); // GTA2_NET_CHECKGRID: the collision grid has no freed sprites
@@ -48,7 +48,8 @@ void DebugKill(int victim, int killer);
 void DebugArm(int player, int weapon, int ammo); // Player::AddWeaponWithAmmo
 void DebugFire(int player); // the player's ped set on fire (Ped::SetOnFire)
 // On foot, the player's ped drowned (Char::DrownPed, 0) or electrocuted (1); seated in a car beside it (2), pulled out of the
-// car it sits in (3, StartPulledOut), jacking another player seated in a car beside it, from where that one stood (4);
+// car it sits in (3, StartPulledOut), jacking another player seated in a car beside it, from where that one stood (4),
+// its car moved into mp1's water to sink (5);
 // 10 + 0..4: the nearest ambient ped on foot drowned, electrocuted, knocked down, thrown by a blast at its feet, or killed
 void DebugPhase(int player, int what);
 // GTA2_NET_TESTLOCALPHASE=<tick>:<what>[,...] on a client, before each run of that tick (live and resimulated): its own
@@ -97,7 +98,7 @@ void PrintDivergence();
 // (port/net/scripts/ped_diff.py compares a server's dump with a client's)
 void DumpPeds(uint32_t tick, bool server);
 // GTA2_NET_RANDLOG=<file>:<from>:<to>: each rand() draw's caller (an offset in the program) and owner flag at those ticks (the game's
-// cycle), from when StartRandLog is called; port/net/scripts/rand_diff.py compares two
+// cycle), from when StartRandLog is called (a client with GTA2_NET_COMPARE: from its first comparison); port/net/scripts/rand_diff.py compares two
 void StartRandLog();
 // GTA2_NET_SFXLOG: the samples the mixer starts printed; on a server, its listener at slot <value>'s camera (every tick)
 void InstallSfxLog(bool server);
@@ -116,6 +117,8 @@ void DebugCheckWeapons(const char* where, uint32_t snapTick);
 void DebugCheckTurrets(const char* where, uint32_t snapTick);
 // GTA2_NET_CHECKGRID: every collision grid row a sorted list of cells and links from their pools
 void DebugCheckGridLists(const char* where, uint32_t snapTick);
+// GTA2_NET_CHECKSTALE: no sprite grid links a freed sprite (id 0); each one printed with where its sprite was freed
+void DebugCheckStaleLinks(const char* where, uint32_t snapTick);
 void DebugOnCrash(); // from the crash handler (port/compat/src/main.cpp): the local player's ped, car and camera
 void DebugSetFrame(uint32_t frame); // the client's frame, for the debug checks' messages
 // GTA2_NET_MARKER: a square drawn where the newest snapshot has the local player (raw Fix16), over the frame

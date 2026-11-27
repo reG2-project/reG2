@@ -99,6 +99,7 @@ void net::engine::StartNetworkGame(const NetworkGame& game)
     gPortScoreBonusHook = net::engine::ScoreBonus;
     gPortKillCamTicks = KillCamTicks;
     gPortDeathViewPed = DeathCamera;
+    gPortCorpseKept = CorpseKept;
     InstallStarts(true);
     InstallCarTurns(true);
     InstallNetworkViews(true);
@@ -147,6 +148,7 @@ void net::engine::StopNetworkGame()
     gPortScoreBonusHook = NULL;
     gPortKillCamTicks = NULL;
     gPortDeathViewPed = NULL;
+    gPortCorpseKept = NULL;
     InstallStarts(false);
     InstallCarTurns(false);
     InstallNetworkViews(false);

@@ -1342,6 +1342,12 @@ Car* CarManager::SpawnCarOnRoadNetwork(Fix16 xpos, Fix16 ypos, s32 road_directio
                 {
                     Car* pCar =
                         SpawnCar_426E10_v2(x, y, ground_z, ReturnAngleFromRoadDirection(road_direction), car_model_type);
+#if defined(GTA2_PORT)
+                    if (!pCar)
+                    {
+                        return NULL; // a full car pool
+                    }
+#endif
                     pCar->SetupCarPhysicsAndSpriteBindingWithTrailer();
                     pCar->AllocateAI();
                     pCar->mAI->SetCar(pCar);
@@ -1396,6 +1402,14 @@ Car* CarManager::SpawnCarAt(Fix16 xpos, Fix16 ypos, Fix16 zpos, Ang16 rotation, 
 
     car_info* pCarInfo = gGtx_0x106C->get_car_info_5AA3B0(car_info_idx);
 
+#if defined(GTA2_PORT)
+    if (!gCar_BC_Pool->mPool.PortRoom() || !gSpriteShapePool->mPool.PortRoom(2))
+    {
+        PortPool::Skipped("a car");
+        return NULL;
+    }
+    PortPool::Essential essential; // the car's own lights, sirens and roof objects
+#endif
     Car* pCar;
     if (pCarInfo->IsTruckCab())
     {
@@ -1539,6 +1553,13 @@ Trailer* CarManager::SpawnCabAndTrailer(Fix16 xpos, Fix16 ypos, Ang16 rotation, 
 {
     Ang16 out_rot;
 
+#if defined(GTA2_PORT)
+    if (!gCar_BC_Pool->mPool.PortRoom(2) || !gTrailerPool->mPool.PortRoom())
+    {
+        PortPool::Skipped("a truck and trailer");
+        return NULL;
+    }
+#endif
     Car* pCab = SpawnCarAtCorrectZ(xpos, ypos, rotation, car_model);
 
     // Separate output locals: VC6 puts them in the dead xpos/ypos arg slots and keeps the
@@ -4292,6 +4313,12 @@ void Car::AttachGangIcon(u8 arrow_colour)
 {
     Object* pIcon =
         gObject_5C->NewPhysicsObj(arrow_colour + 286, kFpZero_6777CC, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
+#if defined(GTA2_PORT)
+    if (!pIcon)
+    {
+        return; // a full object pool
+    }
+#endif
     mCarSprite->AttachSprite(pIcon->mSprite, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
 }
 
@@ -4400,6 +4427,12 @@ void Car::PutWaterCannonOnRoof()
 {
     Object* pObject =
         gObject_5C->NewPhysicsObj(objects::water_cannon_114, kFpZero_6777CC, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
+#if defined(GTA2_PORT)
+    if (!pObject)
+    {
+        return; // a full object pool
+    }
+#endif
     mCarSprite->AttachSprite(pObject->mSprite, kFpZero_6777CC, kWaterCannonOffsetY, kAng180_677326);
 }
 
@@ -4408,6 +4441,12 @@ void Car::PutTankCannonOnRoof()
 {
     Object* pObject =
         gObject_5C->NewPhysicsObj(objects::tank_cannon_148, kFpZero_6777CC, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
+#if defined(GTA2_PORT)
+    if (!pObject)
+    {
+        return; // a full object pool
+    }
+#endif
     mCarSprite->AttachSprite(pObject->mSprite, kFpZero_6777CC, kTankCannonOffsetY, kAngZero_67791C);
 }
 
@@ -4415,6 +4454,12 @@ MATCH_FUNC(0x440b60)
 void Car::PutMachineGunOnRoof()
 {
     Object* pObj = gObject_5C->NewPhysicsObj(248, kFpZero_6777CC, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
+#if defined(GTA2_PORT)
+    if (!pObj)
+    {
+        return; // a full object pool
+    }
+#endif
     mCarSprite->AttachSprite(pObj->mSprite, kFpZero_6777CC, kMachineGunOffsetY, kAngZero_67791C);
 }
 
@@ -4423,6 +4468,12 @@ void Car::PutTV_Antenna()
 {
     Object* pNewObj =
         gObject_5C->NewPhysicsObj(objects::tv_antenna_149, kFpZero_6777CC, kFpZero_6777CC, kFpZero_6777CC, kAngZero_67791C);
+#if defined(GTA2_PORT)
+    if (!pNewObj)
+    {
+        return; // a full object pool
+    }
+#endif
     mCarSprite->AttachSprite(pNewObj->mSprite, kFpZero_6777CC, kTvAntennaOffsetY, GetRadioTowerAngle());
 }
 
@@ -4589,6 +4640,12 @@ void Car::FireCarBomb(char_type instant_bomb)
                                                                     kFpZero_6777CC,
                                                                     kFpZero_6777CC,
                                                                     kAngZero_67791C);
+#if defined(GTA2_PORT)
+        if (!pNewObject)
+        {
+            return; // a full object pool
+        }
+#endif
         Ped* pDriver = this->mDriver;
         if (pDriver)
         {
@@ -5358,6 +5415,18 @@ void Car::UpdateLights()
 MATCH_FUNC(0x442170)
 bool Car::IsCarInConditionsToDespawn() const
 {
+#if defined(GTA2_PORT)
+    // Port: the kill cam looks away from a player's corpse, but a car it lies in stays as in the original, whose view
+    // never leaves it: Player::GetPlayerCar returns it (the car radio reads it)
+    for (u8 i = 0; i < gGame_0x40->mNumPlayers; i++)
+    {
+        Player* pPlayer = gGame_0x40->mPlayers[i];
+        if (pPlayer->mInUse && pPlayer->GetPlayerCar() == this)
+        {
+            return false;
+        }
+    }
+#endif
     Ped* pDriver = mDriver;
     if ((!pDriver || !pDriver->mPlayer) && !IsVisibleToAnyPlayer())
     {
@@ -5661,6 +5730,13 @@ MATCH_FUNC(0x4427a0)
 void Car::AttachTrailer(Car* pTrailerCar)
 {
     mpTrailer = gTrailerPool->mPool.Allocate();
+#if defined(GTA2_PORT)
+    if (!mpTrailer)
+    {
+        PortPool::Skipped("a trailer hitch");
+        return;
+    }
+#endif
     mpTrailer->SetTruckCabAndTrailerCar(this, pTrailerCar);
 
     Car* pLast = NULL;
@@ -6483,6 +6559,12 @@ MATCH_FUNC(0x443f30)
 void Car::AttachLight(s32 object_type, s32 argb, s32 x_offset, s32 y_offset)
 {
     Object* pObj = gObject_5C->NewLightOfType(object_type, 0, 0, 0, argb, kFpOneAndHalf_6772AC, 200);
+#if defined(GTA2_PORT)
+    if (!pObj)
+    {
+        return; // a full object pool
+    }
+#endif
     pObj->TurnOffLight();
     mCarSprite->AttachSprite(pObj->mSprite, (kFpOne64th_677888 * x_offset), (kFpOne64th_677888 * y_offset), kAngZero_67791C);
 }
@@ -7637,11 +7719,24 @@ bool TrafficSpawner::SpawnTrafficCar(s32 spawn_type, s32 arrow_direction, s32 bl
                                 }
                                 else
                                 {
+#if defined(GTA2_PORT)
+                                    // Its driver, or police crew, below: InitCarAIControl gives no AI to a car without one
+                                    if (!PortRoomForPeds(2 + kPortAmbientPedReserve, false, "a traffic car"))
+                                    {
+                                        return false;
+                                    }
+#endif
                                     Car* pNewCar = gCarManager_6C->SpawnCarAtCorrectZ_WithScale(car_x,
                                                                                                 car_y,
                                                                                                 ReturnAngleFromRoadDirection(arrow_direction),
                                                                                                 car_model,
                                                                                                 kFpOne_6FF778);
+#if defined(GTA2_PORT)
+                                    if (!pNewCar)
+                                    {
+                                        return false; // a full car pool
+                                    }
+#endif
                                     if (car_model != car_model_enum::SWATVAN && car_model != car_model_enum::COPCAR &&
                                         car_model != car_model_enum::JEEP && car_model != car_model_enum::EDSELFBI)
                                     {

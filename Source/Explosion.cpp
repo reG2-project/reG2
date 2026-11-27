@@ -785,9 +785,18 @@ void Explosion::UpdateExplosion_18_19_20_32_33()
                                                                kFpPoint09,
                                                                -kFpOne1024th,
                                                                kFpPoint2_6FD2F0);
+#if defined(GTA2_PORT)
+                    if (!pDebris)
+                    {
+                        break; // a full pool (CreateObject): the fire burns where it is
+                    }
+#endif
                     pDebris->mSprite->AttachSprite(pExplosionObj->mSprite, 0, 0, kAngZero_6FD5D4);
 
                     Object* pLight = gObject_5C->NewLight(94, 138, 2, 0xFF8000, 3, 255);
+#if defined(GTA2_PORT)
+                    if (pLight)
+#endif
                     pDebris->mSprite->AttachSprite(pLight->mSprite, 0, 0, kAngZero_6FD5D4);
                 }
                 break;

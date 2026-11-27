@@ -151,7 +151,11 @@ void Firefighter::Update()
     {
         case firefighter_state::spawn_truck_1:
             if (mTargetCar && mTargetCar->mDespawnStatus != car_despawn_status::despawned_6 &&
-                !mTargetCar->IsDespawning() && gCarManager_6C->CanAllocateCarOfKind(car_kind::firefighter_5))
+                !mTargetCar->IsDespawning() && gCarManager_6C->CanAllocateCarOfKind(car_kind::firefighter_5)
+#if defined(GTA2_PORT)
+                && PortRoomForPeds(1, false, "a fire engine crew") // full: the fire engine is called off
+#endif
+                )
             {
                 mCar = gCarManager_6C->SpawnCarAtRoadDirection(car_model_enum::FIRETRUK, mXpos, mYpos, mZpos);
                 if (mCar)

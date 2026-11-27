@@ -10,11 +10,17 @@
 #include "session/server.hpp"
 #include "port/src/rand/state.hpp" // the sound's and particles' own streams
 #include <SDL3/SDL.h>
+#include <atomic>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #if !defined(_WIN32)
+    #if !defined(__EMSCRIPTEN__)
+        #include <execinfo.h>
+    #endif
+    #include <pthread.h>
+    #include <sys/stat.h>
     #include <unistd.h>
 #endif
 
@@ -28,8 +34,133 @@ int gTickMs = 33;
 
 void StopIfRequested();
 
+// The main loop's progress for the watchdog: the hooks run, and the last phase entered
+std::atomic<uint32_t> gHookRuns;
+std::atomic<const char*> gPhase{"start"};
+std::atomic<bool> gWatching; // a network game's: the frontend waits as long as it likes
+
+void Phase(const char* phase)
+{
+    gHookRuns.fetch_add(1, std::memory_order_relaxed);
+    gPhase.store(phase, std::memory_order_relaxed);
+}
+
+// A line to stderr and, when it is another file, to stdout: signal-safe, for the ends that print nothing else
+void Note(const char* line)
+{
+    const size_t n = strlen(line);
+#if defined(_WIN32)
+    fputs(line, stderr);
+    fflush(stderr);
+    (void)n;
+#else
+    struct stat out, err;
+    const bool same = fstat(1, &out) == 0 && fstat(2, &err) == 0 && out.st_dev == err.st_dev && out.st_ino == err.st_ino;
+    ssize_t r = write(2, line, n);
+    if (!same)
+    {
+        r = write(1, line, n);
+    }
+    (void)r;
+#endif
+}
+
+#if !defined(_WIN32)
+pthread_t gMainThread;
+
+void OnBacktraceSignal(int)
+{
+#if !defined(__EMSCRIPTEN__)
+    void* frames[64];
+    backtrace_symbols_fd(frames, backtrace(frames, 64), 2);
+#endif
+}
+
+void OnPipeSignal(int)
+{
+    static volatile sig_atomic_t sOnce;
+    if (!sOnce)
+    {
+        sOnce = 1;
+        Note("reg2: SIGPIPE (the log's reader gone?), going on without it\n");
+    }
+}
+#endif
+
+void NoteExit()
+{
+    char line[96];
+    snprintf(line, sizeof(line), "reg2: exit() after %u hook runs, phase %s\n", gHookRuns.load(), gPhase.load());
+    Note(line);
+}
+
+// A main loop that stops for 10 s says so, with its backtrace, and again when it goes on
+int SDLCALL Watchdog(void*)
+{
+    uint32_t last = gHookRuns.load();
+    int still = 0;
+    for (;;)
+    {
+        SDL_Delay(1000);
+        const uint32_t now = gHookRuns.load();
+        char line[128];
+        if (!gWatching.load())
+        {
+            last = now;
+            still = 0;
+            continue;
+        }
+        if (now != last)
+        {
+            if (still >= 10)
+            {
+                snprintf(line, sizeof(line), "reg2: main loop going again after %d s\n", still);
+                Note(line);
+            }
+            last = now;
+            still = 0;
+            continue;
+        }
+        if (++still % 60 != 10)
+        {
+            continue;
+        }
+        snprintf(line, sizeof(line), "reg2: main loop stalled %d s after %u hook runs, phase %s; its backtrace:\n", still, now,
+                 gPhase.load());
+        Note(line);
+#if !defined(_WIN32)
+        pthread_kill(gMainThread, SIGUSR2);
+#endif
+    }
+    return 0;
+}
+
+// Every end of a network game's process says how it ended, and a stalled main loop where it is
+void WatchExits()
+{
+    gWatching = true;
+    static bool sOnce;
+    if (sOnce)
+    {
+        return;
+    }
+    sOnce = true;
+    atexit(NoteExit);
+#if !defined(_WIN32)
+    gMainThread = pthread_self();
+#if !defined(__EMSCRIPTEN__)
+    void* frame;
+    backtrace(&frame, 1); // loads what backtrace needs now, not in the handler
+#endif
+    signal(SIGUSR2, OnBacktraceSignal);
+    signal(SIGPIPE, OnPipeSignal);
+#endif
+    SDL_DetachThread(SDL_CreateThread(Watchdog, "reg2 watchdog", NULL));
+}
+
 void OnFrame(void*)
 {
+    Phase("net frame");
     StopIfRequested();
     if (net::engine::GameRunning())
     {
@@ -43,6 +174,7 @@ void OnFrame(void*)
     {
         gClient->Frame();
     }
+    Phase("game frame");
 }
 
 // A client that quits, or is stopped, leaves the server at once: else its slot stays taken until the server's timeout
@@ -67,24 +199,38 @@ void StopIfRequested()
 {
     if (gStopRequested)
     {
+        char line[96];
+        snprintf(line, sizeof(line), "reg2: signal %d, leaving the game after %u hook runs\n", (int)gStopRequested, gHookRuns.load());
+        Note(line);
         LeaveServer();
         _Exit(0);
     }
 }
 
-void OnStopSignal(int)
+void OnStopSignal(int sig)
 {
+    char line[128];
     if (gStopRequested)
     {
-        _Exit(0); // a second one: at once
+        snprintf(line, sizeof(line), "reg2: signal %d again, ending at once\n", sig);
+        Note(line);
+        _Exit(0);
     }
-    gStopRequested = 1;
+    gStopRequested = sig;
+    snprintf(line, sizeof(line), "reg2: signal %d, phase %s\n", sig, gPhase.load());
+    Note(line);
     // Neither hook may run soon (a map loading, the frontend): out without leaving after a second
 #if defined(_WIN32)
     SDL_Delay(1000); // the handler has a thread of its own
+    Note("reg2: no hook ran within 1 s of the signal, ending without leaving\n");
     _Exit(0);
 #else
-    signal(SIGALRM, [](int) { _Exit(0); });
+    signal(SIGALRM, [](int) {
+        char line[128];
+        snprintf(line, sizeof(line), "reg2: no hook ran within 1 s of the signal (phase %s), ending without leaving\n", gPhase.load());
+        Note(line);
+        _Exit(0);
+    });
     alarm(1);
 #endif
 }
@@ -95,6 +241,7 @@ void NetworkSetup(bool server)
     // A crash's report, with the netcode's view of the game last: network games only (the report isn't signal-safe)
     port_InstallCrashReport();
     gPortCrashHook = net::engine::DebugOnCrash;
+    WatchExits();
     PortRand::SetSoundSeparate(true); // sound draws its own random numbers: a resimulation without sound draws the same
     PortRand::SetParticleSeparate(true); // and particles: a resimulation makes the flames it made before
     net::engine::SetRandOwners(!server); // and each entity and server service its own: the same wherever it runs
@@ -114,7 +261,7 @@ void NetworkSetup(bool server)
 void StartClientGame(const net::engine::NetworkGame& game)
 {
     atexit(LeaveServer);
-    gPortIdleHook = [] { StopIfRequested(); gClient->Idle(); net::engine::IdleWait(); }; // pongs timed as they come
+    gPortIdleHook = [] { Phase("idle"); StopIfRequested(); gClient->Idle(); net::engine::IdleWait(); }; // pongs timed as they come
     signal(SIGTERM, OnStopSignal);
     signal(SIGINT, OnStopSignal);
 #if !defined(_WIN32)
@@ -149,6 +296,7 @@ int LeaveNetworkGame()
     gPortDrawNetStandings = NULL;
     net::engine::SetStandings(std::vector<net::engine::PlayerRow>(), 0);
     gPortNetFrameLoop = false;
+    gWatching = false;
     net::engine::SetPaceMs(-1);
     PortRand::SetSoundSeparate(false);
     PortRand::SetParticleSeparate(false);
@@ -303,7 +451,7 @@ int NetMain_Init(std::vector<std::string>& args)
             net::engine::SetFrameHook(OnFrame, NULL);
             return 1;
         }
-        gPortIdleHook = [] { StopIfRequested(); gServer->Idle(); net::engine::IdleWait(); }; // pings answered at once
+        gPortIdleHook = [] { Phase("idle"); StopIfRequested(); gServer->Idle(); net::engine::IdleWait(); }; // pings answered at once
         atexit(LeaveServer);
         signal(SIGTERM, OnStopSignal);
         signal(SIGINT, OnStopSignal);

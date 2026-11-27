@@ -77,7 +77,15 @@ void UpdateCars()
     std::vector<int> order;
     if (!net::CarOrder(motion, order))
     {
-        gCar_BC_Pool->mPool.UpdatePool();
+        // The pool's own walk (Pool::UpdatePool) through Update: after a tick in another order, a car can hold a hitter
+        // that came after it then and frees itself before it now (despawned_6, which CarAI::ManageCollisions reads on)
+        gCar_BC_Pool->mPool.field_X_count = 0;
+        for (Car* c = gCar_BC_Pool->mPool.GetFirstUsed(); c;)
+        {
+            Car* next = c->mpNext;
+            Update(c);
+            c = next;
+        }
         return;
     }
     net::engine::ComfortCarTurns(cars, order);

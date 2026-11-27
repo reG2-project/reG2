@@ -136,6 +136,7 @@ void net::ServerProbe::Captured(uint32_t tick, const Snapshot& world)
     engine::DebugCheckWeapons("after the tick", tick);
     engine::DebugCheckTurrets("after the tick", tick);
     engine::DebugCheckGridLists("after the tick", tick);
+    engine::DebugCheckStaleLinks("after the tick", tick);
     engine::StackLog(true);
     engine::TrainLog(true);
     engine::FireLog(true);

@@ -11,6 +11,13 @@ MATCH_FUNC(0x471140)
 PedListNode* Ped_List::AddPedToFront(Ped* pPed)
 {
     PedListNode* pNew = gChar_8_Pool->Allocate();
+#if defined(GTA2_PORT)
+    if (!pNew)
+    {
+        PortPool::Skipped("a ped list entry"); // the ped is left out of the list
+        return NULL;
+    }
+#endif
 
     pNew->mCharPed = pPed;
 
@@ -41,6 +48,13 @@ void Ped_List::AddPedToBackIfMissing(Ped* pPed)
     }
 
     PedListNode* pNew = gChar_8_Pool->Allocate();
+#if defined(GTA2_PORT)
+    if (!pNew)
+    {
+        PortPool::Skipped("a ped list entry");
+        return;
+    }
+#endif
     pNew->mCharPed = pPed;
 
     if (pTail)
@@ -77,6 +91,13 @@ void Ped_List::AddPedToFrontIfMissing(Ped* pPed)
     }
 
     PedListNode* pNew = gChar_8_Pool->Allocate();
+#if defined(GTA2_PORT)
+    if (!pNew)
+    {
+        PortPool::Skipped("a ped list entry");
+        return;
+    }
+#endif
     pNew->mCharPed = pPed;
 
     pNew->mpNext = mpFirstPed;

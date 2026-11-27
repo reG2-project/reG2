@@ -237,6 +237,13 @@ Object* Weapon::spawn_bullet(s32 bullet_type, Fix16 xpos, Fix16 ypos, Fix16 zpos
 
     Sprite* pProbeSprite = gObject_5C->mCollisionProbeSprite;
     Object* pNewBullet = gObject_5C->NewPhysicsObj(bullet_type, xpos, ypos, zpos, rot);
+#if defined(GTA2_PORT)
+    if (!pNewBullet)
+    {
+        sbAllowFlameSegment = false; // a full pool (CreateObject): no shot, as when blocked
+        return NULL;
+    }
+#endif
 
     probe_x = mpPed->get_cam_x() + (xpos - mpPed->get_cam_x()) / kFP16Two_706EC0;
     probe_y = mpPed->get_cam_y() + (ypos - mpPed->get_cam_y()) / kFP16Two_706EC0;
@@ -665,6 +672,9 @@ void Weapon::throwable(s32 obj_idx, s32 throw_strength, s32 throw_charge)
                             if (obj_idx == objects::moving_molotov_138)
                             {
                                 Object* pLightObj = gObject_5C->NewLight(94, 138, 2, 0xFF8000, 3, 255);
+#if defined(GTA2_PORT)
+                                if (pLightObj)
+#endif
                                 pProjectile->mSprite->AttachSprite(pLightObj->mSprite, 0, 0, kAngZero_707006);
                                 Object* pExplosionObj =
                                     gObject_5C->CreateExplosion(Fix16(113), Fix16(145), 2, kAngZero_707006, explosion_type::molotov_fire_5, mpPed->mId);
@@ -1745,6 +1755,12 @@ void Weapon::car_mine()
     if (gMap_0x370->CanPlaceOilOrMine(p.x, p.y, z_low, z_high, &newZ))
     {
         Object* pMine = gObject_5C->NewPhysicsObj(objects::mine_10, p.x, p.y, newZ, pCarSprite->mRotation);
+#if defined(GTA2_PORT)
+        if (!pMine)
+        {
+            return; // a full pool (CreateObject): no mine, no ammo used
+        }
+#endif
         pMine->SetDamageOwner(mpPed->mPedRefIdx);
 
         decrement_ammo();

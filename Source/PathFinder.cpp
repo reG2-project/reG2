@@ -515,6 +515,12 @@ void PathFinder::RestoreSavedPosition()
 MATCH_FUNC(0x554a90)
 s32 PathFinder::IsFirstInPathQueue(Ped* pPed) const
 {
+#if defined(GTA2_PORT)
+    if (!mPedList.mpFirstPed)
+    {
+        return 0; // the ped isn't queued: a full PedListNode pool (Ped::UpdateMovementTowardsTarget)
+    }
+#endif
     return mPedList.mpFirstPed->mCharPed == pPed;
 }
 

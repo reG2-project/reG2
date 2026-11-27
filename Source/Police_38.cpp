@@ -144,6 +144,12 @@ void PoliceCrew::RemoveFromPursuit()
 MATCH_FUNC(0x570bf0)
 void PoliceCrew::SpawnPoliceInCar()
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(2, false, "a police crew"))
+    {
+        return; // a full ped pool: tried again on a later tick
+    }
+#endif
     PedGroup* pGroup = PedGroup::New();
     Ped* pCopLeader = gPedManager->AllocatePed();
     pCopLeader->SetPedType(ped_type::special_ped_4);
@@ -226,6 +232,12 @@ void PoliceCrew::SpawnPoliceInCar()
 MATCH_FUNC(0x570e30)
 void PoliceCrew::SpawnSWAT()
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(4, false, "a SWAT crew"))
+    {
+        return; // a full ped pool: tried again on a later tick
+    }
+#endif
     PedGroup* pSwatGroup = PedGroup::New();
     Ped* pSwatLeader = gPedManager->AllocatePed();
     pSwatLeader->SetPedType(ped_type::special_ped_4);
@@ -272,6 +284,12 @@ void PoliceCrew::SpawnSWAT()
 MATCH_FUNC(0x571150)
 void PoliceCrew::SpawnFBI_nonused()
 {
+#if defined(GTA2_PORT)
+    if (!PortRoomForPeds(1, false, "an FBI crew"))
+    {
+        return; // a full ped pool: tried again on a later tick
+    }
+#endif
     Ped* pFBI = gPedManager->AllocatePed();
     pFBI->SetPedType(ped_type::special_ped_4);
     pFBI->set_occupation(ped_ocupation_enum::fbi);
@@ -2679,10 +2697,23 @@ bool PoliceRoadblock::CreateRoadblock(u8 x, u8 y, u8 z, s32 orientation)
                                                                                  kFpOne_6FECEC);
                                 sRoadblockLaneHasBarriers = 0;
                                 sRoadblockLaneHasGuard = 0;
+#if defined(GTA2_PORT)
+                                if (!pCar)
+                                {
+                                    break; // a full car pool
+                                }
                                 Ped* pDriver = gPedManager->SpawnDriver(pCar);
+                                if (pDriver) // NULL: a full ped pool, the tank stays empty
+                                {
+#else
+                                Ped* pDriver = gPedManager->SpawnDriver(pCar);
+#endif
                                 pDriver->SetPedType(ped_type::script_created_5);
                                 pDriver->set_occupation(ped_ocupation_enum::road_block_tank_man);
                                 pDriver->mThreatReaction = threat_reaction_enum::react_as_emergency_1;
+#if defined(GTA2_PORT)
+                                }
+#endif
                                 pCar->mAttachments.GetSpriteForModel(objects::tank_cannon_148)->mOffsetRot =
                                     kAng90_6FEB74;
                             }
@@ -2737,6 +2768,20 @@ bool PoliceRoadblock::CreateRoadblock(u8 x, u8 y, u8 z, s32 orientation)
                                                                   Fix16(y_start + lane) + kFpHalf_6FEBF4,
                                                                   z,
                                                                   kAng90_6FEB74);
+#if defined(GTA2_PORT)
+                    if (!pBarrier1 || !pBarrier2) // a full object pool: no barriers in this lane
+                    {
+                        if (pBarrier1)
+                        {
+                            pBarrier1->RequestRemoval();
+                        }
+                        if (pBarrier2)
+                        {
+                            pBarrier2->RequestRemoval();
+                        }
+                    }
+                    else
+#endif
                     if (!mBarrier1)
                     {
                         mBarrier1 = pBarrier1;
@@ -2991,10 +3036,23 @@ bool PoliceRoadblock::CreateRoadblock(u8 x, u8 y, u8 z, s32 orientation)
                                                                                  kFpOne_6FECEC);
                                 sRoadblockLaneHasBarriers = 0;
                                 sRoadblockLaneHasGuard = 0;
+#if defined(GTA2_PORT)
+                                if (!pCar)
+                                {
+                                    break; // a full car pool
+                                }
                                 Ped* pDriver = gPedManager->SpawnDriver(pCar);
+                                if (pDriver) // NULL: a full ped pool, the tank stays empty
+                                {
+#else
+                                Ped* pDriver = gPedManager->SpawnDriver(pCar);
+#endif
                                 pDriver->SetPedType(ped_type::script_created_5);
                                 pDriver->set_occupation(ped_ocupation_enum::road_block_tank_man);
                                 pDriver->mThreatReaction = threat_reaction_enum::react_as_emergency_1;
+#if defined(GTA2_PORT)
+                                }
+#endif
                             }
                             break;
                     }
@@ -3047,6 +3105,20 @@ bool PoliceRoadblock::CreateRoadblock(u8 x, u8 y, u8 z, s32 orientation)
                                                                   Fix16(y_start) + kFpPoint8_6FEB68,
                                                                   z,
                                                                   kAng0_6FEE30);
+#if defined(GTA2_PORT)
+                    if (!pBarrier1 || !pBarrier2) // a full object pool: no barriers in this lane
+                    {
+                        if (pBarrier1)
+                        {
+                            pBarrier1->RequestRemoval();
+                        }
+                        if (pBarrier2)
+                        {
+                            pBarrier2->RequestRemoval();
+                        }
+                    }
+                    else
+#endif
                     if (!mBarrier1)
                     {
                         mBarrier1 = pBarrier1;

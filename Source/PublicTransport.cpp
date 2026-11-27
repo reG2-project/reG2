@@ -408,6 +408,12 @@ void Train::UpdatePassengerAI()
                                 if ((*ppWagon)->IsStoppedWithPavementAtDoor(gTargetCarDoor) && this->mPassengerCount > 0)
                                 {
                                     Ped* pPassenger = gPedManager->SpawnTrainLeaver();
+#if defined(GTA2_PORT)
+                                    if (!pPassenger)
+                                    {
+                                        break; // a full ped pool
+                                    }
+#endif
                                     pPassenger->mCar = *ppWagon;
                                     pPassenger->SetObjective(objectives_enum::leave_train_38);
                                     Ped_List* pLink = &pPassenger->mCar->mPassengersList;
@@ -434,6 +440,9 @@ void Train::UpdatePassengerAI()
                     if (this->mCarriages[0]->mPassengersList.HasNoPeds())
                     {
                         if (this->mPassengerCount > 6 || !this->mIsHijacked)
+#if defined(GTA2_PORT)
+                        if (PortRoomForPeds(1 + kPortAmbientPedReserve, false, "a bus passenger"))
+#endif
                         {
                             Ped* pPassenger = gPedManager->SpawnTrainLeaver();
                             pPassenger->mCar = this->mCarriages[0];

@@ -308,6 +308,10 @@ void net::engine::DebugPhase(int player, int what)
             ForceIntoCar(ped, car);
         }
     }
+    else if (what == 5 && ped->mCar && ped->mCar->mCarSprite)
+    {
+        ped->TeleportToCoord(Fix16((54 << 14) + (1 << 13), 0), Fix16((160 << 14) + (1 << 13), 0)); // mp1-6p's water
+    }
     else if (what == 3 && ped->mCar && ped->mCar->mCarSprite)
     {
         const Sprite* cs = ped->mCar->mCarSprite;
