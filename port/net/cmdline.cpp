@@ -48,7 +48,7 @@ const char kUsage[] =
     "                        that server again, headless, its world checked against the recording's\n"
     "\n"
     "Either end: a link conditioner on this end's sends (tests): --lag ms, --jitter ms, --loss percent,\n"
-    "  --lossburst N, --spike ms:on:every; --mtu N (1280, 1428 the most)\n"
+    "  --lossburst N, --spike ms:on:every, --stall ms:every; --mtu N (1280, 1428 the most)\n"
     "\n"
     "More: port/docs/netcode.md\n";
 } // namespace
@@ -235,6 +235,16 @@ bool net::ParseOptions(std::vector<std::string>& args, NetOptions& o)
         else if (a == "--lossburst" && more)
         {
             sc.link.lossBurst = cc.link.lossBurst = atoi(args[++i].c_str());
+        }
+        else if (a == "--stall" && more)
+        {
+            LinkShape& l = cc.link;
+            if (sscanf(args[++i].c_str(), "%d:%d", &l.stallMs, &l.stallEveryS) != 2 || l.stallEveryS <= 0)
+            {
+                fprintf(stderr, "net: --stall ms:every (seconds)\n");
+                return false;
+            }
+            sc.link.stallMs = l.stallMs, sc.link.stallEveryS = l.stallEveryS;
         }
         else if (a == "--spike" && more)
         {

@@ -56,9 +56,10 @@ struct LinkShape
 {
     int lagMs = 0, jitterMs = 0, lossPercent = 0, lossBurst = 0;
     int spikeMs = 0, spikeOnS = 0, spikeEveryS = 0;
+    int stallMs = 0, stallEveryS = 0;
     bool Any() const
     {
-        return lagMs || jitterMs || lossPercent || spikeMs;
+        return lagMs || jitterMs || lossPercent || spikeMs || stallMs;
     }
 };
 // A link conditioner around <inner> (taking it over), on this end's sends; use it on both ends.
