@@ -568,7 +568,7 @@ void SpriteFreedHook(Sprite* sp)
     }
     f.links = GridLinksTo(sp);
     memset(f.frames, 0, sizeof(f.frames));
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
     backtrace(f.frames, 16);
 #endif
 }
@@ -619,7 +619,7 @@ void net::engine::DebugCheckStaleLinks(const char* where, uint32_t snapTick)
                     printf("net: CHECK   freed at frame %u tick %u as type %d, owner %p, model %d, with %d grid links then; backtrace:\n",
                            f->second.frame, f->second.tick, f->second.type, f->second.owner, f->second.model, f->second.links);
                     fflush(stdout);
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
                     int n = 0;
                     while (n < 16 && f->second.frames[n])
                     {
